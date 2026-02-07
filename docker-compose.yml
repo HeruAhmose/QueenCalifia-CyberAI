@@ -1,0 +1,225 @@
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Observability: OpenTelemetry Collector (OTLP ingest -> Jaeger + Tempo + file)
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.109.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    environment:
+      QC_OTEL_SAMPLING_PERCENTAGE: ${QC_OTEL_SAMPLING_PERCENTAGE:-25}
+      QC_OTEL_LATENCY_THRESHOLD_MS: ${QC_OTEL_LATENCY_THRESHOLD_MS:-2000}
+      QC_OTEL_TAIL_DECISION_WAIT: ${QC_OTEL_TAIL_DECISION_WAIT:-10s}
+      QC_OTEL_TAIL_NUM_TRACES: ${QC_OTEL_TAIL_NUM_TRACES:-50000}
+      QC_OTEL_TAIL_EXPECTED_NEW_TRACES_PER_SEC: ${QC_OTEL_TAIL_EXPECTED_NEW_TRACES_PER_SEC:-2000}
+    volumes:
+      - ./observability/otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - ./data/otel:/var/log/otel
+    depends_on:
+      - jaeger
+      - tempo
+
+  # Jaeger (UI + trace storage for local/dev)
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    ports:
+      - "16686:16686"   # UI
+      - "4317:4317"     # OTLP gRPC (optional direct ingest; apps default to collector)
+      - "4318:4318"     # OTLP HTTP  (optional direct ingest; apps default to collector)
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+
+  # Grafana Tempo (trace backend; Collector exports here too)
+  tempo:
+    image: grafana/tempo:2.5.0
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./observability/tempo.yaml:/etc/tempo.yaml:ro
+    ports:
+      - "3200:3200"     # Tempo query
+      - "4319:4318"     # OTLP HTTP (host 4319 -> container 4318)
+      - "4320:4317"     # OTLP gRPC (host 4320 -> container 4317)
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    environment:
+      QC_METRICS_TOKEN: ${QC_METRICS_TOKEN:-metrics-dev}
+      QC_PROM_REMOTE_WRITE_URL: ${QC_PROM_REMOTE_WRITE_URL:-}
+      QC_PROM_REMOTE_WRITE_BEARER_TOKEN: ${QC_PROM_REMOTE_WRITE_BEARER_TOKEN:-}
+      QC_PROM_REMOTE_WRITE_BASIC_USER: ${QC_PROM_REMOTE_WRITE_BASIC_USER:-}
+      QC_PROM_REMOTE_WRITE_BASIC_PASSWORD: ${QC_PROM_REMOTE_WRITE_BASIC_PASSWORD:-}
+    volumes:
+      - ./observability/prometheus.yml.tmpl:/etc/prometheus/prometheus.yml.tmpl:ro
+      - ./observability/prometheus-entrypoint.sh:/entrypoint.sh:ro
+      - prometheus_data:/prometheus
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    ports:
+      - "9090:9090"
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:11.1.4
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      QC_ALERT_WEBHOOK_URL: ${QC_ALERT_WEBHOOK_URL:-}
+      QC_ALERT_WEBHOOK_METHOD: ${QC_ALERT_WEBHOOK_METHOD:-POST}
+      QC_ALERT_WEBHOOK_DISABLE_RESOLVE: ${QC_ALERT_WEBHOOK_DISABLE_RESOLVE:-0}
+      QC_ALERT_WEBHOOK_BEARER_TOKEN: ${QC_ALERT_WEBHOOK_BEARER_TOKEN:-}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - grafana_provisioning:/etc/grafana/provisioning
+      - ./grafana/provisioning:/etc/grafana/provisioning-src:ro
+      - ./grafana/entrypoint.sh:/entrypoint.sh:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - tempo
+      - jaeger
+
+  api:
+    build: .
+    env_file:
+      - .env
+    environment:
+      QC_REDIS_URL: redis://redis:6379/0
+      QC_USE_CELERY: "1"
+      QC_PRODUCTION: "1"
+      QC_ENFORCE_HTTPS: "0"
+      QC_ALLOW_INSECURE_BOOTSTRAP: "1"   # initial local bootstrap only; disable once keys are provisioned
+      QC_API_KEYS_FILE: /data/keys.json
+      QC_AUDIT_LOG_FILE: /data/audit.jsonl
+
+      QC_DENY_PUBLIC_TARGETS: "1"
+      QC_SCAN_ALLOWLIST: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8"
+
+      QC_ROLE_RATE_LIMITS_JSON: '{"admin":240,"analyst":120,"reader":60,"public":30}'
+      QC_RATE_LIMIT_ENDPOINTS_JSON: '{"POST /api/vulns/scan":{"admin":30,"analyst":10,"reader":0,"public":0}}'
+
+      # Global request budgeting (token bucket; weighted per-endpoint)
+      QC_BUDGET_ENABLED: ${QC_BUDGET_ENABLED:-1}
+      QC_FORCE_REDIS_BUDGET: ${QC_FORCE_REDIS_BUDGET:-1}
+      QC_BUDGET_ROLE_BUCKETS_JSON: '${QC_BUDGET_ROLE_BUCKETS_JSON:-{"admin":{"capacity":1200,"refill_per_minute":600},"analyst":{"capacity":600,"refill_per_minute":240},"reader":{"capacity":300,"refill_per_minute":120},"public":{"capacity":120,"refill_per_minute":60}}}'
+      QC_BUDGET_ENDPOINT_COSTS_JSON: '${QC_BUDGET_ENDPOINT_COSTS_JSON:-{"GET /api/*":1,"POST /api/events/ingest":3,"POST /api/vulns/scan":25,"POST /api/incidents/<incident_id>/approve/<action_id>":4,"POST /api/incidents/<incident_id>/deny/<action_id>":2,"POST /api/incidents/<incident_id>/rollback/<action_id>":6}}'
+
+      # OpenTelemetry (export to Collector -> Jaeger + Tempo + file)
+      QC_OTEL_ENABLED: "1"
+      OTEL_TRACES_EXPORTER: "otlp"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4318"
+      OTEL_SERVICE_NAME: "queencalifia-api"
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/data
+    depends_on:
+      - redis
+      - otel-collector
+
+  # ── Frontend (Vite dev server) ──
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm install --ignore-scripts && npm run dev -- --host 0.0.0.0"
+    volumes:
+      - ./frontend:/app
+      - frontend_modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://api:5000
+    depends_on:
+      - api
+
+  worker:
+    build: .
+    command: ["celery", "-A", "celery_app.celery_app", "worker", "-l", "INFO", "--concurrency", "4", "-Q", "scans"]
+    env_file:
+      - .env
+    environment:
+      QC_REDIS_URL: redis://redis:6379/0
+      QC_DENY_PUBLIC_TARGETS: "1"
+      QC_SCAN_ALLOWLIST: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8"
+
+      # Optional: speed for load tests only (keeps scans fast & deterministic)
+      QC_SCAN_DRY_RUN: ${QC_SCAN_DRY_RUN:-0}
+
+      QC_OTEL_ENABLED: "1"
+      OTEL_TRACES_EXPORTER: "otlp"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4318"
+      OTEL_SERVICE_NAME: "queencalifia-worker"
+    depends_on:
+      - redis
+      - otel-collector
+
+  # Load testing (k6) — enable via `--profile loadtest`
+  k6:
+    image: grafana/k6:0.49.0
+    profiles: ["loadtest"]
+    volumes:
+      - ./loadtest:/scripts:ro
+      - ./data/loadtest:/output
+    environment:
+      QC_API_BASE: "http://api:5000"
+      QC_API_KEY: ${QC_LOADTEST_API_KEY:-}
+      QC_K6_VUS: ${QC_K6_VUS:-20}
+      QC_K6_DURATION: ${QC_K6_DURATION:-30s}
+      QC_K6_ENABLE_SCAN: ${QC_K6_ENABLE_SCAN:-1}
+      QC_K6_REPORT_DIR: "/output"
+      QC_K6_EXPECT_BUDGET_HEADERS: ${QC_K6_EXPECT_BUDGET_HEADERS:-1}
+    command: ["run", "/scripts/k6_qc.js"]
+    depends_on:
+      - api
+
+
+  # Smoke test profile: validates Grafana webhook sends Authorization header
+  webhook-receiver:
+    profiles: ["smoketest"]
+    build:
+      context: ./observability/webhook_receiver
+    environment:
+      QC_WEBHOOK_EXPECTED_AUTH: "Bearer ${QC_ALERT_WEBHOOK_BEARER_TOKEN:-}"
+    ports:
+      - "8081:8080"
+
+  grafana-smoketest:
+    profiles: ["smoketest"]
+    image: python:3.11-alpine
+    depends_on:
+      - grafana
+      - webhook-receiver
+    environment:
+      GRAFANA_URL: http://grafana:3000
+      GRAFANA_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GRAFANA_PASS: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      QC_ALERT_WEBHOOK_BEARER_TOKEN: ${QC_ALERT_WEBHOOK_BEARER_TOKEN:-}
+      QC_ALERT_WEBHOOK_URL: ${QC_ALERT_WEBHOOK_URL:-}
+      QC_ALERT_WEBHOOK_METHOD: ${QC_ALERT_WEBHOOK_METHOD:-POST}
+      QC_ALERT_WEBHOOK_DISABLE_RESOLVE: ${QC_ALERT_WEBHOOK_DISABLE_RESOLVE:-0}
+      WEBHOOK_LAST_URL: http://webhook-receiver:8080/last
+    volumes:
+      - ./smoketest/provisioned_smoketest.py:/smoketest.py:ro
+    entrypoint: ["python", "/smoketest.py"]
+
+volumes:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+  grafana_provisioning:
+  frontend_modules:
+

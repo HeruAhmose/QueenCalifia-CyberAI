@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+echo "[pre-push] running unit tests..."
+make test
+
+if [ "${QC_PREPUSH_SMOKETEST:-0}" = "1" ]; then
+  echo "[pre-push] running smoketest..."
+  make smoketest
+else
+  echo "[pre-push] smoketest skipped (set QC_PREPUSH_SMOKETEST=1 to enable)"
+fi

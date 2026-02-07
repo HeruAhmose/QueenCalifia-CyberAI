@@ -1,0 +1,64 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [local, redis]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Pytest (local mode)
+        if: matrix.mode == 'local'
+        run: |
+          pytest
+
+      - name: Pytest (redis mode)
+        if: matrix.mode == 'redis'
+        env:
+          QC_REDIS_URL: redis://localhost:6379/0
+          QC_FORCE_REDIS_RATE_LIMIT: "1"
+          QC_BUDGET_ENABLED: "1"
+          QC_FORCE_REDIS_BUDGET: "1"
+          OTEL_TRACES_EXPORTER: "none"
+          QC_OTEL_ENABLED: "0"
+        run: |
+          pytest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Frontend tests (Vitest)
+        working-directory: frontend
+        run: |
+          npm install
+          npm test
