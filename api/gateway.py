@@ -1136,14 +1136,14 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
     def ready():
         return jsonify({"ready": True, "timestamp": _utcnow()})
 
-    # Kubernetes-style health endpoints
+    # Kubernetes-style health endpoints (aliases for compatibility)
     @app.route("/healthz")
     def healthz():
-        return jsonify({"status": "operational", "system": "Queen Califia CyberAI", "timestamp": _utcnow()})
+        return health()
 
     @app.route("/readyz")
     def readyz():
-        return jsonify({"ready": True, "timestamp": _utcnow()})
+        return ready()
 
     @app.route("/metrics")
     def metrics():
