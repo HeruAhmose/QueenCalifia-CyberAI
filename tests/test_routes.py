@@ -8,6 +8,8 @@ def test_routes_registered(app_factory):
     expected = {
         "/api/health",
         "/api/ready",
+        "/healthz",
+        "/readyz",
         "/api/mesh/status",
         "/api/threats/active",
         "/api/events/ingest",

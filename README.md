@@ -8,6 +8,71 @@ cp .env.example .env
 docker compose up --build
 ```
 
+
+## Production (Docker Compose)
+This repo includes a production compose that runs:
+- API (Gunicorn)
+- Worker (Celery)
+- Redis
+- Frontend built to static assets served by nginx (no Vite dev server)
+
+```bash
+cp .env.example .env
+docker compose -f docker-compose.prod.yml up --build
+# Dashboard: http://localhost:8080
+```
+
+
+### Edge TLS termination (single nginx container)
+If you want nginx to terminate TLS and force HTTP -> HTTPS, use the edge compose:
+
+```bash
+cp .env.example .env
+docker compose -f docker-compose.prod.edge.yml up --build
+# HTTPS: https://localhost:8443  (self-signed by default)
+```
+
+Bring your own cert by placing these files on the host:
+
+- `./secrets/tls/fullchain.pem`
+- `./secrets/tls/privkey.pem`
+
+For real deployments, set `QC_HTTP_PORT=80` and `QC_HTTPS_PORT=443` in your environment.
+
+
+#### ACME (Let's Encrypt) automation (optional profile)
+If your edge host has a real DNS name and inbound ports **80/443**, you can enable automatic certificate issuance + renewal:
+
+```bash
+cp .env.example .env
+# set QC_DOMAIN + QC_EMAIL in .env
+docker compose -f docker-compose.prod.edge.yml --profile acme up --build
+```
+
+Tips:
+- Use `QC_LETSENCRYPT_STAGING=1` for dry runs to avoid rate limits.
+- The edge container auto-reloads nginx when cert files change.
+
+
+### Health probes
+- Liveness: `GET /healthz`
+- Readiness: `GET /readyz`
+
+### Deterministic Python dependencies (pip-tools + hashes)
+Lockfiles are generated in a Linux container so the hashes match Docker deploys.
+
+```bash
+make lock
+# produces: requirements.lock, requirements-dev.lock
+```
+
+To build images using the hashed lockfile:
+
+```bash
+QC_USE_LOCK=1 docker compose -f docker-compose.prod.yml up --build
+```
+
+
 ### Observability (local)
 - Jaeger UI: `http://localhost:16686`
 - Tempo: `http://localhost:3200`
@@ -487,4 +552,103 @@ Host/port mode:
 
 ```bash
 make spki-pin-runbook HOST=redis.internal.example PORT=6380 JSON=1 OUT=./data/loadtest/spki_pins.jsonl
+```
+
+
+### SPKI runbook SIEM telemetry
+
+Every summary and per-attempt JSON record includes a `target` field containing the
+input URL or `host:port` for SIEM correlation.
+
+```bash
+# Emit a JSON summary after the runbook completes (appended to --out JSONL)
+QC_SPKI_SUMMARY_JSON=1 make spki-pin-runbook URL=rediss://host:6380/0 OUT=data/spki.jsonl
+
+# Also emit a per-retry JSON record for each attempt (ideal for latency dashboards)
+QC_SPKI_SUMMARY_JSON=1 QC_SPKI_ATTEMPT_JSON=1 \
+  make spki-pin-runbook URL=rediss://host:6380/0 OUT=data/spki.jsonl
+```
+
+The dashboard **Command** tab reads these records from `/api/infra/spki-log`
+and renders:
+- SPKI Pin Status / Last Target / Retry Attempts KPI cards
+- Runbook summary timeline (target, rc, attempts, elapsed)
+- Per-attempt retry log table (timestamp, rc, attempt#, sleep, elapsed, target)
+
+
+## Kubernetes
+
+Sample manifests live in `k8s/` — see `k8s/README.md` for the full walkthrough.
+
+### You must edit before deploying
+
+| File | What to change |
+|------|---------------|
+| `k8s/api.yaml`, `k8s/worker.yaml` | `image: ghcr.io/YOUR_ORG/queencalifia-api:TAG` |
+| `k8s/frontend.yaml` | `image: ghcr.io/YOUR_ORG/queencalifia-frontend:TAG` |
+| `k8s/ingress.yaml` | `host` + `tls.hosts` → your domain (replace `example.com`) |
+| `k8s/cert-manager/clusterissuer-*.yaml` | `email` → your ACME contact (replace `you@example.com`) |
+| `k8s/secret.example.yaml` | Copy to `k8s/secret.yaml`, fill real secrets |
+
+### Apply order
+
+```bash
+kubectl apply -f k8s/namespace.yaml
+kubectl -n queen-califia apply -f k8s/secret.yaml
+kubectl -n queen-califia apply -f k8s/configmap.yaml
+kubectl -n queen-califia apply -f k8s/redis.yaml
+kubectl -n queen-califia apply -f k8s/api.yaml
+kubectl -n queen-califia apply -f k8s/worker.yaml
+kubectl -n queen-califia apply -f k8s/frontend.yaml
+kubectl -n queen-califia apply -f k8s/ingress.yaml
+```
+
+### Manifests included
+
+| Manifest | Purpose |
+|----------|---------|
+| `k8s/namespace.yaml` | `queen-califia` namespace |
+| `k8s/secret.example.yaml` | Template for `QC_API_KEY_PEPPER`, `QC_AUDIT_HMAC_KEY`, `QC_METRICS_TOKEN` |
+| `k8s/configmap.yaml` | Non-secret config (`QC_PRODUCTION=1`, `QC_REDIS_URL`, scan policy) |
+| `k8s/redis.yaml` | StatefulSet + PVC (1 Gi, AOF persistence) with liveness/readiness probes |
+| `k8s/api.yaml` | Deployment (2 replicas) — liveness: `/healthz`, readiness: `/readyz` |
+| `k8s/worker.yaml` | Celery worker Deployment (1 replica, concurrency 4) |
+| `k8s/frontend.yaml` | nginx static Deployment (2 replicas) |
+| `k8s/ingress.yaml` | NGINX Ingress — `/api` + `/metrics` → api, `/` → frontend, cert-manager TLS |
+| `k8s/cert-manager/clusterissuer-staging.yaml` | Let's Encrypt staging (test first) |
+| `k8s/cert-manager/clusterissuer-prod.yaml` | Let's Encrypt production |
+
+## Edge ACME preflight
+
+Before switching to real Let's Encrypt certs, start the edge stack and run preflight:
+
+```bash
+# 1. Edge stack must be running first
+docker compose -f docker-compose.prod.edge.yml up -d
+
+# 2. Run preflight (checks DNS, TCP, redirect, ACME webroot, TLS, /readyz)
+make preflight-prod QC_DOMAIN=example.com QC_HTTP_PORT=80 QC_HTTPS_PORT=443
+
+# or directly:
+QC_DOMAIN=example.com ./scripts/preflight_prod.sh
+```
+
+Preflight validates: DNS A/AAAA resolution, TCP port reachability, HTTP→HTTPS redirect, ACME challenge webroot (writes + reads a token through the edge container), TLS handshake, and API `/readyz` over HTTPS.
+
+
+## Kubernetes (Helm)
+
+### Argo CD Image Updater (PR-gated)
+
+If you want K8s to auto-bump image tags while still using PR review, see:
+- `docs/ARGOCD_IMAGE_UPDATER.md`
+- `k8s/argocd/application-queen-califia.yaml`
+
+
+A production Helm chart is available at `helm/queen-califia`.
+
+```bash
+helm upgrade --install qc ./helm/queen-califia -n queen-califia --create-namespace \
+  --set api.image.repository=ghcr.io/YOUR_ORG/queencalifia-api --set api.image.tag=TAG \
+  --set frontend.image.repository=ghcr.io/YOUR_ORG/queencalifia-frontend --set frontend.image.tag=TAG
 ```

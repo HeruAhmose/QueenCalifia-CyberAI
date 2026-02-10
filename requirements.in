@@ -1,9 +1,3 @@
-# NOTE:
-# - requirements.txt is the editable, range-based runtime input (kept for readability).
-# - For deterministic builds, generate and use requirements.lock (with hashes):
-#     make lock
-#     QC_USE_LOCK=1 docker compose -f docker-compose.prod.yml up --build
-#
 # Top-level runtime dependencies (pip-tools input)
 # Generate deterministic lockfiles via:
 #   make lock

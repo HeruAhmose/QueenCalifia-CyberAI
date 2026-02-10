@@ -1,0 +1,56 @@
+{{- if .Values.worker.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qc-worker
+  namespace: {{ include "queen-califia.ns" . }}
+  labels:
+{{ include "queen-califia.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.worker.replicaCount }}
+  selector:
+    matchLabels:
+      app: qc-worker
+      {{- include "queen-califia.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: qc-worker
+        {{- include "queen-califia.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+      {{- $psc := default .Values.podSecurityContext .Values.worker.podSecurityContext -}}
+      {{- with $psc }}
+      securityContext:
+{{ toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: worker
+          image: {{ include "queen-califia.workerImage" . }}
+          imagePullPolicy: {{ .Values.worker.image.pullPolicy }}
+          {{- $csc := default .Values.containerSecurityContext .Values.worker.containerSecurityContext -}}
+          {{- with $csc }}
+          securityContext:
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+          command: {{ toYaml .Values.worker.command | nindent 10 }}
+          envFrom:
+            {{- if .Values.config.create }}
+            - configMapRef:
+                name: {{ .Values.config.name }}
+            {{- end }}
+            - secretRef:
+                name: {{ .Values.secrets.name }}
+          livenessProbe:
+            exec:
+              command: ["sh", "-lc", "pgrep -f 'celery' >/dev/null"]
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 6
+          resources:
+{{ toYaml .Values.worker.resources | indent 12 }}
+{{- end }}

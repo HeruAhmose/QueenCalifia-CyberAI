@@ -1,0 +1,29 @@
+api:
+  image:
+    repository: ghcr.io/example/queencalifia-api
+    tag: ci
+    digest: ""
+worker:
+  image:
+    repository: ghcr.io/example/queencalifia-api
+    tag: ci
+    digest: ""
+frontend:
+  image:
+    repository: ghcr.io/example/queencalifia-frontend
+    tag: ci
+    digest: ""
+secrets:
+  create: true
+  stringData:
+    QC_API_KEY_PEPPER: ci_dummy
+    QC_AUDIT_HMAC_KEY: ci_dummy
+    QC_METRICS_TOKEN: ci_dummy
+ingress:
+  enabled: true
+  host: example.com
+certManager:
+  createClusterIssuers: false
+redis:
+  persistence:
+    enabled: false

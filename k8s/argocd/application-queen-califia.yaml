@@ -1,0 +1,51 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: queen-califia
+  namespace: argocd
+  annotations:
+    # --- Argo CD Image Updater (Git write-back to a dedicated branch) ---
+    # Docs: https://argocd-image-updater.readthedocs.io/
+    argocd-image-updater.argoproj.io/image-list: |
+      api=ghcr.io/YOUR_ORG/queencalifia-api
+      frontend=ghcr.io/YOUR_ORG/queencalifia-frontend
+
+    # Digest pinning (immutable deploys): pins exact sha256 digests.
+    # Alternative: change to "semver" + allow-tags for tag-based tracking.
+    argocd-image-updater.argoproj.io/api.update-strategy: digest
+    argocd-image-updater.argoproj.io/frontend.update-strategy: digest
+
+    # Tell Image Updater which Helm values keys represent image repo/tag/digest.
+    argocd-image-updater.argoproj.io/api.helm.image-name: api.image.repository
+    argocd-image-updater.argoproj.io/api.helm.image-tag: api.image.digest
+    argocd-image-updater.argoproj.io/frontend.helm.image-name: frontend.image.repository
+    argocd-image-updater.argoproj.io/frontend.helm.image-tag: frontend.image.digest
+
+    # Git write-back:
+    argocd-image-updater.argoproj.io/write-back-method: git
+
+    # Create a new branch from main for each update (works with protected default branches).
+    # A GitHub Action in this repo will open a PR from that branch to main for review.
+    argocd-image-updater.argoproj.io/git-branch: main:image-updater-{{.SHA256}}
+
+    # Write the updated tags into the ArgoCD values file (relative to spec.source.path).
+    argocd-image-updater.argoproj.io/write-back-target: "helmvalues:values-argocd.yaml"
+
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/YOUR_ORG/QueenCalifia-CyberAI.git
+    targetRevision: main
+    path: helm/queen-califia
+    helm:
+      valueFiles:
+        - values-argocd.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: queen-califia
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
