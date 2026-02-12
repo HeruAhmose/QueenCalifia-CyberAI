@@ -1,12 +1,13 @@
-#!/bin/sh
+#!/usr/bin/env sh
 set -eu
 
-echo "[pre-push] running unit tests..."
-make test
+echo "[pre-push] running checks via PowerShell (scripts/ci/prepush.ps1)..."
 
-if [ "${QC_PREPUSH_SMOKETEST:-0}" = "1" ]; then
-  echo "[pre-push] running smoketest..."
-  make smoketest
+if command -v pwsh >/dev/null 2>&1; then
+  exec pwsh -NoProfile -ExecutionPolicy Bypass -File "scripts/ci/prepush.ps1" "$@"
+elif command -v powershell >/dev/null 2>&1; then
+  exec powershell -NoProfile -ExecutionPolicy Bypass -File "scripts/ci/prepush.ps1" "$@"
 else
-  echo "[pre-push] smoketest skipped (set QC_PREPUSH_SMOKETEST=1 to enable)"
+  echo "[pre-push] ERROR: pwsh/powershell not found; cannot run pre-push checks." >&2
+  exit 1
 fi
