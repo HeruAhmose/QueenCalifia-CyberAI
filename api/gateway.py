@@ -36,7 +36,7 @@ import logging
 import secrets
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Callable
 from collections import defaultdict, deque
 import ipaddress
@@ -91,7 +91,7 @@ class SecurityConfig:
 # ─── Utilities ──────────────────────────────────────────────────────────────
 
 def _utcnow() -> str:
-    return datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _constant_time_eq(a: str, b: str) -> bool:
@@ -1197,6 +1197,15 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
     @app.route("/readyz")
     def readyz():
         return _readyz_response()
+
+    # Kubernetes-style health endpoints (aliases for compatibility)
+    @app.route("/healthz")
+    def healthz():
+        return health()
+
+    @app.route("/readyz")
+    def readyz():
+        return ready()
 
     @app.route("/metrics")
     def metrics():
