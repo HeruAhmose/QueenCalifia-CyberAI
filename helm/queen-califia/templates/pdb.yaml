@@ -1,0 +1,65 @@
+{{- /*
+PodDisruptionBudgets (optional)
+*/ -}}
+
+{{- if .Values.api.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: qc-api
+  namespace: {{ include "queen-califia.ns" . }}
+  labels:
+{{ include "queen-califia.labels" . | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app: qc-api
+      {{- include "queen-califia.selectorLabels" . | nindent 6 }}
+  {{- if hasKey .Values.api.pdb "minAvailable" }}
+  minAvailable: {{ .Values.api.pdb.minAvailable }}
+  {{- else }}
+  maxUnavailable: {{ .Values.api.pdb.maxUnavailable | default 1 }}
+  {{- end }}
+---
+{{- end }}
+
+{{- if .Values.frontend.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: qc-frontend
+  namespace: {{ include "queen-califia.ns" . }}
+  labels:
+{{ include "queen-califia.labels" . | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app: qc-frontend
+      {{- include "queen-califia.selectorLabels" . | nindent 6 }}
+  {{- if hasKey .Values.frontend.pdb "minAvailable" }}
+  minAvailable: {{ .Values.frontend.pdb.minAvailable }}
+  {{- else }}
+  maxUnavailable: {{ .Values.frontend.pdb.maxUnavailable | default 1 }}
+  {{- end }}
+---
+{{- end }}
+
+{{- if and .Values.worker.enabled .Values.worker.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: qc-worker
+  namespace: {{ include "queen-califia.ns" . }}
+  labels:
+{{ include "queen-califia.labels" . | indent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app: qc-worker
+      {{- include "queen-califia.selectorLabels" . | nindent 6 }}
+  {{- if hasKey .Values.worker.pdb "minAvailable" }}
+  minAvailable: {{ .Values.worker.pdb.minAvailable }}
+  {{- else }}
+  maxUnavailable: {{ .Values.worker.pdb.maxUnavailable | default 1 }}
+  {{- end }}
+{{- end }}

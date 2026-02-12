@@ -103,6 +103,7 @@ services:
       QC_ALLOW_INSECURE_BOOTSTRAP: "1"   # initial local bootstrap only; disable once keys are provisioned
       QC_API_KEYS_FILE: /data/keys.json
       QC_AUDIT_LOG_FILE: /data/audit.jsonl
+      QC_SPKI_LOG_FILE: /data/spki.jsonl
 
       QC_DENY_PUBLIC_TARGETS: "1"
       QC_SCAN_ALLOWLIST: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8"

@@ -1,0 +1,8 @@
+{{- if .Values.namespace.create }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "queen-califia.ns" . }}
+  labels:
+{{ include "queen-califia.labels" . | indent 4 }}
+{{- end }}

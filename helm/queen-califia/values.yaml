@@ -1,0 +1,185 @@
+# Default values for queen-califia.
+# This chart is safe-by-default: ingress disabled, secrets not auto-created.
+
+nameOverride: ""
+fullnameOverride: ""
+
+namespace:
+  create: false
+  name: ""
+
+imagePullSecrets: []
+podAnnotations: {}
+podLabels: {}
+
+# Optional security contexts applied to all workloads.
+# Component-level overrides: <component>.podSecurityContext / <component>.containerSecurityContext
+podSecurityContext: {}
+containerSecurityContext: {}
+
+api:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/YOUR_ORG/queencalifia-api
+    tag: "TAG"
+    digest: ""
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 5000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  env:
+    QC_PRODUCTION: "1"
+    QC_ENFORCE_HTTPS: "1"
+    QC_USE_CELERY: "1"
+    QC_REQUIRE_REDIS: "1"
+    QC_REDIS_URL: "redis://redis:6379/0"
+    QC_DENY_PUBLIC_TARGETS: "1"
+    QC_SCAN_ALLOWLIST: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8"
+  probes:
+    livenessPath: /healthz
+    readinessPath: /readyz
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: ""
+    behavior: {}
+  pdb:
+    enabled: false
+    maxUnavailable: 1
+
+worker:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/YOUR_ORG/queencalifia-api
+    tag: "TAG"
+    digest: ""
+    pullPolicy: IfNotPresent
+  command: ["celery", "-A", "celery_app.celery_app", "worker", "-l", "INFO", "--concurrency", "4", "-Q", "scans"]
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: ""
+    behavior: {}
+  pdb:
+    enabled: false
+    maxUnavailable: 1
+
+frontend:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/YOUR_ORG/queencalifia-frontend
+    tag: "TAG"
+    digest: ""
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+  probes:
+    path: /
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: ""
+    behavior: {}
+  pdb:
+    enabled: false
+    maxUnavailable: 1
+
+redis:
+  enabled: true
+  image: redis:7-alpine
+  persistence:
+    enabled: true
+    size: 1Gi
+
+secrets:
+  # Prefer external secret management in prod:
+  # - set create=false
+  # - create a Secret named `name` in the release namespace
+  create: false
+  name: qc-secrets
+  stringData: {}
+  # stringData:
+  #   QC_API_KEY_PEPPER: "CHANGE_ME__LONG_RANDOM"
+  #   QC_AUDIT_HMAC_KEY: "CHANGE_ME__LONG_RANDOM"
+  #   QC_METRICS_TOKEN: "CHANGE_ME__LONG_RANDOM"
+
+config:
+  create: true
+  name: qc-config
+
+ingress:
+  enabled: false
+  className: nginx
+  host: example.com
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+  tls:
+    enabled: true
+    secretName: qc-tls
+  certManager:
+    enabled: true
+    clusterIssuer: letsencrypt-staging
+
+certManager:
+  # Optional: create ClusterIssuers (cluster-scoped).
+  # Typically done once per cluster, not per app.
+  createClusterIssuers: false
+  email: you@example.com
+  solvers:
+    ingressClass: nginx
+  issuers:
+    staging:
+      name: letsencrypt-staging
+      server: https://acme-staging-v02.api.letsencrypt.org/directory
+      accountKeySecretName: letsencrypt-staging-account-key
+    prod:
+      name: letsencrypt-prod
+      server: https://acme-v02.api.letsencrypt.org/directory
+      accountKeySecretName: letsencrypt-prod-account-key
+
+networkPolicy:
+  enabled: false
+
+  ingress:
+    allowFromSameNamespace: true
+    # Namespaces that may reach qc-api/qc-frontend (e.g. ingress-nginx)
+    allowFromNamespaces:
+      - ingress-nginx
+
+  egress:
+    # If true, we do not create an Egress policy (no egress restrictions).
+    allowAll: true
+    allowToSameNamespace: true
+    allowDNS: true
+    allowToCIDRs: []

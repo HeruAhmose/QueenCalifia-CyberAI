@@ -16,6 +16,7 @@ htmlcov/
 
 # Runtime data
 data/
+!data/**/.gitkeep
 audit*.jsonl
 keys.json
 
@@ -32,3 +33,7 @@ Thumbs.db
 .idea/
 *.swp
 *~
+
+# TLS / secrets (mounted)
+secrets/
+!secrets/**/.gitkeep

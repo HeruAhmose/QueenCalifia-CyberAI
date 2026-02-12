@@ -1,0 +1,39 @@
+name: deps-refresh
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  python-lock-refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Refresh pip lockfiles (pip-tools via Docker)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./scripts/lock.sh --upgrade
+
+      - name: Create PR with updated lockfiles
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: chore/deps-refresh
+          delete-branch: true
+          title: "chore(deps): refresh Python lockfiles"
+          commit-message: "chore(deps): refresh Python lockfiles"
+          body: |
+            Automated weekly refresh of deterministic Python lockfiles.
+
+            - requirements.lock
+            - requirements-dev.lock
+          add-paths: |
+            requirements.lock
+            requirements-dev.lock

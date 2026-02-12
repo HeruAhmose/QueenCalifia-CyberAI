@@ -1,0 +1,89 @@
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      args:
+        QC_USE_LOCK: ${QC_USE_LOCK:-0}   # set to 1 after generating requirements.lock + hashes
+    env_file:
+      - .env
+    environment:
+      QC_REDIS_URL: redis://redis:6379/0
+      QC_REQUIRE_REDIS: "1"
+      QC_USE_CELERY: "1"
+      QC_PRODUCTION: "1"
+
+      # If you're terminating TLS outside Docker (recommended), keep this 0 and rely on a reverse proxy.
+      QC_ENFORCE_HTTPS: ${QC_ENFORCE_HTTPS:-0}
+
+      # Local bootstrap defaults (disable in hardened prod once keys are provisioned)
+      QC_ALLOW_INSECURE_BOOTSTRAP: ${QC_ALLOW_INSECURE_BOOTSTRAP:-0}
+      QC_API_KEYS_FILE: /data/keys.json
+      QC_AUDIT_LOG_FILE: /data/audit.jsonl
+      QC_SPKI_LOG_FILE: /data/spki.jsonl
+
+      QC_DENY_PUBLIC_TARGETS: ${QC_DENY_PUBLIC_TARGETS:-1}
+      QC_SCAN_ALLOWLIST: ${QC_SCAN_ALLOWLIST:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8}
+    volumes:
+      - ./data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/readyz', timeout=3)"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      args:
+        QC_USE_LOCK: ${QC_USE_LOCK:-0}
+    command: ["celery", "-A", "celery_app.celery_app", "worker", "-l", "INFO", "--concurrency", "4", "-Q", "scans"]
+    env_file:
+      - .env
+    environment:
+      QC_REDIS_URL: redis://redis:6379/0
+      QC_REQUIRE_REDIS: "1"
+      QC_DENY_PUBLIC_TARGETS: ${QC_DENY_PUBLIC_TARGETS:-1}
+      QC_SCAN_ALLOWLIST: ${QC_SCAN_ALLOWLIST:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8}
+      QC_SCAN_DRY_RUN: ${QC_SCAN_DRY_RUN:-0}
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Production frontend (built -> nginx). Proxies /api/* to the api service.
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "${QC_DASHBOARD_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  redis_data:

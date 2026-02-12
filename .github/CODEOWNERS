@@ -1,0 +1,5 @@
+# Require review for deployment-sensitive changes
+/helm/ @YOURORG/platform-team
+/k8s/  @YOURORG/platform-team
+/.github/workflows/ @YOURORG/platform-team
+/scripts/bootstrap/ @YOURORG/platform-team

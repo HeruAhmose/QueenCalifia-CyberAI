@@ -1,0 +1,203 @@
+name: release-helm
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Where to publish the Helm chart"
+        required: true
+        default: "oci"
+        type: choice
+        options:
+          - oci
+          - pages
+          - both
+
+permissions:
+  contents: write
+  packages: write
+  pull-requests: write
+
+env:
+  REGISTRY: ghcr.io
+  OCI_CHART_REPO: ghcr.io/${{ github.repository_owner }}/charts
+  API_IMAGE: ghcr.io/${{ github.repository_owner }}/queencalifia-api
+  FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/queencalifia-frontend
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive version
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            TAG="v0.0.0"
+          fi
+          VERSION="${TAG#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build + push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ${{ env.API_IMAGE }}:${{ steps.meta.outputs.version }}
+            ${{ env.API_IMAGE }}:latest
+
+      - name: Build + push Frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:${{ steps.meta.outputs.version }}
+            ${{ env.FRONTEND_IMAGE }}:latest
+
+  version-sync:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref_type == 'tag'
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Sync chart + values versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.build-and-push.outputs.version }}"
+          ./scripts/release/sync_versions.sh "${VERSION}"
+
+      - name: Create PR for version sync (protected-branch safe)
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: ${{ github.event.repository.default_branch }}
+          branch: chore/release-sync-v${{ needs.build-and-push.outputs.version }}
+          delete-branch: true
+          title: "chore(release): sync chart/app versions to v${{ needs.build-and-push.outputs.version }}"
+          commit-message: "chore(release): sync chart/app versions to v${{ needs.build-and-push.outputs.version }}"
+          body: |
+            Automated sync after tagging v${{ needs.build-and-push.outputs.version }}.
+
+            Updates:
+            - helm/queen-califia/Chart.yaml (version + appVersion)
+            - helm/queen-califia/values.yaml (default image tags)
+          add-paths: |
+            helm/queen-califia/Chart.yaml
+            helm/queen-califia/values.yaml
+
+  chart-package:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    outputs:
+      chart_version: ${{ needs.build-and-push.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: Package Helm chart
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.build-and-push.outputs.version }}"
+          mkdir -p dist
+          helm lint ./helm/queen-califia
+          helm package ./helm/queen-califia --destination dist --version "${VERSION}" --app-version "${VERSION}"
+          ls -lah dist
+
+      - name: Upload chart artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-chart
+          path: dist/*.tgz
+
+  publish-oci:
+    runs-on: ubuntu-latest
+    needs: [build-and-push, chart-package]
+    if: |
+      github.ref_type == 'tag' && (github.event_name == 'push' || github.event.inputs.publish == 'oci' || github.event.inputs.publish == 'both')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: Download chart artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: helm-chart
+          path: dist
+
+      - name: Login Helm registry (OCI)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} -u "${{ github.actor }}" --password-stdin
+
+      - name: Push chart to OCI
+        shell: bash
+        run: |
+          set -euo pipefail
+          CHART="$(ls dist/*.tgz | head -n1)"
+          helm push "${CHART}" "oci://${{ env.OCI_CHART_REPO }}"
+
+  publish-pages:
+    runs-on: ubuntu-latest
+    needs: [build-and-push, chart-package]
+    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.publish == 'pages' || github.event.inputs.publish == 'both')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: Run chart-releaser (GH Pages)
+        uses: helm/chart-releaser-action@v1.6.0
+        with:
+          charts_dir: helm
+          pages_branch: gh-pages
+          packages_with_index: true
+        env:
+          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}

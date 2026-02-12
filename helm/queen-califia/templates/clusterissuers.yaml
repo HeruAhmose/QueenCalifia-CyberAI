@@ -1,0 +1,31 @@
+{{- if .Values.certManager.createClusterIssuers }}
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ .Values.certManager.issuers.staging.name }}
+spec:
+  acme:
+    email: {{ .Values.certManager.email | quote }}
+    server: {{ .Values.certManager.issuers.staging.server | quote }}
+    privateKeySecretRef:
+      name: {{ .Values.certManager.issuers.staging.accountKeySecretName }}
+    solvers:
+      - http01:
+          ingress:
+            class: {{ .Values.certManager.solvers.ingressClass | quote }}
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ .Values.certManager.issuers.prod.name }}
+spec:
+  acme:
+    email: {{ .Values.certManager.email | quote }}
+    server: {{ .Values.certManager.issuers.prod.server | quote }}
+    privateKeySecretRef:
+      name: {{ .Values.certManager.issuers.prod.accountKeySecretName }}
+    solvers:
+      - http01:
+          ingress:
+            class: {{ .Values.certManager.solvers.ingressClass | quote }}
+{{- end }}

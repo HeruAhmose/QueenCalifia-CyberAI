@@ -20,4 +20,4 @@ def test_diff_window_env_is_honored(monkeypatch):
     expected = ["a", "b", "c"]
     observed = ["a", "X", "c"]
     out = mod._uid_diff(expected, observed, window=None)
-    assert "context_expected[0:2]" in out  # with window=1, hi should be 2 around index 1 => slice 0:2 or 0:3 depending
+    assert "context_expected[0:3]" in out  # with window=1, show 1 item of context on each side of index 1 => slice 0:3

@@ -31,6 +31,12 @@ help:
 	@echo "  make dev           - run backend locally (--no-auth, --debug)"
 	@echo "  make dev-frontend  - run frontend Vite dev server locally"
 	@echo "  make hooks         - install git hooks (core.hooksPath=.githooks)"
+	@echo "  make prod-up       - docker compose (production) up --build -d (Dashboard: http://localhost:8080)"
+	@echo "  make prod-edge-up  - docker compose (edge TLS) up --build -d (HTTPS: https://localhost:8443)"
+	@echo "  make prod-edge-acme-up - docker compose (edge TLS + ACME) up --build -d (requires QC_DOMAIN/QC_EMAIL)"
+	@echo "  make prod-down     - docker compose (production) down -v"
+	@echo "  make lock          - generate requirements.lock + requirements-dev.lock with hashes (Docker required)"
+	@echo "  make lock-upgrade  - same as lock, but upgrades within constraints"
 
 up:
 	@if [ ! -f .env ]; then cp .env.example .env; echo "📋 Created .env from .env.example"; fi
@@ -147,3 +153,64 @@ spki-pin-runbook:
 	  fi; \
 	  ./scripts/spki_pin_runbook.sh "$(HOST)" "$(PORT)" $(if $(JSON),--json,) $(if $(PEM),--print-pem,) $(if $(REDACT),--redact-pem,) $(if $(OUT),--out "$(OUT)",); \
 	fi
+
+
+lock:
+	@./scripts/lock.sh
+
+lock-upgrade:
+	@QC_LOCK_UPGRADE=1 ./scripts/lock.sh
+
+prod-up:
+	@if [ ! -f .env ]; then cp .env.example .env; echo "📋 Created .env from .env.example"; fi
+	docker compose -f docker-compose.prod.yml up --build -d
+	@echo ""
+	@echo "  ✅ Queen Califia (prod) is running!"
+	@echo "  Dashboard:  http://localhost:$${QC_DASHBOARD_PORT:-8080}"
+	@echo ""
+
+prod-down:
+	docker compose -f docker-compose.prod.yml down -v
+
+
+prod-edge-up:
+	@if [ ! -f .env ]; then cp .env.example .env; echo "📋 Created .env from .env.example"; fi
+	docker compose -f docker-compose.prod.edge.yml up --build -d
+	@echo ""
+	@echo "  ✅ Edge (TLS) is running!"
+	@echo "  HTTPS: https://localhost:${QC_HTTPS_PORT:-8443}"
+	@echo ""
+
+prod-edge-acme-up:
+	@if [ ! -f .env ]; then cp .env.example .env; echo "📋 Created .env from .env.example"; fi
+	docker compose -f docker-compose.prod.edge.yml --profile acme up --build -d
+	@echo ""
+	@echo "  ✅ Queen Califia edge (ACME) is running!"
+	@echo "  HTTPS: https://localhost:$${QC_HTTPS_PORT:-8443}"
+	@echo ""
+prod-edge-down:
+	docker compose -f docker-compose.prod.edge.yml down -v
+
+
+preflight-prod:
+	./scripts/preflight_prod.sh
+
+
+k8s-validate:
+	@echo "Validating Helm + Kustomize manifests..."
+	helm lint ./helm/queen-califia -f ./helm/queen-califia/ci-values.yaml
+	helm template qc ./helm/queen-califia -f ./helm/queen-califia/ci-values.yaml >/tmp/qc-helm-rendered.yaml
+	kustomize build k8s/ >/tmp/qc-kustomize-rendered.yaml
+	@echo "Rendered manifests written to /tmp/qc-helm-rendered.yaml and /tmp/qc-kustomize-rendered.yaml"
+
+
+\1
+.PHONY: kind-ingress-e2e
+kind-ingress-e2e: ## Run Ingress E2E test (port-forward ingress-nginx) against the current kind context
+	./scripts/ci/kind_ingress_e2e.sh
+
+
+.PHONY: deploy-vm
+# Local deploy helper (requires bash + ssh configured)
+deploy-vm:
+	@bash scripts/deploy/vm_deploy.sh

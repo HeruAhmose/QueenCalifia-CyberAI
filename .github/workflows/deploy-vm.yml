@@ -1,0 +1,55 @@
+name: Deploy VM
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to deploy (branch or tag)"
+        required: true
+        default: "main"
+      acme:
+        description: "Use Let's Encrypt (acme profile)"
+        type: boolean
+        required: true
+        default: true
+      ssh_port:
+        description: "SSH port"
+        required: false
+        default: "22"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Write SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: Deploy over SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ~/.ssh/id_ed25519
+          DEPLOY_SSH_PORT: ${{ inputs.ssh_port }}
+          DEPLOY_REF: ${{ inputs.ref }}
+          QC_ACME: ${{ inputs.acme && '1' || '0' }}
+          QC_DOMAIN: ${{ secrets.QC_DOMAIN }}
+          QC_EMAIL: ${{ secrets.QC_EMAIL }}
+          QC_API_KEY_PEPPER: ${{ secrets.QC_API_KEY_PEPPER }}
+          QC_AUDIT_HMAC_KEY: ${{ secrets.QC_AUDIT_HMAC_KEY }}
+          QC_CORS_ORIGINS: ${{ secrets.QC_CORS_ORIGINS }}
+          QC_PROXY_TRUSTED_HOPS: ${{ secrets.QC_PROXY_TRUSTED_HOPS }}
+        run: |
+          bash scripts/deploy/vm_deploy.sh
+
+      - name: Summary
+        run: |
+          echo "Deployed ref '${{ inputs.ref }}' to ${{ secrets.DEPLOY_HOST }} (acme=${{ inputs.acme }})" >> $GITHUB_STEP_SUMMARY

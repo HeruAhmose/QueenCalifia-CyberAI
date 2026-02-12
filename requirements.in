@@ -1,0 +1,36 @@
+# Top-level runtime dependencies (pip-tools input)
+# Generate deterministic lockfiles via:
+#   make lock
+#
+# NOTE: Lockfiles with hashes are OS/arch specific. Generate inside Linux (Docker) for Docker builds.
+
+# Web framework (hardened)
+flask>=3.0.0,<4.0
+flask-cors>=4.0.0,<6.0
+werkzeug>=3.0.1,<4.0
+gunicorn>=21.2.0,<23.0
+
+# Security
+cryptography>=42.0.0,<44.0
+PyJWT>=2.8.0,<3.0
+bcrypt>=4.1.0,<5.0
+python-dotenv>=1.0.0,<2.0
+
+# Data processing
+numpy>=1.24.0,<2.1
+
+# Distributed scalability
+redis>=5.0.0,<6.0
+celery>=5.3.0,<6.0
+
+# Observability (OpenTelemetry)
+opentelemetry-api>=1.25.0,<2.0
+opentelemetry-sdk>=1.25.0,<2.0
+opentelemetry-exporter-otlp>=1.25.0,<2.0
+opentelemetry-instrumentation-flask>=0.46b0,<0.60b0
+opentelemetry-instrumentation-requests>=0.46b0,<0.60b0
+opentelemetry-instrumentation-redis>=0.46b0,<0.60b0
+opentelemetry-instrumentation-celery>=0.46b0,<0.60b0
+
+# Metrics (Prometheus)
+prometheus-client>=0.20.0,<1.0

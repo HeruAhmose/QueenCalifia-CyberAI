@@ -1,0 +1,178 @@
+name: Protect branches (one click)
+
+on:
+  workflow_dispatch:
+    inputs:
+      owner:
+        description: "Repo owner/org (blank = auto-detect)"
+        required: false
+        default: ""
+      repo:
+        description: "Repo name (blank = auto-detect)"
+        required: false
+        default: ""
+      approvals:
+        description: "Required approving reviews"
+        required: true
+        default: "2"
+      enforce_admins:
+        description: "Enforce rules for admins"
+        required: true
+        type: boolean
+        default: true
+      require_codeowners:
+        description: "Require Code Owner reviews"
+        required: true
+        type: boolean
+        default: true
+      auto_detect_checks:
+        description: "Auto-detect required check contexts from branch HEAD"
+        required: true
+        type: boolean
+        default: true
+      use_checks_objects:
+        description: "Prefer required_status_checks.checks objects (context + app_id) when possible"
+        required: true
+        type: boolean
+        default: true
+      prefer_checks_objects:
+        description: "When checks objects exist, keep contexts limited to non-check-run contexts"
+        required: true
+        type: boolean
+        default: true
+      exclude_app_slugs:
+        description: "Exclude check runs emitted by these GitHub Apps (comma-separated app slugs)"
+        required: false
+        default: ""
+      allowlist_regex:
+        description: "Optional regex allowlist (comma-separated). If set, only matching checks are required."
+        required: false
+        default: ""
+      denylist_regex:
+        description: "Optional regex denylist (comma-separated). Matches are excluded."
+        required: false
+        default: ""
+      extra_checks_staging:
+        description: "Extra required checks for staging (comma-separated)"
+        required: false
+        default: ""
+      extra_checks_production:
+        description: "Extra required checks for production (comma-separated)"
+        required: false
+        default: ""
+      dry_run:
+        description: "Print payload only (no API call)"
+        required: true
+        type: boolean
+        default: false
+      refuse_on_removals:
+        description: "Safety guard: refuse to apply if the diff would remove required checks"
+        required: true
+        type: boolean
+        default: true
+
+
+permissions:
+  contents: read
+
+jobs:
+  protect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify gh auth
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${GH_TOKEN:-}"
+          gh --version
+          gh auth status
+
+      - name: Plan + (optional) apply branch protection (with diff safety guard)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+
+          $owner = "${{ inputs.owner }}"
+          $repo  = "${{ inputs.repo }}"
+
+          $approvals = [int]"${{ inputs.approvals }}"
+          $enforceAdmins = ("${{ inputs.enforce_admins }}" -eq "true")
+          $requireCodeOwners = ("${{ inputs.require_codeowners }}" -eq "true")
+          $autoDetect = ("${{ inputs.auto_detect_checks }}" -eq "true")
+          $dryRun = ("${{ inputs.dry_run }}" -eq "true")
+          $refuseOnRemovals = ("${{ inputs.refuse_on_removals }}" -eq "true")
+
+          $useChecksObjects = ("${{ inputs.use_checks_objects }}" -eq "true")
+          $preferChecksObjects = ("${{ inputs.prefer_checks_objects }}" -eq "true")
+
+          $exclude = "${{ inputs.exclude_app_slugs }}".Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+          $allow   = "${{ inputs.allowlist_regex }}".Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+          $deny    = "${{ inputs.denylist_regex }}".Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+          $extraStaging = "${{ inputs.extra_checks_staging }}".Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+          $extraProd    = "${{ inputs.extra_checks_production }}".Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+
+          $reportPath = "artifacts/branch-protection-payload.json"
+
+          $args = @()
+          if ($owner) { $args += @("-Owner", $owner) }
+          if ($repo)  { $args += @("-Repo",  $repo) }
+          $args += @("-Approvals", $approvals)
+          $args += @("-EnforceAdmins", $enforceAdmins)
+          $args += @("-RequireCodeOwnerReviews", $requireCodeOwners)
+
+          $args += @("-UseChecksObjects", $useChecksObjects)
+          $args += @("-PreferChecksObjects", $preferChecksObjects)
+
+          if ($autoDetect) { $args += "-AutoDetectStatusChecks" }
+          if ($exclude.Count -gt 0) { $args += @("-ExcludeAppSlugs", $exclude) }
+          if ($allow.Count -gt 0)   { $args += @("-AllowlistRegex", $allow) }
+          if ($deny.Count -gt 0)    { $args += @("-DenylistRegex",  $deny) }
+          if ($extraStaging.Count -gt 0) { $args += @("-ExtraStatusChecksStaging", $extraStaging) }
+          if ($extraProd.Count -gt 0)    { $args += @("-ExtraStatusChecksProduction", $extraProd) }
+
+          Write-Host "==> Generate desired payload + diff (always)"
+          pwsh -File scripts/github/protect_branches.ps1 @args -DryRun -ReportPath $reportPath
+
+          pwsh -File scripts/github/diff_branch_protection.ps1 `
+            -Owner $owner -Repo $repo `
+            -ReportPath $reportPath `
+            -OutMarkdown artifacts/branch-protection-diff.md `
+            -OutJson artifacts/branch-protection-diff.json
+
+          $diff = Get-Content artifacts/branch-protection-diff.json -Raw | ConvertFrom-Json
+          $branchesWithRemovals = @()
+          foreach ($b in $diff) {
+            $ctxRem = @($b.contexts.remove)
+            $chkRem = @($b.checks_objects.remove)
+            if ($ctxRem.Count -gt 0 -or $chkRem.Count -gt 0) { $branchesWithRemovals += $b.branch }
+          }
+
+          if (-not $dryRun -and $refuseOnRemovals -and $branchesWithRemovals.Count -gt 0) {
+            Write-Error ("Safety guard: refusing to apply because removals detected for branch(es): {0}. " +
+              "Run the dry-run workflow, review artifacts/branch-protection-diff.md, then re-run with refuse_on_removals=false if intentional." -f ($branchesWithRemovals -join ', '))
+            exit 3
+          }
+
+          if ($dryRun) {
+            Write-Host "✅ Dry run requested; not applying."
+            exit 0
+          }
+
+          Write-Host "==> Apply branch protection"
+          pwsh -File scripts/github/protect_branches.ps1 @args -ReportPath $reportPath
+
+      - name: Upload apply report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: branch-protection-apply-report
+          path: artifacts/

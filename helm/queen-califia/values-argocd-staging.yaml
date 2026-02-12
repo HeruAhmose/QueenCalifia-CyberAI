@@ -1,0 +1,25 @@
+# Staging values for Argo CD (Image Updater writes digests here).
+api:
+  image:
+    repository: ghcr.io/YOUR_ORG/queencalifia-api
+    tag: "0.1.0"
+    digest: ""
+
+frontend:
+  image:
+    repository: ghcr.io/YOUR_ORG/queencalifia-frontend
+    tag: "0.1.0"
+    digest: ""
+
+ingress:
+  enabled: true
+  host: staging.qc.example.com
+  tls:
+    enabled: true
+    secretName: qc-staging-tls
+  certManager:
+    enabled: true
+    clusterIssuer: letsencrypt-staging
+
+redis:
+  enabled: true
