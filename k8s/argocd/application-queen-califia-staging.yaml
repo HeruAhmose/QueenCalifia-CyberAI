@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: queen-califia-staging
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: queen-califia
+    app.kubernetes.io/part-of: queen-califia
+    environment: staging
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/YOUR_ORG/QueenCalifia-CyberAI.git
+    targetRevision: staging
+    path: helm/queen-califia
+    helm:
+      valueFiles:
+        - values-argocd-staging.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: queen-califia-staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

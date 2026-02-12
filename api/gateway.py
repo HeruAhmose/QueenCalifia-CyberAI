@@ -327,6 +327,8 @@ class RateLimitPolicy:
         if not endpoint_limits:
             endpoint_limits = {
                 "GET /api/health": 6000,
+                "GET /healthz": 6000,
+                "GET /readyz": 6000,
                 "GET /api/ready": 6000,
                 # tighter, high-cost endpoint (scan submissions)
                 "POST /api/vulns/scan": {"admin": 30, "analyst": 10, "reader": 0, "public": 0},
@@ -476,6 +478,8 @@ class BudgetPolicy:
             endpoint_costs = {
                 "GET /api/health": 0,
                 "GET /api/ready": 0,
+                "GET /healthz": 0,
+                "GET /readyz": 0,
                 "GET /api/dashboard": 1,
                 "GET /api/incidents": 1,
                 "GET /api/incidents/<incident_id>": 1,
@@ -938,7 +942,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
             principal = api_keys.validate(presented) if api_keys else None
             if not principal:
                 # Allow unauthenticated health/readiness probes
-                if request.path in ("/api/health", "/api/ready", "/metrics"):
+                if request.path in ("/api/health", "/api/ready", "/healthz", "/readyz", "/metrics"):
                     g.principal = None
                     g.user_role = "public"
                     return None
@@ -1128,13 +1132,71 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
 
     # ── Endpoints ────────────────────────────────────────────────────────────
 
+    def _health_payload() -> dict:
+        return {
+            "status": "operational",
+            "system": "Queen Califia CyberAI",
+            "timestamp": _utcnow(),
+        }
+
+    def _check_audit_log_dir() -> dict:
+        audit_path = os.environ.get("QC_AUDIT_LOG_FILE", "audit.log.jsonl")
+        audit_dir = os.path.dirname(audit_path) or "."
+        try:
+            if not os.path.isdir(audit_dir):
+                os.makedirs(audit_dir, exist_ok=True)
+            ok = os.access(audit_dir, os.W_OK)
+            return {"name": "audit_log_dir", "ok": bool(ok), "required": True, "path": audit_dir}
+        except Exception as exc:
+            return {"name": "audit_log_dir", "ok": False, "required": True, "path": audit_dir, "error": str(exc)}
+
+    def _check_redis() -> dict:
+        required = os.environ.get("QC_REQUIRE_REDIS", "0") == "1"
+        url = (os.environ.get("QC_REDIS_URL", "") or "").strip()
+
+        if not url:
+            return {"name": "redis", "ok": True, "required": False, "skipped": True}
+
+        try:
+            from core.redis_client import get_redis
+
+            r = get_redis()
+            r.ping()
+            return {"name": "redis", "ok": True, "required": bool(required), "url": url}
+        except Exception as exc:
+            return {"name": "redis", "ok": False, "required": bool(required), "url": url, "error": str(exc)}
+
+    def _healthz_response():
+        return jsonify(_health_payload())
+
+    def _readyz_response():
+        checks = [
+            _check_audit_log_dir(),
+            _check_redis(),
+        ]
+        required_failures = [c for c in checks if c.get("required") and not c.get("ok")]
+        payload = {
+            "ready": len(required_failures) == 0,
+            "timestamp": _utcnow(),
+            "checks": {c["name"]: c for c in checks},
+        }
+        return (jsonify(payload), 200 if payload["ready"] else 503)
+
     @app.route("/api/health")
     def health():
-        return jsonify({"status": "operational", "system": "Queen Califia CyberAI", "timestamp": _utcnow()})
+        return _healthz_response()
 
     @app.route("/api/ready")
     def ready():
-        return jsonify({"ready": True, "timestamp": _utcnow()})
+        return _readyz_response()
+
+    @app.route("/healthz")
+    def healthz():
+        return _healthz_response()
+
+    @app.route("/readyz")
+    def readyz():
+        return _readyz_response()
 
     @app.route("/metrics")
     def metrics():

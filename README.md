@@ -652,3 +652,8 @@ helm upgrade --install qc ./helm/queen-califia -n queen-califia --create-namespa
   --set api.image.repository=ghcr.io/YOUR_ORG/queencalifia-api --set api.image.tag=TAG \
   --set frontend.image.repository=ghcr.io/YOUR_ORG/queencalifia-frontend --set frontend.image.tag=TAG
 ```
+
+
+## One-click deploy
+
+See `docs/ONE_CLICK_DEPLOY.md`.

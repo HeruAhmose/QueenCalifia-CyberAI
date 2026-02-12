@@ -1,0 +1,36 @@
+apiVersion: argocd-image-updater.argoproj.io/v1alpha1
+kind: ImageUpdater
+metadata:
+  name: queen-califia-staging
+  namespace: argocd-image-updater
+spec:
+  # Argo CD Applications live here
+  namespace: argocd
+
+  # Git write-back (creates a new branch from staging; your CI opens a PR for review)
+  writeBackConfig:
+    method: "git"
+    gitConfig:
+      repository: "https://github.com/YOUR_ORG/QueenCalifia-CyberAI.git"
+      branch: "staging:image-updater-staging-{{.SHA256}}"
+      writeBackTarget: "helmvalues:values-argocd-staging.yaml"
+
+  applicationRefs:
+    - namePattern: "queen-califia-staging"
+      images:
+        - alias: api
+          imageName: "ghcr.io/YOUR_ORG/queencalifia-api:latest"
+          commonUpdateSettings:
+            updateStrategy: "digest"
+          manifestTargets:
+            helm:
+              name: "api.image.repository"
+              tag: "api.image.digest"
+        - alias: frontend
+          imageName: "ghcr.io/YOUR_ORG/queencalifia-frontend:latest"
+          commonUpdateSettings:
+            updateStrategy: "digest"
+          manifestTargets:
+            helm:
+              name: "frontend.image.repository"
+              tag: "frontend.image.digest"

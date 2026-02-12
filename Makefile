@@ -37,8 +37,6 @@ help:
 	@echo "  make prod-down     - docker compose (production) down -v"
 	@echo "  make lock          - generate requirements.lock + requirements-dev.lock with hashes (Docker required)"
 	@echo "  make lock-upgrade  - same as lock, but upgrades within constraints"
-	@echo ""
-	@echo "  Windows / PowerShell:  make help-win"
 
 up:
 	@if [ ! -f .env ]; then cp .env.example .env; echo "📋 Created .env from .env.example"; fi
@@ -157,55 +155,6 @@ spki-pin-runbook:
 	fi
 
 
-# ──────────────────────────────────────────────────────────────
-# Windows / PowerShell targets  (suffix: -win)
-# Usage:  make test-win   OR   make -f Makefile dev-win
-# Requires: Python venv activated, pip, npm on PATH.
-# ──────────────────────────────────────────────────────────────
-.PHONY: help-win test-win test-backend-win test-frontend-win dev-win dev-frontend-win hooks-win lock-win lock-upgrade-win
-
-help-win:
-	@echo "Targets (Windows / PowerShell):"
-	@echo "  make test-win          - install deps + run backend + frontend tests"
-	@echo "  make test-backend-win  - run backend pytest only"
-	@echo "  make test-frontend-win - run frontend tests only"
-	@echo "  make dev-win           - run backend locally (no-auth, debug)"
-	@echo "  make dev-frontend-win  - run frontend Vite dev server"
-	@echo "  make hooks-win         - install git hooks"
-	@echo "  make lock-win          - pip-compile lock files (requires pip-tools)"
-	@echo "  make lock-upgrade-win  - pip-compile lock files with --upgrade"
-
-test-backend-win:
-	pip install -r requirements.txt
-	pip install -r requirements-dev.txt
-	python -m pytest -q
-
-test-frontend-win:
-	cd frontend && npm install && npm test
-
-test-win: test-backend-win test-frontend-win
-
-dev-win:
-	set QC_NO_AUTH=1 && python app.py --no-auth --debug
-
-dev-frontend-win:
-	cd frontend && npm install && npm run dev
-
-hooks-win:
-	git config core.hooksPath .githooks
-	@echo "Installed hooks path: .githooks"
-
-lock-win:
-	pip install pip-tools
-	pip-compile --generate-hashes --strip-extras -o requirements.lock requirements.in
-	pip-compile --generate-hashes --strip-extras -o requirements-dev.lock requirements-dev.in
-
-lock-upgrade-win:
-	pip install pip-tools
-	pip-compile --upgrade --generate-hashes --strip-extras -o requirements.lock requirements.in
-	pip-compile --upgrade --generate-hashes --strip-extras -o requirements-dev.lock requirements-dev.in
-
-
 lock:
 	@./scripts/lock.sh
 
@@ -255,8 +204,13 @@ k8s-validate:
 	@echo "Rendered manifests written to /tmp/qc-helm-rendered.yaml and /tmp/qc-kustomize-rendered.yaml"
 
 
-
-
+\1
 .PHONY: kind-ingress-e2e
 kind-ingress-e2e: ## Run Ingress E2E test (port-forward ingress-nginx) against the current kind context
 	./scripts/ci/kind_ingress_e2e.sh
+
+
+.PHONY: deploy-vm
+# Local deploy helper (requires bash + ssh configured)
+deploy-vm:
+	@bash scripts/deploy/vm_deploy.sh
