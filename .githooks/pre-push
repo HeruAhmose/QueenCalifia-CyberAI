@@ -4,9 +4,9 @@ set -eu
 echo "[pre-push] running checks via PowerShell (scripts/ci/prepush.ps1)..."
 
 if command -v pwsh >/dev/null 2>&1; then
-  exec pwsh -NoProfile -ExecutionPolicy Bypass -File "scripts/ci/prepush.ps1" "$@"
+  exec pwsh -NoProfile -ExecutionPolicy Bypass -File "scripts/ci/prepush.ps1" "$@" < /dev/null
 elif command -v powershell >/dev/null 2>&1; then
-  exec powershell -NoProfile -ExecutionPolicy Bypass -File "scripts/ci/prepush.ps1" "$@"
+  exec powershell -NoProfile -ExecutionPolicy Bypass -File "scripts/ci/prepush.ps1" "$@" < /dev/null
 else
   echo "[pre-push] ERROR: pwsh/powershell not found; cannot run pre-push checks." >&2
   exit 1
