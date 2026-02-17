@@ -42,6 +42,18 @@ from collections import defaultdict, deque
 import ipaddress
 
 from flask import Flask, request, jsonify, g
+
+# Optional: Zero-Day predictor + operational telemetry
+try:
+    from engines.zero_day_predictor import ZeroDayPredictor  # type: ignore
+except Exception:  # pragma: no cover
+    ZeroDayPredictor = None  # type: ignore
+
+try:
+    from core.telemetry import telemetry as qc_telemetry  # type: ignore
+except Exception:  # pragma: no cover
+    qc_telemetry = None
+
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 from core.log_context import set_request_id, set_principal, clear_request_id, clear_principal
@@ -873,7 +885,7 @@ def require_permission(permission: str) -> Callable:
 
 # ─── API Factory ─────────────────────────────────────────────────────────────
 
-def create_security_api(security_mesh, vuln_engine, incident_orchestrator, config: Optional[SecurityConfig] = None) -> Flask:
+def create_security_api(security_mesh, vuln_engine, incident_orchestrator, config: Optional[SecurityConfig] = None, zero_day_predictor=None, advanced_telemetry=None) -> Flask:
     config = config or SecurityConfig()
 
     # Secrets
@@ -908,6 +920,13 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
     )
 
     app = Flask(__name__)
+    # --- Telemetry (optional, safe-by-default) ---
+    try:
+        from core.telemetry import install_flask_hooks  # type: ignore
+        install_flask_hooks(app)
+    except Exception:
+        pass
+
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
     CORS(
@@ -1197,6 +1216,150 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
     @app.route("/readyz")
     def readyz():
         return _readyz_response()
+
+    # --- Telemetry endpoints (optional) ---
+    @app.route('/api/v1/telemetry/ingest', methods=['POST'])
+    def telemetry_ingest():
+        """Ingest one telemetry event and return current derived signals."""
+        try:
+            from core.telemetry import process_event  # type: ignore
+        except Exception:
+            return jsonify({'enabled': False, 'error': 'telemetry unavailable'}), 503
+        payload = request.get_json(silent=True) or {}
+        if not isinstance(payload, dict):
+            return jsonify({'error': 'expected JSON object'}), 400
+        return jsonify(process_event(payload))
+
+    @app.route('/api/v1/telemetry/summary')
+    def telemetry_summary():
+        """Return a safe summary snapshot for dashboards."""
+        try:
+            from core.telemetry import qc_telemetry  # type: ignore
+        except Exception:
+            qc_telemetry = None
+        if qc_telemetry is None:
+            return jsonify({'enabled': False, 'summary': {}})
+        return jsonify({'enabled': True, 'summary': qc_telemetry.summary()})
+
+    # --- Zero-Day Predictor API ---
+    @app.route('/api/v1/predictor/analyze', methods=['POST'])
+    def predictor_analyze():
+        """Analyze an event through the 5-layer prediction engine."""
+        if zero_day_predictor is None:
+            return jsonify({'enabled': False, 'error': 'predictor unavailable'}), 503
+        payload = request.get_json(silent=True) or {}
+        if not isinstance(payload, dict):
+            return jsonify({'error': 'expected JSON object'}), 400
+        return jsonify(zero_day_predictor.analyze_event(payload))
+
+    @app.route('/api/v1/predictor/predictions')
+    def predictor_predictions():
+        """Get active predictions above optional confidence threshold."""
+        if zero_day_predictor is None:
+            return jsonify({'enabled': False}), 503
+        min_conf = float(request.args.get('min_confidence', 0))
+        return jsonify({'predictions': zero_day_predictor.get_active_predictions(min_conf)})
+
+    @app.route('/api/v1/predictor/status')
+    def predictor_status():
+        """Get predictor engine status."""
+        if zero_day_predictor is None:
+            return jsonify({'enabled': False}), 503
+        return jsonify(zero_day_predictor.get_status())
+
+    @app.route('/api/v1/predictor/landscape')
+    def predictor_landscape():
+        """Get strategic threat landscape assessment."""
+        if zero_day_predictor is None:
+            return jsonify({'enabled': False}), 503
+        return jsonify(zero_day_predictor.get_threat_landscape())
+
+    @app.route('/api/v1/predictor/validate', methods=['POST'])
+    def predictor_validate():
+        """Validate a prediction outcome."""
+        if zero_day_predictor is None:
+            return jsonify({'enabled': False}), 503
+        payload = request.get_json(silent=True) or {}
+        result = zero_day_predictor.validate_prediction(
+            payload.get('prediction_id', ''),
+            payload.get('outcome', ''),
+            payload.get('notes', ''),
+        )
+        if result is None:
+            return jsonify({'error': 'prediction not found'}), 404
+        return jsonify({'validated': True, **result})
+
+    # --- Advanced Telemetry API ---
+    @app.route('/api/v1/telemetry/advanced/process', methods=['POST'])
+    def telemetry_advanced_process():
+        """Process event through 6-stream telemetry matrix."""
+        if advanced_telemetry is None:
+            return jsonify({'enabled': False, 'error': 'telemetry unavailable'}), 503
+        payload = request.get_json(silent=True) or {}
+        if not isinstance(payload, dict):
+            return jsonify({'error': 'expected JSON object'}), 400
+        tel_result = advanced_telemetry.process_event(payload)
+        # Cross-feed into predictor if available
+        if zero_day_predictor is not None:
+            for sig in tel_result.get('predictor_signals', []):
+                enriched = advanced_telemetry.enrich_signal_confidence(sig)
+                zero_day_predictor.signal_bus.append(enriched)
+        return jsonify(tel_result)
+
+    @app.route('/api/v1/telemetry/advanced/status')
+    def telemetry_advanced_status():
+        """Get advanced telemetry status."""
+        if advanced_telemetry is None:
+            return jsonify({'enabled': False}), 503
+        return jsonify(advanced_telemetry.get_status())
+
+    @app.route('/api/v1/telemetry/advanced/beacons')
+    def telemetry_beacons():
+        """Get detected beacon profiles."""
+        if advanced_telemetry is None:
+            return jsonify({'enabled': False}), 503
+        return jsonify({'beacons': advanced_telemetry.get_beacon_report()})
+
+    @app.route('/api/v1/telemetry/advanced/risk-map')
+    def telemetry_risk_map():
+        """Get asset risk scoring map."""
+        if advanced_telemetry is None:
+            return jsonify({'enabled': False}), 503
+        return jsonify(advanced_telemetry.get_asset_risk_map())
+
+    @app.route('/api/v1/telemetry/advanced/graph')
+    def telemetry_lateral_graph():
+        """Get lateral movement communication graph."""
+        if advanced_telemetry is None:
+            return jsonify({'enabled': False}), 503
+        return jsonify(advanced_telemetry.get_lateral_movement_graph())
+
+    @app.route('/api/v1/telemetry/advanced/health')
+    def telemetry_health():
+        """Get collection health report."""
+        if advanced_telemetry is None:
+            return jsonify({'enabled': False}), 503
+        return jsonify(advanced_telemetry.check_collection_health())
+
+    @app.route('/api/v1/telemetry/advanced/feedback')
+    def telemetry_feedback():
+        """Get adaptive feedback loop summary."""
+        if advanced_telemetry is None:
+            return jsonify({'enabled': False}), 503
+        return jsonify(advanced_telemetry.get_feedback_summary())
+
+    @app.route('/api/v1/telemetry/advanced/feedback', methods=['POST'])
+    def telemetry_record_feedback():
+        """Record a prediction outcome for adaptive calibration."""
+        if advanced_telemetry is None:
+            return jsonify({'enabled': False}), 503
+        payload = request.get_json(silent=True) or {}
+        return jsonify(advanced_telemetry.record_prediction_outcome(
+            payload.get('prediction_id', ''),
+            payload.get('outcome', ''),
+            payload.get('contributing_layers', []),
+            payload.get('signal_types', []),
+        ))
 
     @app.route("/metrics")
     def metrics():

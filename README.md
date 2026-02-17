@@ -165,6 +165,28 @@ Queen Califia Quantum CyberAI
 │   ├── Remediation Workflows — Approval-gated execution
 │   └── Post-Incident Review & Metrics (MTTD/MTTC/MTTR)
 │
+├── 🔮 Zero-Day Prediction Engine (engines/zero_day_predictor.py)
+│   ├── Layer 1: Multi-Source Anomaly Fusion (Z-score correlation)
+│   ├── Layer 2: Attack Surface Drift Detection (config/cert/service)
+│   ├── Layer 3: Shannon Entropy Analysis (encryption/encoding shifts)
+│   ├── Layer 4: Behavioral Genome Deviation (process DNA profiling)
+│   ├── Layer 5: Strategic Threat Forecast (campaign correlation)
+│   ├── 12 Threat Categories — novel_exploit through polymorphic
+│   ├── 5 Confidence Tiers — speculative → near_certain
+│   ├── Cross-Layer Correlation — 3+ layers → prediction generation
+│   ├── Auto-Containment for critical predictions (≥0.9 confidence)
+│   └── Prediction Validation & Accuracy Tracking
+│
+├── 📡 Advanced Telemetry Matrix (engines/advanced_telemetry.py)
+│   ├── T1: Network Flow Intel — JA3/JA4 fingerprinting, DGA/DNS tunneling
+│   ├── T2: Temporal Patterns — Beaconing detection (CV analysis), burst detection
+│   ├── T3: Kernel/Endpoint — Syscall profiling, ransomware I/O, memory injection
+│   ├── T4: Cross-Asset Correlation — Communication graph, blast radius, lateral movement
+│   ├── T5: Adaptive Feedback Loop — Threshold auto-tuning, FP suppression learning
+│   ├── T6: Collection Health — Sensor monitoring, coverage gaps, blind spot mapping
+│   ├── 12+ Known C2 Fingerprints (Cobalt Strike, Sliver, Brute Ratel, etc.)
+│   └── Signal Bus Integration — Direct cross-feed to Zero-Day Predictor
+│
 ├── 🔒 Hardened API Gateway (api/gateway.py)
 │   ├── API Key Authentication with RBAC (admin/analyst/reader)
 │   ├── Sliding Window Rate Limiting
@@ -174,7 +196,14 @@ Queen Califia Quantum CyberAI
 │   ├── CORS with restricted origins (not wildcard)
 │   └── No error detail leakage
 │
-└── 📊 SOC Dashboard (React frontend, served separately)
+└── 📊 SOC Dashboard (React frontend — 7 operational tabs)
+    ├── Strategic Overview — Threat posture, mesh health, prediction timeline
+    ├── Zero-Day Predictor — 5-layer activity, prediction list, campaigns
+    ├── Advanced Telemetry — 6-stream intelligence (network/temporal/kernel/graph/feedback/health)
+    ├── Security Mesh — Node topology, IOC management, circuit status
+    ├── Incident Response — Severity breakdown, playbook execution, forensics
+    ├── Vulnerability Scanner — CIDR scanning, CVE correlation, compliance
+    └── DevOps Operations — K8s bootstrap, branch protection, DNS sanity
 ```
 
 ## Biomimetic Design Principles
@@ -217,11 +246,35 @@ Set `QC_LOG_FORMAT=json` (default when `QC_PRODUCTION=1`). HTTP and task logs in
 - `request_id` (propagates from HTTP -> Celery via `X-Request-ID`)
 - `principal` (API key hash or ip identity)
 
+### Zero-Day Predictor & Advanced Telemetry API
+
+```
+POST /api/v1/predictor/analyze         — Analyze event through 5-layer prediction engine
+GET  /api/v1/predictor/predictions     — Get active predictions (optional ?min_confidence=0.5)
+GET  /api/v1/predictor/status          — Predictor engine status
+GET  /api/v1/predictor/landscape       — Strategic threat landscape assessment
+POST /api/v1/predictor/validate        — Validate prediction outcome
+
+POST /api/v1/telemetry/advanced/process — Process event through 6-stream telemetry matrix
+GET  /api/v1/telemetry/advanced/status  — Telemetry engine status
+GET  /api/v1/telemetry/advanced/beacons — Detected beacon profiles
+GET  /api/v1/telemetry/advanced/risk-map — Asset risk scoring map
+GET  /api/v1/telemetry/advanced/graph   — Lateral movement communication graph
+GET  /api/v1/telemetry/advanced/health  — Collection health report
+GET  /api/v1/telemetry/advanced/feedback — Adaptive feedback loop summary
+POST /api/v1/telemetry/advanced/feedback — Record prediction outcome for calibration
+```
+
 ### Tests
 
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt
+
+# Run all tests (97 engine tests + integration tests)
 pytest
+
+# Run engine tests only
+pytest tests/test_zero_day_predictor.py tests/test_advanced_telemetry.py -v
 ```
 
 ### Run (Development)
@@ -424,7 +477,7 @@ MIT License — See LICENSE
 ## Author
 
 **Jon** — Tamerian Materials  
-Naval Academy Graduate | Navy Veteran | Cybersecurity Professional
+Navy Veteran | Cyber Security Professional
 
 ---
 

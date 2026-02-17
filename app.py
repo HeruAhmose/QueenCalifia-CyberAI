@@ -28,6 +28,8 @@ from api.gateway import create_security_api, SecurityConfig
 from core.tamerian_mesh import TamerianSecurityMesh
 from engines.vulnerability_engine import VulnerabilityEngine
 from engines.incident_response import IncidentResponseOrchestrator
+from engines.zero_day_predictor import ZeroDayPredictor
+from engines.advanced_telemetry import AdvancedTelemetry
 
 configure_logging()
 logger = logging.getLogger("queencalifia")
@@ -66,6 +68,21 @@ def build_system(no_auth: bool, origins: str) -> dict:
 
     incident_orchestrator = IncidentResponseOrchestrator(config={})
 
+    # ── Zero-Day Prediction & Advanced Telemetry ──
+    predictor_config = {
+        "anomaly_z_threshold": float(os.environ.get("QC_ANOMALY_Z", 3.0)),
+    }
+    zero_day_predictor = ZeroDayPredictor(config=predictor_config)
+
+    telemetry_config = {
+        "dns_qps_threshold": int(os.environ.get("QC_DNS_QPS_THRESHOLD", 50)),
+        "injection_syscall_threshold": int(os.environ.get("QC_INJECTION_THRESHOLD", 10)),
+        "blast_radius_threshold": int(os.environ.get("QC_BLAST_THRESHOLD", 20)),
+        "off_hours_start": int(os.environ.get("QC_OFF_HOURS_START", 22)),
+        "off_hours_end": int(os.environ.get("QC_OFF_HOURS_END", 5)),
+    }
+    advanced_telemetry = AdvancedTelemetry(config=telemetry_config)
+
     api_config = SecurityConfig(
         require_api_key=not no_auth,
         allowed_origins=_parse_origins(origins),
@@ -78,6 +95,8 @@ def build_system(no_auth: bool, origins: str) -> dict:
         vuln_engine=vuln_engine,
         incident_orchestrator=incident_orchestrator,
         config=api_config,
+        zero_day_predictor=zero_day_predictor,
+        advanced_telemetry=advanced_telemetry,
     )
 
     return {
@@ -85,6 +104,8 @@ def build_system(no_auth: bool, origins: str) -> dict:
         "security_mesh": security_mesh,
         "vuln_engine": vuln_engine,
         "incident_orchestrator": incident_orchestrator,
+        "zero_day_predictor": zero_day_predictor,
+        "advanced_telemetry": advanced_telemetry,
     }
 
 
