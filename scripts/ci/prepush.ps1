@@ -4,14 +4,20 @@
   Cross-platform pre-push checks (PowerShell 7).
 
 .DESCRIPTION
-  Default behavior is "developer-friendly":
-    - Blocks only on high-signal problems (gitlinks/submodules staged).
-    - Runs pytest only if available; otherwise warns and allows push.
+  Default (FAST) mode:
+    - Blocks pushes that stage gitlinks/submodules (mode 160000).
+    - Optionally lints GitHub Actions YAML if actionlint/yamllint is installed.
+    - Runs python compileall.
+    - If pytest is installed, runs a small fast test set (zero-day predictor tests).
 
-  Set QC_PREPUSH_STRICT=1 to make missing tools/tests fail the push.
+  FULL mode:
+    - Set QC_PREPUSH_FULL=1 to run full pytest suite (pytest -q).
 
-.NOTES
-  Called by .githooks/pre-push
+  STRICT mode:
+    - Set QC_PREPUSH_STRICT=1 to fail push if python/pytest/tooling is missing.
+
+  Tip:
+    - To skip locally: set QC_PREPUSH_SKIP=1 (or use git push --no-verify).
 #>
 
 Set-StrictMode -Version Latest
@@ -20,13 +26,22 @@ $ErrorActionPreference = "Stop"
 function Write-Info([string] $Msg) { Write-Host "[pre-push] $Msg" }
 function Write-Warn([string] $Msg) { Write-Warning "[pre-push] $Msg" }
 
-function Exec([string] $File, [string[]] $Args) {
-  $p = Start-Process -FilePath $File -ArgumentList $Args -NoNewWindow -Wait -PassThru
-  if ($p.ExitCode -ne 0) { throw "Command failed ($File): $($Args -join ' ')" }
-}
+function GitTop() { (git rev-parse --show-toplevel).Trim() }
 
-function GitTop() {
-  return (git rev-parse --show-toplevel).Trim()
+function Exec([string] $File, [string[]] $Args, [switch] $NoStdin) {
+  $tmpIn = $null
+  try {
+    if ($NoStdin) {
+      $tmpIn = Join-Path $env:TEMP ("qc_empty_stdin_" + [Guid]::NewGuid().ToString("n") + ".txt")
+      Set-Content -Path $tmpIn -Value "" -Encoding Ascii
+      $p = Start-Process -FilePath $File -ArgumentList $Args -NoNewWindow -Wait -PassThru -RedirectStandardInput $tmpIn
+    } else {
+      $p = Start-Process -FilePath $File -ArgumentList $Args -NoNewWindow -Wait -PassThru
+    }
+    if ($p.ExitCode -ne 0) { throw "Command failed ($File): $($Args -join ' ')" }
+  } finally {
+    if ($tmpIn -and (Test-Path $tmpIn)) { Remove-Item -Force $tmpIn -ErrorAction SilentlyContinue }
+  }
 }
 
 function FailIfGitlinksStaged() {
@@ -39,45 +54,100 @@ function FailIfGitlinksStaged() {
   }
 
   if (Test-Path ".gitmodules") {
-    # If .gitmodules exists, that's a strong sign a submodule is being introduced/used.
-    # This repo prefers to avoid submodules for portability.
     $strict = [bool]($env:QC_PREPUSH_STRICT -eq "1")
-    $msg = ".gitmodules exists. If you are not intentionally using submodules, remove it."
+    $msg = ".gitmodules exists. If not intentional, remove it."
     if ($strict) { throw $msg } else { Write-Warn $msg }
   }
 }
 
-function TryRunPytest() {
+function Resolve-Python() {
+  # Prefer local venv
+  if (Test-Path ".venv/Scripts/python.exe") { return (Resolve-Path ".venv/Scripts/python.exe").Path }
+  try { return (Get-Command python -ErrorAction Stop).Source } catch {}
+  try { return (Get-Command py -ErrorAction Stop).Source } catch {}
+  return $null
+}
+
+function Has-Module([string] $Py, [string] $ModuleName) {
+  try { Exec $Py @("-c", "import $ModuleName; print(getattr($ModuleName,'__version__','ok'))") -NoStdin; return $true } catch { return $false }
+}
+
+function TryRunActionlint() {
   $strict = [bool]($env:QC_PREPUSH_STRICT -eq "1")
-
-  $py = $null
-  try { $py = (Get-Command python -ErrorAction Stop).Source } catch {}
-  if (-not $py) {
-    $msg = "python not found; skipping pytest."
-    if ($strict) { throw $msg } else { Write-Warn $msg; return }
-  }
-
-  $hasPytest = $true
   try {
-    Exec $py @("-c", "import pytest; print(pytest.__version__)")
+    $cmd = (Get-Command actionlint -ErrorAction Stop).Source
+    Write-Info "lint: GitHub Actions (actionlint)"
+    Exec $cmd @() -NoStdin
   } catch {
-    $hasPytest = $false
+    $msg = "actionlint not found; skipping GitHub Actions lint."
+    if ($strict) { throw $msg } else { Write-Warn $msg }
   }
+}
 
-  if (-not $hasPytest) {
-    $msg = "pytest not installed; skipping tests. (Install: python -m pip install -r requirements-dev.txt)"
-    if ($strict) { throw $msg } else { Write-Warn $msg; return }
+function TryRunYamllint() {
+  $strict = [bool]($env:QC_PREPUSH_STRICT -eq "1")
+  try {
+    $cmd = (Get-Command yamllint -ErrorAction Stop).Source
+    if (Test-Path ".github/workflows") {
+      Write-Info "lint: YAML (yamllint) on .github/workflows"
+      Exec $cmd @(".github/workflows") -NoStdin
+    }
+  } catch {
+    $msg = "yamllint not found; skipping YAML lint."
+    if ($strict) { throw $msg } else { Write-Warn $msg }
   }
+}
 
-  Write-Info "running unit tests (pytest -q)"
-  Exec $py @("-m", "pytest", "-q")
+function RunCompileAll([string] $Py) {
+  Write-Info "fast: compileall"
+  $targets = @("api","core","engines","scripts","tests")
+  $args = @("-m","compileall","-q") + $targets
+  Exec $Py $args -NoStdin
+}
+
+function RunPytestFast([string] $Py) {
+  # Only run if pytest exists
+  if (-not (Has-Module $Py "pytest")) {
+    $msg = "pytest not installed; skipping tests. (Run: pwsh -File scripts/dev/python_bootstrap_windows.ps1 -Dev)"
+    if ($env:QC_PREPUSH_STRICT -eq "1") { throw $msg } else { Write-Warn $msg; return }
+  }
+  Write-Info "fast: pytest (zero-day predictor)"
+  Exec $Py @("-m","pytest","-q","tests/test_zero_day_predictor.py") -NoStdin
+}
+
+function RunPytestFull([string] $Py) {
+  if (-not (Has-Module $Py "pytest")) {
+    $msg = "pytest not installed; cannot run full test suite."
+    if ($env:QC_PREPUSH_STRICT -eq "1") { throw $msg } else { Write-Warn $msg; return }
+  }
+  Write-Info "full: pytest"
+  Exec $Py @("-m","pytest","-q") -NoStdin
+}
+
+if ($env:QC_PREPUSH_SKIP -eq "1") {
+  Write-Warn "QC_PREPUSH_SKIP=1 set; skipping checks."
+  exit 0
 }
 
 try {
   Push-Location (GitTop)
   Write-Info "starting"
   FailIfGitlinksStaged
-  TryRunPytest
+
+  TryRunActionlint
+  TryRunYamllint
+
+  $py = Resolve-Python
+  if (-not $py) {
+    $msg = "python not found; skipping python checks."
+    if ($env:QC_PREPUSH_STRICT -eq "1") { throw $msg } else { Write-Warn $msg; Write-Info "ok"; exit 0 }
+  }
+
+  RunCompileAll $py
+
+  $full = [bool]($env:QC_PREPUSH_FULL -eq "1")
+  if ($full) { RunPytestFull $py } else { RunPytestFast $py }
+
   Write-Info "ok"
 } finally {
   Pop-Location

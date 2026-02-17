@@ -1,0 +1,17 @@
+v3.1: Unified Command Dashboard + Advanced Telemetry + Production Hardening
+
+- Upgraded live interactive dashboard to v3.1 with 7 operational tabs
+  - Strategic Overview: Threat posture gauge, event timeline, prediction feed
+  - Zero-Day Predictor: 5-layer prediction engine, campaign tracking
+  - Advanced Telemetry: 6-stream intel (network/temporal/kernel/graph/feedback/health)
+  - Security Mesh: Node topology, circuit status, IOC management
+  - Incident Response: Severity triage, playbook execution, forensics, action approval
+  - Vulnerability Scanner: CIDR scanning, CVE correlation, compliance auditing
+  - DevOps Operations: K8s bootstrap, branch protection, DNS sanity
+
+- Cleaned stale artifacts from repo root (removed v38 subfolder and zip)
+- Added QUICKSTART_WINDOWS.md documentation
+- Added DevOps Dashboard component
+- Added advanced telemetry and zero-day predictor test suites
+- Updated App.jsx to use new dashboard export
+- Version footer updated to v3.1
