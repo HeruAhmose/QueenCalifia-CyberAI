@@ -11,3 +11,4 @@ resources:
   - ingress.yaml
   - cert-manager/clusterissuer-staging.yaml
   - cert-manager/clusterissuer-prod.yaml
+  - network-policies/zero-trust.yaml

@@ -1,0 +1,197 @@
+# QueenCalifia CyberAI — Zero-Trust Network Policies
+# Deny all traffic by default, then explicitly allow required paths.
+# ═══════════════════════════════════════════════════════════════════
+
+---
+# ── DEFAULT DENY ALL ────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: qc-deny-all
+  namespace: queen-califia
+  labels:
+    app.kubernetes.io/part-of: queen-califia
+    security.queencalifia.io/policy: deny-all
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+
+---
+# ── ALLOW: Ingress Controller → API ────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: qc-allow-ingress-to-api
+  namespace: queen-califia
+spec:
+  podSelector:
+    matchLabels:
+      app: qc-api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 5000
+
+---
+# ── ALLOW: Ingress Controller → Frontend ───────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: qc-allow-ingress-to-frontend
+  namespace: queen-califia
+spec:
+  podSelector:
+    matchLabels:
+      app: qc-frontend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 80
+
+---
+# ── ALLOW: API → Redis (egress) ────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: qc-api-egress-redis
+  namespace: queen-califia
+spec:
+  podSelector:
+    matchLabels:
+      app: qc-api
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: qc-redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Allow DNS resolution
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+# ── ALLOW: Worker → Redis (egress) ─────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: qc-worker-egress-redis
+  namespace: queen-califia
+spec:
+  podSelector:
+    matchLabels:
+      app: qc-worker
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: qc-redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Allow DNS resolution
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+# ── ALLOW: Redis accepts from API + Worker ─────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: qc-redis-ingress
+  namespace: queen-califia
+spec:
+  podSelector:
+    matchLabels:
+      app: qc-redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: qc-api
+        - podSelector:
+            matchLabels:
+              app: qc-worker
+      ports:
+        - protocol: TCP
+          port: 6379
+
+---
+# ── ALLOW: Prometheus → API /metrics ───────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: qc-prometheus-scrape-api
+  namespace: queen-califia
+spec:
+  podSelector:
+    matchLabels:
+      app: qc-api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 5000
+
+---
+# ── ALLOW: Frontend → API (internal proxy) ─────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: qc-frontend-egress-api
+  namespace: queen-califia
+spec:
+  podSelector:
+    matchLabels:
+      app: qc-frontend
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: qc-api
+      ports:
+        - protocol: TCP
+          port: 5000
+    # Allow DNS
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

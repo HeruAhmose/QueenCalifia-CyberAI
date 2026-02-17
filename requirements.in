@@ -16,6 +16,9 @@ PyJWT>=2.8.0,<3.0
 bcrypt>=4.1.0,<5.0
 python-dotenv>=1.0.0,<2.0
 
+# AI Sovereignty Layer (structured output enforcement)
+pydantic>=2.5.0,<3.0
+
 # Data processing
 
 # Distributed scalability
