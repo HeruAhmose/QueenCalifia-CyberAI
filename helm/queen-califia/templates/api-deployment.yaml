@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qc-api
+  namespace: {{ include "queen-califia.ns" . }}
+  labels:
+{{ include "queen-califia.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.api.replicaCount }}
+  selector:
+    matchLabels:
+      app: qc-api
+      {{- include "queen-califia.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: qc-api
+        {{- include "queen-califia.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+      {{- $psc := default .Values.podSecurityContext .Values.api.podSecurityContext -}}
+      {{- with $psc }}
+      securityContext:
+{{ toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: api
+          image: {{ include "queen-califia.image" (dict "img" .Values.api.image) }}
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          {{- $csc := default .Values.containerSecurityContext .Values.api.containerSecurityContext -}}
+          {{- with $csc }}
+          securityContext:
+{{ toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - containerPort: {{ .Values.api.service.port }}
+              name: http
+          envFrom:
+            {{- if .Values.config.create }}
+            - configMapRef:
+                name: {{ .Values.config.name }}
+            {{- end }}
+            - secretRef:
+                name: {{ .Values.secrets.name }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.api.probes.livenessPath }}
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.api.probes.readinessPath }}
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 6
+          resources:
+{{ toYaml .Values.api.resources | indent 12 }}

@@ -1,0 +1,54 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+
+  # Tail-based sampling: keep errors + slow traces; otherwise sample a baseline %
+  # NOTE: Tail sampling requires all spans of a trace to reach the same collector instance.
+  tail_sampling:
+    decision_wait: ${QC_OTEL_TAIL_DECISION_WAIT:10s}
+    num_traces: ${QC_OTEL_TAIL_NUM_TRACES:50000}
+    expected_new_traces_per_sec: ${QC_OTEL_TAIL_EXPECTED_NEW_TRACES_PER_SEC:2000}
+    policies:
+      - name: always_keep_errors
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+      - name: always_keep_slow
+        type: latency
+        latency:
+          threshold_ms: ${QC_OTEL_LATENCY_THRESHOLD_MS:2000}
+      - name: baseline_probabilistic
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: ${QC_OTEL_SAMPLING_PERCENTAGE:25}
+
+  batch:
+
+exporters:
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  file:
+    path: /var/log/otel/traces.jsonl
+
+service:
+  telemetry:
+    logs:
+      level: "info"
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, tail_sampling, batch]
+      exporters: [otlp/jaeger, otlp/tempo, file]

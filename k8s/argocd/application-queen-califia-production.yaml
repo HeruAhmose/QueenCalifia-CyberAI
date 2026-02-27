@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: queen-califia-production
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: queen-califia
+    app.kubernetes.io/part-of: queen-califia
+    environment: production
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/YOUR_ORG/QueenCalifia-CyberAI.git
+    targetRevision: production
+    path: helm/queen-califia
+    helm:
+      valueFiles:
+        - values-argocd-production.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: queen-califia-production
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

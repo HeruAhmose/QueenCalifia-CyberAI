@@ -1,0 +1,6 @@
+apiVersion: v2
+name: queen-califia
+description: Queen Califia CyberAI - API + worker + frontend + optional Redis and Ingress.
+type: application
+version: 0.1.0
+appVersion: "38"

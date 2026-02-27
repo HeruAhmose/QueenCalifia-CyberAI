@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: queencalifia_api
+    metrics_path: /metrics
+    authorization:
+      credentials: "__QC_METRICS_TOKEN__"
+    static_configs:
+      - targets: ["api:5000"]

@@ -1,0 +1,8 @@
+# GENERATED FILE — DO NOT EDIT
+#
+# Create/refresh with:
+#   make lock          # reproducible (includes hashes)
+#   make lock-upgrade  # upgrades within constraints (includes hashes)
+#
+# This repository intentionally keeps lockfiles under version control.
+# Lockfiles with hashes are OS/arch specific; generate inside Linux (Docker) for Docker deploys.

@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qc-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qc-worker
+  template:
+    metadata:
+      labels:
+        app: qc-worker
+    spec:
+      containers:
+        - name: worker
+          image: ghcr.io/YOUR_ORG/queencalifia-api:TAG
+          imagePullPolicy: IfNotPresent
+          command: ["celery", "-A", "celery_app.celery_app", "worker", "-l", "INFO", "--concurrency", "4", "-Q", "scans"]
+          envFrom:
+            - configMapRef:
+                name: qc-config
+            - secretRef:
+                name: qc-secrets
+          livenessProbe:
+            exec:
+              command: ["sh", "-lc", "pgrep -f 'celery' >/dev/null"]
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi

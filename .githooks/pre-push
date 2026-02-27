@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+set -eu
+
+# Prevent Git's pre-push stdin (ref lines) from being forwarded into child processes.
+# Some tools (e.g. python without args) can misinterpret it as code.
+exec </dev/null
+
+echo "[pre-push] running checks via PowerShell (scripts/ci/prepush.ps1)..."
+
+if command -v pwsh >/dev/null 2>&1; then
+  exec pwsh -NoProfile -ExecutionPolicy Bypass -File "scripts/ci/prepush.ps1" "$@"
+elif command -v powershell >/dev/null 2>&1; then
+  exec powershell -NoProfile -ExecutionPolicy Bypass -File "scripts/ci/prepush.ps1" "$@"
+else
+  echo "[pre-push] ERROR: pwsh/powershell not found; cannot run pre-push checks." >&2
+  exit 1
+fi

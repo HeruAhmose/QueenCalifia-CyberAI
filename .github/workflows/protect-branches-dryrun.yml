@@ -1,0 +1,124 @@
+name: Protect branches (dry run)
+
+on:
+  workflow_dispatch:
+    inputs:
+      approvals:
+        description: "Required approvals"
+        required: true
+        default: "2"
+      enforce_admins:
+        description: "Enforce admins (true|false)"
+        required: true
+        default: "true"
+      require_code_owner_reviews:
+        description: "Require CODEOWNERS review (true|false)"
+        required: true
+        default: "true"
+      auto_detect_checks:
+        description: "Auto-detect required check contexts from branch HEAD"
+        required: true
+        type: boolean
+        default: true
+      use_checks_objects:
+        description: "Prefer required_status_checks.checks objects (context + app_id) when possible"
+        required: true
+        type: boolean
+        default: true
+      prefer_checks_objects:
+        description: "When checks objects exist, keep contexts limited to non-check-run contexts"
+        required: true
+        type: boolean
+        default: true
+      exclude_app_slugs:
+        description: "Exclude check runs emitted by these GitHub Apps (comma-separated app slugs)"
+        required: false
+        default: ""
+      allowlist_regex:
+        description: "Optional regex allowlist (comma-separated). If set, only matching checks are required."
+        required: false
+        default: ""
+      denylist_regex:
+        description: "Optional regex denylist (comma-separated). Matches are excluded."
+        required: false
+        default: ""
+      extra_checks_staging:
+        description: "Extra required checks for staging (comma-separated)"
+        required: false
+        default: ""
+      extra_checks_production:
+        description: "Extra required checks for production (comma-separated)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  dryrun:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dry run branch protection and write payload
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          if (-not $env:GH_TOKEN) { throw "Missing secrets.GH_TOKEN (PAT / fine-grained token with branch protection permissions)." }
+
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+
+          $autoDetect = ("${{ inputs.auto_detect_checks }}" -eq "true")
+          $useChecksObjects = ("${{ inputs.use_checks_objects }}" -eq "true")
+          $preferChecksObjects = ("${{ inputs.prefer_checks_objects }}" -eq "true")
+
+          $exclude = "${{ inputs.exclude_app_slugs }}".Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+          $allow   = "${{ inputs.allowlist_regex }}".Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+          $deny    = "${{ inputs.denylist_regex }}".Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+          $extraStaging = "${{ inputs.extra_checks_staging }}".Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+          $extraProd    = "${{ inputs.extra_checks_production }}".Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+
+          $args = @(
+            "-DryRun",
+            "-Approvals", ([int]'${{ inputs.approvals }}'),
+            "-EnforceAdmins", ([bool]::Parse('${{ inputs.enforce_admins }}')),
+            "-RequireCodeOwnerReviews", ([bool]::Parse('${{ inputs.require_code_owner_reviews }}')),
+            "-UseChecksObjects", $useChecksObjects,
+            "-PreferChecksObjects", $preferChecksObjects,
+            "-ReportPath", "artifacts/branch-protection-payload.json"
+          )
+
+          if ($autoDetect) { $args += "-AutoDetectStatusChecks" }
+          if ($exclude.Count -gt 0) { $args += @("-ExcludeAppSlugs", $exclude) }
+          if ($allow.Count -gt 0)   { $args += @("-AllowlistRegex", $allow) }
+          if ($deny.Count -gt 0)    { $args += @("-DenylistRegex",  $deny) }
+          if ($extraStaging.Count -gt 0) { $args += @("-ExtraStatusChecksStaging", $extraStaging) }
+          if ($extraProd.Count -gt 0)    { $args += @("-ExtraStatusChecksProduction", $extraProd) }
+
+          pwsh ./scripts/github/protect_branches.ps1 @args
+
+          Write-Host "`n--- Payload preview (first 160 lines) ---"
+          Get-Content artifacts/branch-protection-payload.json | Select-Object -First 160 | Out-Host
+
+
+      - name: Diff vs current protection (human-readable)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          if (-not (Test-Path artifacts/branch-protection-payload.json)) { throw "Missing artifacts/branch-protection-payload.json" }
+
+          pwsh ./scripts/github/diff_branch_protection.ps1 `
+            -ReportPath "artifacts/branch-protection-payload.json" `
+            -OutMarkdown "artifacts/branch-protection-diff.md" `
+            -OutJson "artifacts/branch-protection-diff.json"
+
+          Write-Host "`n--- Diff preview (first 200 lines) ---"
+          Get-Content artifacts/branch-protection-diff.md | Select-Object -First 200 | Out-Host
+
+      - name: Upload payload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: branch-protection-dryrun-report
+          path: artifacts

@@ -1,0 +1,44 @@
+# Example values file for Argo CD (used by k8s/argocd/application-queen-califia.yaml).
+# Image Updater will update the image digests in THIS file via git write-back.
+api:
+  image:
+    repository: ghcr.io/YOUR_ORG/queencalifia-api
+    tag: "0.1.0"
+    # Image Updater writes sha256 digests here for immutable deploys.
+    # When digest is set, it takes priority over tag.
+    digest: ""
+
+# Worker inherits the API image when repository/digest are empty.
+worker:
+  image:
+    repository: ""
+    tag: ""
+    digest: ""
+
+frontend:
+  image:
+    repository: ghcr.io/YOUR_ORG/queencalifia-frontend
+    tag: "0.1.0"
+    digest: ""
+
+ingress:
+  enabled: true
+  host: qc.example.com
+  tls:
+    enabled: true
+    secretName: qc-tls
+  certManager:
+    enabled: true
+    clusterIssuer: letsencrypt-prod
+
+certManager:
+  createClusterIssuers: false
+
+redis:
+  enabled: true
+
+# Optional hardening knobs (uncomment as desired):
+# networkPolicy:
+#   enabled: true
+#   egress:
+#     allowAll: true

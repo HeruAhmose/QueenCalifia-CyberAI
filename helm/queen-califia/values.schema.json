@@ -1,0 +1,281 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Queen Califia CyberAI Helm Values",
+  "description": "Schema for helm/queen-califia/values.yaml — validated by helm lint, helm template, and CI.",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "imageBlock": {
+      "type": "object",
+      "description": "Container image reference. When digest is set it takes priority over tag (immutable deploys).",
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag":        { "type": "string" },
+        "digest": {
+          "type": "string",
+          "description": "OCI digest (e.g. sha256:abc123…). When set, overrides tag.",
+          "pattern": "^(sha256:[a-f0-9]{64})?$"
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"]
+        }
+      },
+      "required": ["repository", "tag"]
+    },
+    "resourceBlock": {
+      "type": "object",
+      "properties": {
+        "requests": {
+          "type": "object",
+          "properties": {
+            "cpu":    { "type": "string" },
+            "memory": { "type": "string" }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "cpu":    { "type": "string" },
+            "memory": { "type": "string" }
+          }
+        }
+      }
+    },
+    "autoscalingBlock": {
+      "type": "object",
+      "properties": {
+        "enabled":    { "type": "boolean" },
+        "minReplicas": { "type": "integer", "minimum": 1 },
+        "maxReplicas": { "type": "integer", "minimum": 1 },
+        "targetCPUUtilizationPercentage":    { "type": ["integer", "string"], "description": "Empty string disables CPU metric." },
+        "targetMemoryUtilizationPercentage": { "type": ["integer", "string"], "description": "Empty string disables memory metric." },
+        "behavior": { "type": "object" }
+      },
+      "required": ["enabled"]
+    },
+    "pdbBlock": {
+      "type": "object",
+      "properties": {
+        "enabled":        { "type": "boolean" },
+        "minAvailable":   { "type": ["integer", "string"] },
+        "maxUnavailable": { "type": ["integer", "string"] }
+      },
+      "required": ["enabled"]
+    },
+    "serviceBlock": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      }
+    }
+  },
+  "properties": {
+    "nameOverride":     { "type": "string" },
+    "fullnameOverride": { "type": "string" },
+
+    "namespace": {
+      "type": "object",
+      "properties": {
+        "create": { "type": "boolean" },
+        "name":   { "type": "string" }
+      }
+    },
+
+    "imagePullSecrets": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+
+    "podAnnotations":         { "type": "object" },
+    "podLabels":              { "type": "object" },
+    "podSecurityContext":     { "type": "object" },
+    "containerSecurityContext": { "type": "object" },
+
+    "api": {
+      "type": "object",
+      "properties": {
+        "replicaCount": { "type": "integer", "minimum": 1 },
+        "image":        { "$ref": "#/definitions/imageBlock" },
+        "service":      { "$ref": "#/definitions/serviceBlock" },
+        "resources":    { "$ref": "#/definitions/resourceBlock" },
+        "env":          { "type": "object", "additionalProperties": { "type": "string" } },
+        "probes": {
+          "type": "object",
+          "properties": {
+            "livenessPath":  { "type": "string", "pattern": "^/" },
+            "readinessPath": { "type": "string", "pattern": "^/" }
+          }
+        },
+        "autoscaling":           { "$ref": "#/definitions/autoscalingBlock" },
+        "pdb":                   { "$ref": "#/definitions/pdbBlock" },
+        "podSecurityContext":    { "type": "object" },
+        "containerSecurityContext": { "type": "object" }
+      },
+      "required": ["replicaCount", "image"]
+    },
+
+    "worker": {
+      "type": "object",
+      "properties": {
+        "enabled":      { "type": "boolean" },
+        "replicaCount": { "type": "integer", "minimum": 0 },
+        "image": {
+          "type": "object",
+          "description": "Omit or leave repository/tag empty to inherit from api.image.",
+          "properties": {
+            "repository": { "type": "string" },
+            "tag":        { "type": "string" },
+            "digest":     { "type": "string", "pattern": "^(sha256:[a-f0-9]{64})?$" },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+          }
+        },
+        "command":   { "type": "array", "items": { "type": "string" } },
+        "resources": { "$ref": "#/definitions/resourceBlock" },
+        "autoscaling":           { "$ref": "#/definitions/autoscalingBlock" },
+        "pdb":                   { "$ref": "#/definitions/pdbBlock" },
+        "podSecurityContext":    { "type": "object" },
+        "containerSecurityContext": { "type": "object" }
+      },
+      "required": ["enabled"]
+    },
+
+    "frontend": {
+      "type": "object",
+      "properties": {
+        "replicaCount": { "type": "integer", "minimum": 1 },
+        "image":        { "$ref": "#/definitions/imageBlock" },
+        "service":      { "$ref": "#/definitions/serviceBlock" },
+        "resources":    { "$ref": "#/definitions/resourceBlock" },
+        "probes": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string", "pattern": "^/" }
+          }
+        },
+        "autoscaling":           { "$ref": "#/definitions/autoscalingBlock" },
+        "pdb":                   { "$ref": "#/definitions/pdbBlock" },
+        "podSecurityContext":    { "type": "object" },
+        "containerSecurityContext": { "type": "object" }
+      },
+      "required": ["replicaCount", "image"]
+    },
+
+    "redis": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "image":   { "type": "string" },
+        "persistence": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "size":    { "type": "string", "pattern": "^[0-9]+[A-Za-z]+$" }
+          }
+        }
+      }
+    },
+
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "create":     { "type": "boolean" },
+        "name":       { "type": "string", "minLength": 1 },
+        "stringData": { "type": "object", "additionalProperties": { "type": "string" } }
+      },
+      "required": ["name"]
+    },
+
+    "config": {
+      "type": "object",
+      "properties": {
+        "create": { "type": "boolean" },
+        "name":   { "type": "string", "minLength": 1 }
+      }
+    },
+
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled":   { "type": "boolean" },
+        "className": { "type": "string" },
+        "host":      { "type": "string" },
+        "annotations": { "type": "object" },
+        "tls": {
+          "type": "object",
+          "properties": {
+            "enabled":    { "type": "boolean" },
+            "secretName": { "type": "string" }
+          }
+        },
+        "certManager": {
+          "type": "object",
+          "properties": {
+            "enabled":       { "type": "boolean" },
+            "clusterIssuer": { "type": "string" }
+          }
+        }
+      }
+    },
+
+    "certManager": {
+      "type": "object",
+      "properties": {
+        "createClusterIssuers": { "type": "boolean" },
+        "email":   { "type": "string", "format": "email" },
+        "solvers": {
+          "type": "object",
+          "properties": {
+            "ingressClass": { "type": "string" }
+          }
+        },
+        "issuers": {
+          "type": "object",
+          "properties": {
+            "staging": {
+              "type": "object",
+              "properties": {
+                "name":                 { "type": "string" },
+                "server":               { "type": "string", "format": "uri" },
+                "accountKeySecretName": { "type": "string" }
+              }
+            },
+            "prod": {
+              "type": "object",
+              "properties": {
+                "name":                 { "type": "string" },
+                "server":               { "type": "string", "format": "uri" },
+                "accountKeySecretName": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "networkPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "ingress": {
+          "type": "object",
+          "properties": {
+            "allowFromSameNamespace": { "type": "boolean" },
+            "allowFromNamespaces":    { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "egress": {
+          "type": "object",
+          "properties": {
+            "allowAll":              { "type": "boolean" },
+            "allowToSameNamespace":  { "type": "boolean" },
+            "allowDNS":             { "type": "boolean" },
+            "allowToCIDRs":         { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    }
+  },
+  "required": ["api", "frontend"]
+}

@@ -1,0 +1,139 @@
+# docker-compose.prod.edge.yml
+#
+# Production stack with a single "edge" nginx:
+# - Serves built frontend static assets
+# - Terminates TLS (self-signed if you don't mount or issue real certs)
+# - Forces HTTP -> HTTPS redirect (except health + ACME)
+#
+# Local-friendly defaults:
+#   http  ->  http://localhost:8080  (redirects)
+#   https -> https://localhost:8443  (self-signed)
+#
+# For real deployments, set:
+#   QC_HTTP_PORT=80  QC_HTTPS_PORT=443
+#
+# Optional ACME automation (Let's Encrypt):
+#   - Set QC_DOMAIN + QC_EMAIL in .env
+#   - Run with: docker compose -f docker-compose.prod.edge.yml --profile acme up --build
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      args:
+        QC_USE_LOCK: ${QC_USE_LOCK:-0}
+    env_file:
+      - .env
+    environment:
+      QC_REDIS_URL: redis://redis:6379/0
+      QC_REQUIRE_REDIS: "1"
+      QC_USE_CELERY: "1"
+      QC_PRODUCTION: "1"
+      QC_ENFORCE_HTTPS: ${QC_ENFORCE_HTTPS:-1}
+      QC_ALLOW_INSECURE_BOOTSTRAP: ${QC_ALLOW_INSECURE_BOOTSTRAP:-0}
+      QC_API_KEYS_FILE: /data/keys.json
+      QC_AUDIT_LOG_FILE: /data/audit.jsonl
+      QC_SPKI_LOG_FILE: /data/spki.jsonl
+      QC_DENY_PUBLIC_TARGETS: ${QC_DENY_PUBLIC_TARGETS:-1}
+      QC_SCAN_ALLOWLIST: ${QC_SCAN_ALLOWLIST:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8}
+    volumes:
+      - ./data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/readyz', timeout=3)"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      args:
+        QC_USE_LOCK: ${QC_USE_LOCK:-0}
+    command: ["celery", "-A", "celery_app.celery_app", "worker", "-l", "INFO", "--concurrency", "4", "-Q", "scans"]
+    env_file:
+      - .env
+    environment:
+      QC_REDIS_URL: redis://redis:6379/0
+      QC_REQUIRE_REDIS: "1"
+      QC_DENY_PUBLIC_TARGETS: ${QC_DENY_PUBLIC_TARGETS:-1}
+      QC_SCAN_ALLOWLIST: ${QC_SCAN_ALLOWLIST:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8}
+      QC_SCAN_DRY_RUN: ${QC_SCAN_DRY_RUN:-0}
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  edge:
+    build:
+      context: ./frontend
+      dockerfile: edge/Dockerfile
+    environment:
+      QC_HTTP_PORT: ${QC_HTTP_PORT:-8080}
+      QC_HTTPS_PORT: ${QC_HTTPS_PORT:-8443}
+      QC_TLS_CN: ${QC_TLS_CN:-localhost}
+      QC_API_UPSTREAM: ${QC_API_UPSTREAM:-api:5000}
+    ports:
+      - "${QC_HTTP_PORT:-8080}:${QC_HTTP_PORT:-8080}"
+      - "${QC_HTTPS_PORT:-8443}:${QC_HTTPS_PORT:-8443}"
+    volumes:
+      # Persistent cert location used by the edge container.
+      - edge_certs:/etc/nginx/certs
+      # Optional: mount your own certs (fullchain.pem + privkey.pem) here.
+      - ./secrets/tls:/secrets/tls:ro
+      # HTTP-01 challenge webroot (shared with certbot profile).
+      - certbot_www:/var/www/certbot
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:${QC_HTTP_PORT:-8080}/healthz"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot:latest
+    profiles: ["acme"]
+    env_file:
+      - .env
+    environment:
+      QC_DOMAIN: ${QC_DOMAIN:-}
+      QC_EMAIL: ${QC_EMAIL:-}
+      QC_LETSENCRYPT_STAGING: ${QC_LETSENCRYPT_STAGING:-0}
+      QC_CERTBOT_RENEW_INTERVAL_SECONDS: ${QC_CERTBOT_RENEW_INTERVAL_SECONDS:-43200}
+    volumes:
+      - certbot_etc:/etc/letsencrypt
+      - certbot_var:/var/lib/letsencrypt
+      - certbot_www:/var/www/certbot
+      - edge_certs:/etc/nginx/certs
+      - ./frontend/edge/certbot:/opt/certbot:ro
+    entrypoint: ["/bin/sh", "/opt/certbot/run.sh"]
+    depends_on:
+      - edge
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+  edge_certs:
+  certbot_www:
+  certbot_etc:
+  certbot_var:

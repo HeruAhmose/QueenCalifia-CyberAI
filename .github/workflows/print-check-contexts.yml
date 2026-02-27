@@ -1,0 +1,68 @@
+name: Print check contexts (artifact)
+
+on:
+  workflow_dispatch:
+    inputs:
+      branches:
+        description: "Comma-separated branches to inspect"
+        required: true
+        default: "staging,production"
+      allowlist_regex:
+        description: "Optional regex allowlist (comma-separated). If set, only matching contexts are shown."
+        required: false
+        default: ""
+      denylist_regex:
+        description: "Optional regex denylist (comma-separated). Any matches are excluded."
+        required: false
+        default: ""
+      exclude_app_slugs:
+        description: "Optional GitHub App slugs to exclude (comma-separated)."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  checks: read
+
+jobs:
+  print:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify gh
+        run: |
+          set -euo pipefail
+          gh --version
+
+      - name: Print check contexts
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+
+          $branches = "${{ inputs.branches }}".Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+          $allow = "${{ inputs.allowlist_regex }}".Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+          $deny  = "${{ inputs.denylist_regex }}".Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+          $exclude = "${{ inputs.exclude_app_slugs }}".Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+
+          $args = @("-Branches", $branches, "-OutJson", "artifacts/check-contexts.json", "-OutText", "artifacts/check-contexts.txt")
+          if ($allow.Count -gt 0)   { $args += @("-AllowlistRegex", $allow) }
+          if ($deny.Count -gt 0)    { $args += @("-DenylistRegex",  $deny) }
+          if ($exclude.Count -gt 0) { $args += @("-ExcludeAppSlugs", $exclude) }
+
+          pwsh -File scripts/github/print_check_contexts.ps1 @args
+
+          Write-Host "`n--- Preview (first 160 lines) ---"
+          Get-Content artifacts/check-contexts.txt | Select-Object -First 160 | Out-Host
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: check-contexts
+          path: artifacts/

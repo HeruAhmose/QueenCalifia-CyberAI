@@ -1,0 +1,35 @@
+# Keep Docker builds small + avoid leaking dev artifacts
+.git
+.github
+.githooks
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+
+# Local data / secrets
+.env
+*.pem
+*.key
+*.crt
+data/
+*.jsonl
+
+# Tests + tooling
+tests/
+smoketest/
+loadtest/
+docs/
+CONTRIBUTING.md
+SECURITY.md
+SECURITY_HARDENING.md
+
+# Frontend sources (backend image doesn't need these)
+frontend/
+
+# Mounted TLS/secrets
+secrets/

@@ -1,0 +1,373 @@
+name: Post-bootstrap DNS sanity
+
+on:
+  workflow_dispatch:
+    inputs:
+      ingress_provider:
+        description: "Ingress controller: nginxinc | traefik | haproxy"
+        required: true
+        default: "nginxinc"
+        type: choice
+        options: [nginxinc, traefik, haproxy]
+      ingress_class:
+        description: "Optional ingress class override (blank = provider default)"
+        required: false
+        default: ""
+      staging_host:
+        description: "Staging hostname (FQDN) that should route to the cluster"
+        required: true
+      prod_host:
+        description: "Production hostname (FQDN) that should route to the cluster"
+        required: true
+      strict_dns_match:
+        description: "Fail if DNS does not point exactly at ingress LB (A vs CNAME strict)"
+        required: true
+        type: boolean
+        default: false
+  workflow_run:
+    workflows: ["Bootstrap K8s"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  dns-sanity:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubectl + tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update -y >/dev/null
+          sudo apt-get install -y curl jq dnsutils >/dev/null
+
+          KUBECTL_VERSION="${KUBECTL_VERSION:-v1.30.0}"
+          curl -sSL -o kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/kubectl
+          kubectl version --client
+
+      - name: Configure kubeconfig from secret
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "$KUBECONFIG_B64"
+          mkdir -p ~/.kube
+          echo "$KUBECONFIG_B64" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl get nodes
+
+      - name: Resolve sanity inputs
+        id: vars
+        env:
+          INPUT_PROVIDER: ${{ github.event_name == 'workflow_dispatch' && inputs.ingress_provider || vars.QC_INGRESS_PROVIDER }}
+          INPUT_CLASS: ${{ github.event_name == 'workflow_dispatch' && inputs.ingress_class || vars.QC_INGRESS_CLASS }}
+          INPUT_STAGING: ${{ github.event_name == 'workflow_dispatch' && inputs.staging_host || vars.QC_STAGING_HOST }}
+          INPUT_PROD: ${{ github.event_name == 'workflow_dispatch' && inputs.prod_host || vars.QC_PROD_HOST }}
+          INPUT_STRICT: ${{ github.event_name == 'workflow_dispatch' && inputs.strict_dns_match || vars.QC_STRICT_DNS_MATCH }}
+        run: |
+          set -euo pipefail
+          provider="${INPUT_PROVIDER:-nginxinc}"
+          class="${INPUT_CLASS:-}"
+          staging="${INPUT_STAGING:-}"
+          prod="${INPUT_PROD:-}"
+          strict="${INPUT_STRICT:-false}"
+          strict="$(echo "$strict" | tr '[:upper:]' '[:lower:]')"
+          if [ "$strict" != "true" ]; then strict="false"; fi
+
+          if [ -z "$staging" ] || [ -z "$prod" ]; then
+            echo "Missing hosts. For workflow_run, set repo variables: QC_STAGING_HOST and QC_PROD_HOST." >&2
+            exit 2
+          fi
+
+          if [ -z "$class" ]; then
+            case "$provider" in
+              nginxinc) class="nginx" ;;
+              traefik) class="traefik" ;;
+              haproxy) class="haproxy" ;;
+              *) echo "Unknown provider: $provider" >&2; exit 2 ;;
+            esac
+          fi
+
+          echo "provider=$provider" >> "$GITHUB_OUTPUT"
+          echo "class=$class" >> "$GITHUB_OUTPUT"
+          echo "staging=$staging" >> "$GITHUB_OUTPUT"
+          echo "prod=$prod" >> "$GITHUB_OUTPUT"
+          echo "strict=$strict" >> "$GITHUB_OUTPUT"
+
+      - name: Print LoadBalancer address for ingress controller
+        id: lb
+        env:
+          PROVIDER: ${{ steps.vars.outputs.provider }}
+        run: |
+          set -euo pipefail
+
+          ns=""
+          rel=""
+          case "$PROVIDER" in
+            nginxinc) ns="nginx-ingress"; rel="nginx-ingress" ;;
+            traefik)  ns="traefik";      rel="traefik" ;;
+            haproxy)  ns="haproxy-controller"; rel="haproxy-kubernetes-ingress" ;;
+            *) echo "Unknown provider: $PROVIDER" >&2; exit 2 ;;
+          esac
+
+          lb="$(kubectl -n "$ns" get svc -l "app.kubernetes.io/instance=${rel}" \
+              -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}{.items[0].status.loadBalancer.ingress[0].ip}')"
+
+          echo "Ingress LB: $lb"
+          echo "lb=$lb" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy ACME challenge echo ingress (temporary)
+        id: deploy
+        env:
+          PROVIDER: ${{ steps.vars.outputs.provider }}
+          CLASS: ${{ steps.vars.outputs.class }}
+          STAGING: ${{ steps.vars.outputs.staging }}
+          PROD: ${{ steps.vars.outputs.prod }}
+        run: |
+          set -euo pipefail
+
+          token="qc-dns-sanity-$(date +%s)"
+          echo "Token: $token"
+
+          ann=""
+          case "$PROVIDER" in
+            nginxinc)
+              ann=$'    ingress.kubernetes.io/ssl-redirect: "false"\n    nginx.org/redirect-to-https: "false"\n'
+              ;;
+            traefik)
+              ann=$'    traefik.ingress.kubernetes.io/router.entrypoints: "web"\n    traefik.ingress.kubernetes.io/router.tls: "false"\n'
+              ;;
+            haproxy)
+              ann=$'    haproxy.org/ssl-redirect: "false"\n'
+              ;;
+          esac
+
+          kubectl apply -f - <<EOF
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: qc-dns-sanity
+          ---
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: echo
+            namespace: qc-dns-sanity
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: echo
+            template:
+              metadata:
+                labels:
+                  app: echo
+              spec:
+                securityContext:
+                  seccompProfile:
+                    type: RuntimeDefault
+                containers:
+                  - name: echo
+                    image: hashicorp/http-echo:1.0.0
+                    args: ["-text=qc-dns-sanity:${token}"]
+                    ports:
+                      - containerPort: 5678
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      readOnlyRootFilesystem: true
+                      runAsNonRoot: true
+                      runAsUser: 1000
+                      capabilities:
+                        drop: ["ALL"]
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: echo
+            namespace: qc-dns-sanity
+          spec:
+            selector:
+              app: echo
+            ports:
+              - port: 80
+                targetPort: 5678
+          ---
+          apiVersion: networking.k8s.io/v1
+          kind: Ingress
+          metadata:
+            name: qc-dns-sanity
+            namespace: qc-dns-sanity
+            annotations:
+          ${ann}    kubernetes.io/ingress.class: "${CLASS}"
+          spec:
+            ingressClassName: ${CLASS}
+            rules:
+              - host: ${STAGING}
+                http:
+                  paths:
+                    - path: /.well-known/acme-challenge/
+                      pathType: Prefix
+                      backend:
+                        service:
+                          name: echo
+                          port:
+                            number: 80
+              - host: ${PROD}
+                http:
+                  paths:
+                    - path: /.well-known/acme-challenge/
+                      pathType: Prefix
+                      backend:
+                        service:
+                          name: echo
+                          port:
+                            number: 80
+          EOF
+
+          kubectl -n qc-dns-sanity rollout status deploy/echo --timeout=2m
+          echo "path=/.well-known/acme-challenge/${token}" >> "$GITHUB_OUTPUT"
+
+      - name: DNS + HTTP routing checks (staging + production)
+        env:
+          STAGING: ${{ steps.vars.outputs.staging }}
+          PROD: ${{ steps.vars.outputs.prod }}
+          LB: ${{ steps.lb.outputs.lb }}
+          PATH_Q: ${{ steps.deploy.outputs.path }}
+          STRICT: ${{ steps.vars.outputs.strict }}
+        run: |
+  set -euo pipefail
+
+  if [ -z "${PATH_Q:-}" ]; then
+    echo "Missing PATH_Q output (unexpected)." >&2
+    exit 2
+  fi
+
+  normalize_host() {
+    local h="$1"
+    h="${h%.}"
+    echo "$h" | tr '[:upper:]' '[:lower:]'
+  }
+
+  is_ipv4() {
+    [[ "$1" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || return 1
+    IFS='.' read -r o1 o2 o3 o4 <<<"$1"
+    for o in "$o1" "$o2" "$o3" "$o4"; do
+      [[ "$o" =~ ^[0-9]+$ ]] || return 1
+      (( o >= 0 && o <= 255 )) || return 1
+    done
+    return 0
+  }
+
+  is_ipv6() {
+    [[ "$1" == *:* ]]
+  }
+
+  is_ip() {
+    is_ipv4 "$1" || is_ipv6 "$1"
+  }
+
+  strict_dns_check() {
+    local host="$1"
+    local lb="$2"
+    local dns_out="$3"
+
+    if [ -z "${lb:-}" ]; then
+      echo "⚠️  STRICT DNS: skipped (ingress LB not detected yet)."
+      return 0
+    fi
+
+    local lb_norm
+    lb_norm="$(normalize_host "$lb")"
+
+    local -a ips=()
+    local -a cnames=()
+
+    while IFS= read -r line; do
+      line="$(echo "${line:-}" | tr -d '
+' | xargs)"
+      [ -z "$line" ] && continue
+
+      if is_ip "$line"; then
+        ips+=("$line")
+      else
+        cnames+=("$(normalize_host "$line")")
+      fi
+    done <<<"$dns_out"
+
+    if is_ip "$lb"; then
+      local found="false"
+      for ip in "${ips[@]:-}"; do
+        if [ "$ip" = "$lb" ]; then found="true"; fi
+      done
+
+      if [ "$found" != "true" ]; then
+        echo "❌ STRICT DNS FAIL: $host does not resolve to LB IP '$lb'." >&2
+        exit 1
+      fi
+
+      if [ "${#cnames[@]}" -gt 0 ]; then
+        echo "❌ STRICT DNS FAIL: expected A/AAAA for LB IP '$lb' but got CNAME(s): ${cnames[*]}" >&2
+        exit 1
+      fi
+
+      echo "✅ STRICT DNS OK: A/AAAA matches LB IP"
+      return 0
+    fi
+
+    if [ "${#cnames[@]}" -eq 0 ]; then
+      echo "❌ STRICT DNS FAIL: expected CNAME to LB hostname '$lb_norm' but got A/AAAA only (common with ALIAS/ANAME records)." >&2
+      exit 1
+    fi
+
+    local last="${cnames[$(( ${#cnames[@]} - 1 ))]}"
+    if [ "$last" != "$lb_norm" ]; then
+      echo "❌ STRICT DNS FAIL: last CNAME '$last' does not match ingress LB hostname '$lb_norm'." >&2
+      exit 1
+    fi
+
+    echo "✅ STRICT DNS OK: CNAME chain ends at LB hostname"
+  }
+
+  check_one () {
+    local host="$1"
+    echo ""
+    echo "==> Host: $host"
+    echo "DNS:"
+    dns_out="$(dig +short "$host" | sed '/^$/d' || true)"
+    echo "$dns_out"
+
+    if [ "${STRICT:-false}" = "true" ]; then
+      echo "Strict DNS ↔ LB match: ENABLED"
+      strict_dns_check "$host" "${LB:-}" "${dns_out:-}"
+    else
+      echo "Strict DNS ↔ LB match: disabled"
+    fi
+
+    echo "HTTP via DNS:"
+    curl -fsS --max-time 20 "http://${host}${PATH_Q}" | tee /tmp/body.txt >/dev/null
+    grep -q "qc-dns-sanity:" /tmp/body.txt
+    echo "✅ OK via DNS"
+
+    if [ -n "${LB:-}" ]; then
+      echo "HTTP via LoadBalancer (Host header): $LB"
+      curl -fsS --max-time 20 -H "Host: ${host}" "http://${LB}${PATH_Q}" | tee /tmp/body2.txt >/dev/null
+      grep -q "qc-dns-sanity:" /tmp/body2.txt
+      echo "✅ OK via LB"
+    fi
+  }
+
+  check_one "$STAGING"
+  check_one "$PROD"
+
+
+      - name: Cleanup (best-effort)
+        if: always()
+        run: |
+          kubectl delete ns qc-dns-sanity --ignore-not-found=true

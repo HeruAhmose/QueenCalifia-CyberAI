@@ -1,0 +1,25 @@
+# Production values (promote staging -> production via PR; Argo auto-syncs after merge).
+api:
+  image:
+    repository: ghcr.io/YOUR_ORG/queencalifia-api
+    tag: "0.1.0"
+    digest: ""
+
+frontend:
+  image:
+    repository: ghcr.io/YOUR_ORG/queencalifia-frontend
+    tag: "0.1.0"
+    digest: ""
+
+ingress:
+  enabled: true
+  host: qc.example.com
+  tls:
+    enabled: true
+    secretName: qc-production-tls
+  certManager:
+    enabled: true
+    clusterIssuer: letsencrypt-prod
+
+redis:
+  enabled: true

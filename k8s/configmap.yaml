@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: qc-config
+data:
+  QC_PRODUCTION: "1"
+  QC_ENFORCE_HTTPS: "1"
+
+  QC_USE_CELERY: "1"
+  QC_REQUIRE_REDIS: "1"
+  QC_REDIS_URL: "redis://redis:6379/0"
+
+  # Safe-by-default scan policy
+  QC_DENY_PUBLIC_TARGETS: "1"
+  QC_SCAN_ALLOWLIST: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8"

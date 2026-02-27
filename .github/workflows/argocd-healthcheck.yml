@@ -1,0 +1,82 @@
+name: argocd-healthcheck
+
+on:
+  push:
+    branches: [staging, production]
+  pull_request:
+    branches: [production]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Which Argo CD app to validate"
+        type: choice
+        options: [staging, production, both]
+        default: both
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  argocd-healthcheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Install argocd CLI
+        run: |
+          curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          chmod +x argocd
+          sudo mv argocd /usr/local/bin/argocd
+          argocd version --client
+
+      - name: Validate Healthy/Synced
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+          ARGOCD_OPTS: ${{ secrets.ARGOCD_OPTS }}
+          APP_STAGING: ${{ vars.ARGOCD_APP_STAGING || 'queen-califia-staging' }}
+          APP_PRODUCTION: ${{ vars.ARGOCD_APP_PRODUCTION || 'queen-califia-production' }}
+          TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
+        run: |
+          set -euo pipefail
+          test -n "$ARGOCD_SERVER"
+          test -n "$ARGOCD_AUTH_TOKEN"
+          OPTS="${ARGOCD_OPTS:-}"
+
+          sudo apt-get update -y >/dev/null
+          sudo apt-get install -y jq >/dev/null
+
+          status () {
+            local app="$1"
+            argocd app get "$app" --server "$ARGOCD_SERVER" --auth-token "$ARGOCD_AUTH_TOKEN" $OPTS -o json                   | jq -r '.status.health.status + "/" + .status.sync.status'
+          }
+
+          wait_hs () {
+            local app="$1"
+            echo "==> Waiting for $app to be Healthy/Synced"
+            argocd app wait "$app" --server "$ARGOCD_SERVER" --auth-token "$ARGOCD_AUTH_TOKEN" $OPTS --sync --health --timeout 900
+          }
+
+          check_hs () {
+            local app="$1"
+            local s
+            s="$(status "$app")"
+            echo "$app => $s"
+            test "$s" = "Healthy/Synced"
+          }
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # PR gate: do not wait for sync (nothing has been applied yet); just ensure prod is not degraded.
+            check_hs "$APP_PRODUCTION"
+            exit 0
+          fi
+
+          if [ "$TARGET" = "staging" ]; then
+            wait_hs "$APP_STAGING"
+            check_hs "$APP_PRODUCTION" # fail loudly if prod is degraded
+          elif [ "$TARGET" = "production" ]; then
+            wait_hs "$APP_PRODUCTION"
+          else
+            wait_hs "$APP_STAGING"
+            wait_hs "$APP_PRODUCTION"
+          fi
