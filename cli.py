@@ -616,19 +616,18 @@ def cmd_quantum(args):
 
     print_section("⚛️  QUANTUM READINESS ASSESSMENT")
 
-    report = assess_quantum_readiness(
-        current_algorithms=["RSA-2048", "ECDHE-P256", "AES-256-GCM", "SHA-256"]
-    )
+    report = assess_quantum_readiness()
 
-    if hasattr(report, "overall_readiness"):
-        readiness = report.overall_readiness
-        rc = C.GREEN if readiness >= 0.7 else C.YELLOW if readiness >= 0.4 else C.RED
-        print(f"  Overall Readiness: {rc}{C.BOLD}{readiness*100:.0f}%{C.RESET}")
-    if hasattr(report, "vulnerable_algorithms"):
-        print(f"  Vulnerable:        {C.RED}{', '.join(report.vulnerable_algorithms)}{C.RESET}")
-    if hasattr(report, "safe_algorithms"):
-        print(f"  Quantum-Safe:      {C.GREEN}{', '.join(report.safe_algorithms)}{C.RESET}")
-    if hasattr(report, "recommendations"):
+    rc = C.GREEN if report.score >= 0.7 else C.YELLOW if report.score >= 0.4 else C.RED
+    print(f"  Overall Readiness: {rc}{C.BOLD}{report.score*100:.0f}%{C.RESET}")
+    print(f"  Entropy Health:    {C.GREEN if report.entropy_health else C.RED}{'✓ Healthy' if report.entropy_health else '✗ Degraded'}{C.RESET}")
+    print(f"  Key Vault:         {C.GREEN if report.key_vault_active else C.YELLOW}{'✓ Active' if report.key_vault_active else '○ Inactive'}{C.RESET}")
+    print(f"  Hybrid Mode:       {C.GREEN if report.hybrid_mode_enabled else C.YELLOW}{'✓ Enabled' if report.hybrid_mode_enabled else '○ Disabled'}{C.RESET}")
+    if report.pq_algorithms_available:
+        print(f"  PQ Algorithms:     {C.GREEN}{', '.join(report.pq_algorithms_available)}{C.RESET}")
+    if report.classical_algorithms_in_use:
+        print(f"  Classical (vuln):  {C.YELLOW}{', '.join(report.classical_algorithms_in_use)}{C.RESET}")
+    if report.recommendations:
         print(f"\n  {C.BOLD}Recommendations:{C.RESET}")
         for r in report.recommendations:
             print(f"    • {r}")
