@@ -1,4 +1,5 @@
 import QueenCalifiaAvatar from './components/QueenCalifiaAvatar';
+const API_BASE = window.location.hostname === "localhost" ? "" : "https://queencalifia-cyberai.onrender.com";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Cell, PieChart, Pie } from "recharts";
 
@@ -1603,7 +1604,7 @@ function VulnsTab({ setAvatarState = () => {} }) {
   }, [apiKey]);
 
   const apiFetch = useCallback(async (path, init = {}) => {
-    const res = await fetch(path, { ...init, headers: { ...(init.headers || {}), ...headers } });
+    const res = await fetch(API_BASE + path, { ...init, headers: { ...(init.headers || {}), ...headers } });
     const text = await res.text();
     let json = null;
     try { json = text ? JSON.parse(text) : null; } catch { json = null; }
@@ -1700,7 +1701,7 @@ function VulnsTab({ setAvatarState = () => {} }) {
 
   const fetchRemediation = useCallback(async () => {
     try {
-      const r = await apiFetch("/api/vulns/remediation");
+      const r = await apiFetch("/api/v1/remediate/plan");
       setRemediation(r?.data || null);
     } catch (e) {
       setError(String(e?.message || e));
@@ -1731,7 +1732,7 @@ function VulnsTab({ setAvatarState = () => {} }) {
       let scanDone = false;
       while (tries < 60 && !scanDone) {
         await new Promise(r => setTimeout(r, 3000));
-        const pollResp = await fetch("/api/vulns/scan/" + encodeURIComponent(sid), {
+        const pollResp = await fetch(API_BASE + "/api/vulns/scan/" + encodeURIComponent(sid), {
           headers: { "Content-Type": "application/json", ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) }
         });
         const pollJson = await pollResp.json();
@@ -1748,7 +1749,7 @@ function VulnsTab({ setAvatarState = () => {} }) {
       // Step 3: Execute remediation
       setOneClickPhase("remediating");
       ocLog("🛠️ Executing auto-remediation...", "#f59e0b");
-      const remResp = await fetch("/api/vulns/remediation/execute", {
+      const remResp = await fetch(API_BASE + "/api/v1/remediate/plan", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) },
         body: JSON.stringify({ confirm: "EXECUTE", target: "127.0.0.1", auto_approve: true }),
@@ -1756,7 +1757,7 @@ function VulnsTab({ setAvatarState = () => {} }) {
       const remJson = await remResp.json();
       setOneClickResult(remJson?.data || remJson);
       // Step 4: Load remediation plan
-      const planResp = await fetch("/api/vulns/remediation", {
+      const planResp = await fetch(API_BASE + "/api/v1/remediate/plan", {
         headers: { ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) }
       });
       const planJson = await planResp.json();
@@ -2569,7 +2570,7 @@ function GuidedWizard({ onExit }) {
 
 
 
-const API_BASE = window.location.hostname === "localhost" ? "" : "https://queencalifia-cyberai.onrender.com";
+
 
 export default function QueenCalifiaCommandDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
@@ -2629,6 +2630,7 @@ export default function QueenCalifiaCommandDashboard() {
         @keyframes qcPulseRing { 0%, 100% { opacity: 0.4; transform: scale(1); } 50% { opacity: 0; transform: scale(1.8); } }
         @keyframes qcGlow { 0%, 100% { box-shadow: 0 0 8px ${C.accent}20; } 50% { box-shadow: 0 0 16px ${C.accent}30; } }
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: ${C.void}; }
         ::-webkit-scrollbar-thumb { background: ${C.borderLit}; border-radius: 3px; }
