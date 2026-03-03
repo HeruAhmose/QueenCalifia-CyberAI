@@ -179,6 +179,17 @@ def main() -> None:
     print(f"* Running on http://{args.host}:{args.port}"); wsgi_app.run(host=args.host, port=args.port, debug=False, use_reloader=False)
 
 
+@wsgi_app.route("/api/<path:path>", methods=["OPTIONS"])
+def _options(path=""):
+    o = request.headers.get("Origin","")
+    from flask import make_response
+    r = make_response("", 204)
+    r.headers["Access-Control-Allow-Origin"] = o
+    r.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
+    r.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,X-QC-API-Key"
+    r.headers["Access-Control-Max-Age"] = "3600"
+    return r
+
 @wsgi_app.after_request
 def _cors(r):
     o = request.headers.get("Origin","")
