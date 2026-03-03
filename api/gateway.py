@@ -940,6 +940,27 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         max_age=3600,
     )
 
+    @app.after_request
+    def _force_cors(response):
+        origin = request.headers.get("Origin", "")
+        if origin.endswith(".web.app") or "localhost" in origin:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,X-QC-API-Key"
+            response.headers["Access-Control-Max-Age"] = "3600"
+        return response
+
+    @app.route("/api/<path:path>", methods=["OPTIONS"])
+    def _preflight(path=""):
+        origin = request.headers.get("Origin", "")
+        resp = app.make_response("")
+        resp.status_code = 204
+        resp.headers["Access-Control-Allow-Origin"] = origin
+        resp.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,X-QC-API-Key"
+        resp.headers["Access-Control-Max-Age"] = "3600"
+        return resp
+
     @app.before_request
     def _before_request():
         rid = (request.headers.get("X-Request-ID") or request.headers.get("X-Correlation-ID") or "").strip()
