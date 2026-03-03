@@ -934,9 +934,9 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
     CORS(
         app,
         origins=config.allowed_origins,
-        methods=["GET", "POST", "PUT", "DELETE"],
-        allow_headers=[config.api_key_header, "Content-Type"],
-        supports_credentials=False,
+        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=[config.api_key_header, "Content-Type", "Authorization"],
+        supports_credentials=True,
         max_age=3600,
     )
 
