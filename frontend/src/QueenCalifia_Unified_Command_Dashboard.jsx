@@ -1717,7 +1717,7 @@ function VulnsTab({ setAvatarState = () => {} }) {
     try {
       // Step 1: Launch scan
       ocLog("🔍 Launching full scan of localhost...");
-      const scanResp = await fetch("/api/vulns/scan", {
+      const scanResp = await fetch(API_BASE + "/api/vulns/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) },
         body: JSON.stringify({ target: "127.0.0.1", scan_type: "full", mode: "async", acknowledge_authorized: true }),
@@ -2566,6 +2566,10 @@ function GuidedWizard({ onExit }) {
     </div>
   );
 }
+
+
+
+const API_BASE = window.location.hostname === "localhost" ? "" : "https://queencalifia-cyberai.onrender.com";
 
 export default function QueenCalifiaCommandDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
