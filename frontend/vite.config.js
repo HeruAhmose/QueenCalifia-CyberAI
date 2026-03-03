@@ -8,7 +8,7 @@ export default defineConfig({
     host: "0.0.0.0",
     proxy: {
       "/api": {
-        target: process.env.VITE_API_URL || "http://localhost:5000",
+        target: process.env.VITE_API_URL || "https://queen-califia-api.onrender.com",
         changeOrigin: true,
         secure: false,
       },

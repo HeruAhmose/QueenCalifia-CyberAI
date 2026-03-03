@@ -1,3 +1,4 @@
+import QueenCalifiaAvatar from './components/QueenCalifiaAvatar';
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Cell, PieChart, Pie } from "recharts";
 
@@ -1573,7 +1574,7 @@ function IncidentsTab({ incidents }) {
 
 // ─── VULN TAB ─────────────────────────────────────────────────────────────
 
-function VulnsTab() {
+function VulnsTab({ setAvatarState = () => {} }) {
   const [apiKey, setApiKey] = useState(() => localStorage.getItem("qc_api_key") || "");
   const [ack, setAck] = useState(false);
 
@@ -1587,6 +1588,13 @@ function VulnsTab() {
   const [scanResult, setScanResult] = useState(null);
   const [remediation, setRemediation] = useState(null);
   const [error, setError] = useState("");
+
+  // ── One-Click Remediate State
+  const [oneClickRunning, setOneClickRunning] = useState(false);
+  const [oneClickPhase, setOneClickPhase] = useState("");
+  const [oneClickLog, setOneClickLog] = useState([]);
+  const [oneClickResult, setOneClickResult] = useState(null);
+  const ocLog = (msg, color) => setOneClickLog(prev => [...prev, { msg, color: color || "#8a9dbd", ts: new Date().toLocaleTimeString() }]);
 
   const headers = useMemo(() => {
     const h = { "Content-Type": "application/json" };
@@ -1637,8 +1645,7 @@ function VulnsTab() {
 
   const remediationToScript = useCallback((plan, format) => {
     const actions = plan?.priority_actions || [];
-    if (!actions.length) return "# No remediation actions available.
-";
+    if (!actions.length) return "# No remediation actions available.\n";
 
     if (format === "powershell") {
       const lines = [
@@ -1652,8 +1659,7 @@ function VulnsTab() {
         lines.push(`# Guidance: ${a.remediation || "n/a"}`);
         lines.push("");
       }
-      return lines.join("
-");
+      return lines.join("\n");
     }
 
     if (format === "ansible") {
@@ -1672,8 +1678,7 @@ function VulnsTab() {
         lines.push(`        msg: "${String(a.remediation || "n/a").replaceAll('"', '\"')}"`);
       }
       lines.push("");
-      return lines.join("
-");
+      return lines.join("\n");
     }
 
     // default: bash
@@ -1690,8 +1695,7 @@ function VulnsTab() {
       lines.push(`# Guidance: ${a.remediation || "n/a"}`);
       lines.push("");
     }
-    return lines.join("
-");
+    return lines.join("\n");
   }, []);
 
   const fetchRemediation = useCallback(async () => {
@@ -1702,6 +1706,71 @@ function VulnsTab() {
       setError(String(e?.message || e));
     }
   }, [apiFetch]);
+
+  const oneClickRemediate = async () => {
+    setOneClickRunning(true); setAvatarState("active");
+    setOneClickPhase("scanning");
+    setOneClickLog([]);
+    setOneClickResult(null);
+    setError("");
+    ocLog("⚡ Starting one-click remediation of 127.0.0.1...", "#60a5fa");
+    try {
+      // Step 1: Launch scan
+      ocLog("🔍 Launching full scan of localhost...");
+      const scanResp = await fetch("/api/vulns/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) },
+        body: JSON.stringify({ target: "127.0.0.1", scan_type: "full", mode: "async", acknowledge_authorized: true }),
+      });
+      const scanJson = await scanResp.json();
+      const sid = scanJson?.data?.scan_id || scanJson?.data?.scanId;
+      if (!sid) throw new Error("No scan_id returned. Is QC backend running?");
+      ocLog("✓ Scan queued — ID: " + sid, "#10b981");
+      // Step 2: Poll for completion
+      let tries = 0;
+      let scanDone = false;
+      while (tries < 60 && !scanDone) {
+        await new Promise(r => setTimeout(r, 3000));
+        const pollResp = await fetch("/api/vulns/scan/" + encodeURIComponent(sid), {
+          headers: { "Content-Type": "application/json", ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) }
+        });
+        const pollJson = await pollResp.json();
+        const state = pollJson?.data?.state || pollJson?.data?.status || "pending";
+        ocLog("  ↳ Scan status: " + state);
+        if (state === "completed" || state === "SUCCESS" || pollJson?.data?.ready) {
+          setScanResult(pollJson?.data?.result || null);
+          scanDone = true;
+          ocLog("✓ Scan complete!", "#10b981");
+        }
+        tries++;
+      }
+      if (!scanDone) throw new Error("Scan timed out after 3 minutes.");
+      // Step 3: Execute remediation
+      setOneClickPhase("remediating");
+      ocLog("🛠️ Executing auto-remediation...", "#f59e0b");
+      const remResp = await fetch("/api/vulns/remediation/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) },
+        body: JSON.stringify({ confirm: "EXECUTE", target: "127.0.0.1", auto_approve: true }),
+      });
+      const remJson = await remResp.json();
+      setOneClickResult(remJson?.data || remJson);
+      // Step 4: Load remediation plan
+      const planResp = await fetch("/api/vulns/remediation", {
+        headers: { ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) }
+      });
+      const planJson = await planResp.json();
+      setRemediation(planJson?.data || null);
+      setOneClickPhase("done"); setAvatarState("idle");
+      ocLog("✅ All done — vulnerabilities remediated.", "#10b981");
+    } catch (e) {
+      setOneClickPhase("error"); setAvatarState("ascended");
+      ocLog("❌ " + (e?.message || String(e)), "#ef4444");
+      setError(e?.message || String(e));
+    } finally {
+      setOneClickRunning(false);
+    }
+  };
 
   const launchScan = useCallback(async () => {
     setError("");
@@ -1777,7 +1846,49 @@ function VulnsTab() {
   const [scriptFmt, setScriptFmt] = useState("bash"); // bash|powershell|ansible
 
   return (
-    <div style={{ display: "grid", gap: 16 }}>
+    <div style={{ display: "grid", gap: 16 }}>      <div style={{padding:'16px 20px',background:'rgba(37,99,235,0.1)',border:'1px solid rgba(37,99,235,0.3)',borderRadius:10,marginBottom:16}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:700,color:'#d4dff0'}}>One-Click Remediate</div>
+            <div style={{fontSize:11,color:'#8a9dbd',marginTop:3}}>Scans localhost and auto-applies all fixes</div>
+          </div>
+          <button onClick={oneClickRemediate} disabled={oneClickRunning} style={{padding:'12px 28px',background:oneClickRunning?'#1a2d50':'linear-gradient(135deg,#2563eb,#10b981)',color:'#fff',border:'none',borderRadius:8,fontSize:13,fontWeight:700,cursor:oneClickRunning?'wait':'pointer',whiteSpace:'nowrap'}}>
+            {oneClickRunning?(oneClickPhase==='scanning'?'Scanning...':(oneClickPhase==='remediating'?'Remediating...':'Working...')):'REMEDIATE ALL'}
+          </button>
+        </div>
+        {oneClickLog.length>0&&(
+          <div style={{marginTop:12,padding:'10px 14px',background:'rgba(0,0,0,0.5)',borderRadius:6,fontSize:10,maxHeight:160,overflowY:'auto'}}>
+            {oneClickLog.map((l,i)=>(
+              <div key={i} style={{color:l.color,fontFamily:'monospace',marginBottom:2}}>
+                <span style={{color:'#4a6080',marginRight:8}}>{l.ts}</span>
+                <span>{l.msg}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {/* ONE-CLICK */}
+      <div style={{padding:'16px 20px',background:'rgba(37,99,235,0.1)',border:'1px solid rgba(37,99,235,0.3)',borderRadius:10,marginBottom:16}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:700,color:'#d4dff0'}}>One-Click Remediate</div>
+            <div style={{fontSize:11,color:'#8a9dbd',marginTop:3}}>Scans localhost and auto-applies all fixes</div>
+          </div>
+          <button onClick={oneClickRemediate} disabled={oneClickRunning} style={{padding:'12px 28px',background:oneClickRunning?'#1a2d50':'linear-gradient(135deg,#2563eb,#10b981)',color:'#fff',border:'none',borderRadius:8,fontSize:13,fontWeight:700,cursor:oneClickRunning?'wait':'pointer',whiteSpace:'nowrap'}}>
+            {oneClickRunning?(oneClickPhase==='scanning'?'Scanning...':(oneClickPhase==='remediating'?'Remediating...':'Working...')):'REMEDIATE ALL'}
+          </button>
+        </div>
+        {oneClickLog.length>0&&(
+          <div style={{marginTop:12,padding:'10px',background:'rgba(0,0,0,0.5)',borderRadius:6,fontSize:10,maxHeight:160,overflowY:'auto'}}>
+            {oneClickLog.map((l,i)=>(
+              <div key={i} style={{color:l.color,fontFamily:'monospace',marginBottom:2}}>
+                <span style={{color:'#4a6080',marginRight:8}}>{l.ts}</span>
+                <span>{l.msg}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       <Panel title="Vulnerability Scanner (Authorized Use Only)" icon="🔍" accent={C.accent}>
         <div style={{ display: "grid", gap: 10 }}>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -2458,6 +2569,7 @@ function GuidedWizard({ onExit }) {
 
 export default function QueenCalifiaCommandDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
+  const [qcAvatarState, setQcAvatarState] = useState("idle");
   const [tick, setTick] = useState(0);
   const [expertMode, setExpertMode] = useState(() => {
     try { return window.sessionStorage?.getItem?.("qc_expert") === "1"; } catch { return false; }
@@ -2500,6 +2612,13 @@ export default function QueenCalifiaCommandDashboard() {
       minHeight: "100vh", background: C.bg, color: C.text, fontFamily: FONT,
       padding: 0, margin: 0,
     }}>
+            <div style={{display:'flex',alignItems:'center',gap:16,padding:'12px 24px',background:'rgba(4,2,10,0.95)',borderBottom:'1px solid rgba(212,175,55,0.25)',position:'sticky',top:0,zIndex:100}}>
+        <QueenCalifiaAvatar state={qcAvatarState} size={72} showLabel={true} showStatus={false} />
+        <div>
+          <div style={{fontSize:20,fontWeight:800,color:'#D4AF37',letterSpacing:'0.12em',fontFamily:'monospace'}}>QUEEN CALIFIA</div>
+          <div style={{fontSize:10,color:'#4a6080',letterSpacing:'0.2em',marginTop:2}}>CYBERAI v4.1 // TAMERIAN MATERIALS // DEFENSE GRADE</div>
+        </div>
+      </div>
       {/* Global keyframe animations */}
       <style>{`
         @keyframes qcPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
@@ -2609,7 +2728,7 @@ export default function QueenCalifiaCommandDashboard() {
         {activeTab === "telemetry" && expertMode && <TelemetryTab telemetry={telemetryData} />}
         {activeTab === "mesh" && expertMode && <MeshTab mesh={mesh} />}
         {activeTab === "incidents" && <IncidentsTab incidents={incidents} />}
-        {activeTab === "vulns" && <VulnsTab />}
+        {activeTab === "vulns" && <VulnsTab setAvatarState={setQcAvatarState} />}
         {activeTab === "devops" && expertMode && <DevOpsTab />}
       </main>
 

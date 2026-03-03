@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: queen-califia-api
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py --port 10000 --no-auth
+    envVars:
+      - key: QUEEN_CALIFIA_ENV
+        value: production

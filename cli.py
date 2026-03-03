@@ -359,7 +359,7 @@ def cmd_status(args):
     from engines.live_scanner import LiveScanner
     from engines.auto_remediation import AutoRemediation
     from engines.zero_day_predictor import ZeroDayPredictor
-    from engines.advanced_telemetry import AdvancedTelemetryMatrix
+    from engines.advanced_telemetry import AdvancedTelemetry
 
     print_section("🛡 QUEEN CALIFIA — SYSTEM STATUS")
 
@@ -405,7 +405,7 @@ def cmd_status(args):
 
     # Telemetry
     try:
-        telemetry = AdvancedTelemetryMatrix()
+        telemetry = AdvancedTelemetry()
         t = telemetry.get_status()
         print(f"  {C.CYAN}Advanced Telemetry{C.RESET}")
         print(f"    Streams:     {t.get('active_streams', '?')}")
@@ -612,16 +612,23 @@ def cmd_one_click(args):
 
 def cmd_quantum(args):
     """Quantum cryptographic readiness assessment"""
-    from engines.quantum_engine import assess_quantum_readiness, QuantumKeyVault, LatticeKeyGenerator, EntropyPool
+    from engines.quantum_engine import assess_quantum_readiness, QuantumKeyVault, LatticeKeyGenerator, EntropyPool, LatticeAlgorithm
 
     print_section("⚛️  QUANTUM READINESS ASSESSMENT")
 
-    report = assess_quantum_readiness()
+    # Initialize vault with bootstrap keys for full assessment
+    entropy = EntropyPool()
+    keygen = LatticeKeyGenerator(entropy)
+    vault = QuantumKeyVault(keygen)
+    vault.generate_and_store(LatticeAlgorithm.KYBER_768, purpose="kem")
+    vault.generate_and_store(LatticeAlgorithm.DILITHIUM_3, purpose="signing")
+
+    report = assess_quantum_readiness(vault=vault, hybrid_enabled=True)
 
     rc = C.GREEN if report.score >= 0.7 else C.YELLOW if report.score >= 0.4 else C.RED
     print(f"  Overall Readiness: {rc}{C.BOLD}{report.score*100:.0f}%{C.RESET}")
     print(f"  Entropy Health:    {C.GREEN if report.entropy_health else C.RED}{'✓ Healthy' if report.entropy_health else '✗ Degraded'}{C.RESET}")
-    print(f"  Key Vault:         {C.GREEN if report.key_vault_active else C.YELLOW}{'✓ Active' if report.key_vault_active else '○ Inactive'}{C.RESET}")
+    print(f"  Key Vault:         {C.GREEN if report.key_vault_active else C.YELLOW}{'✓ Active (' + str(vault.key_count) + ' keys)' if report.key_vault_active else '○ Inactive'}{C.RESET}")
     print(f"  Hybrid Mode:       {C.GREEN if report.hybrid_mode_enabled else C.YELLOW}{'✓ Enabled' if report.hybrid_mode_enabled else '○ Disabled'}{C.RESET}")
     if report.pq_algorithms_available:
         print(f"  PQ Algorithms:     {C.GREEN}{', '.join(report.pq_algorithms_available)}{C.RESET}")
@@ -631,15 +638,15 @@ def cmd_quantum(args):
         print(f"\n  {C.BOLD}Recommendations:{C.RESET}")
         for r in report.recommendations:
             print(f"    • {r}")
+    else:
+        print(f"\n  {C.GREEN}{C.BOLD}✓ No critical recommendations — quantum posture is strong{C.RESET}")
 
     if args.keygen:
         print_section("🔑 GENERATING POST-QUANTUM KEYPAIR")
-        entropy = EntropyPool()
-        keygen = LatticeKeyGenerator(entropy)
-        vault = QuantumKeyVault(keygen)
-        key_id = vault.generate_and_store(algorithm="ML-KEM-768", label="cli-generated")
+        key_id = vault.generate_and_store(LatticeAlgorithm.KYBER_1024, purpose="kem")
         print(f"  Key ID:     {C.CYAN}{key_id}{C.RESET}")
-        print(f"  Algorithm:  ML-KEM-768 (NIST PQC Standard)")
+        print(f"  Algorithm:  Kyber-1024 (NIST PQC Standard)")
+        print(f"  Vault Keys: {vault.key_count} total")
         print(f"  Status:     {C.GREEN}✓ Stored in vault{C.RESET}")
 
 

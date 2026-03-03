@@ -1,41 +1,77 @@
-# NOTE:
-# - requirements.txt is the editable, range-based runtime input (kept for readability).
-# - For deterministic builds, generate and use requirements.lock (with hashes):
-#     make lock
-#     QC_USE_LOCK=1 docker compose -f docker-compose.prod.yml up --build
-#
-# Top-level runtime dependencies (pip-tools input)
-# Generate deterministic lockfiles via:
-#   make lock
-#
-# NOTE: Lockfiles with hashes are OS/arch specific. Generate inside Linux (Docker) for Docker builds.
-
-# Web framework (hardened)
-flask>=3.0.0,<4.0
-flask-cors>=4.0.0,<6.0
-werkzeug>=3.0.1,<4.0
-gunicorn>=21.2.0,<23.0
-
-# Security
-cryptography>=42.0.0,<44.0
-PyJWT>=2.8.0,<3.0
-bcrypt>=4.1.0,<5.0
-python-dotenv>=1.0.0,<2.0
-
-# Data processing
-
-# Distributed scalability
-redis>=5.0.0,<6.0
-celery>=5.3.0,<6.0
-
-# Observability (OpenTelemetry)
-opentelemetry-api>=1.25.0,<2.0
-opentelemetry-sdk>=1.25.0,<2.0
-opentelemetry-exporter-otlp>=1.25.0,<2.0
-opentelemetry-instrumentation-flask>=0.46b0,<0.60b0
-opentelemetry-instrumentation-requests>=0.46b0,<0.60b0
-opentelemetry-instrumentation-redis>=0.46b0,<0.60b0
-opentelemetry-instrumentation-celery>=0.46b0,<0.60b0
-
-# Metrics (Prometheus)
-prometheus-client>=0.20.0,<1.0
+amqp==5.3.1
+bcrypt==4.3.0
+billiard==4.2.4
+blinker==1.9.0
+cachetools==5.5.2
+celery==5.6.2
+certifi==2025.1.31
+cffi==2.0.0
+charset-normalizer==3.4.1
+click==8.3.1
+click-didyoumean==0.3.1
+click-plugins==1.1.1.2
+click-repl==0.3.0
+colorama==0.4.6
+cryptography==43.0.3
+Flask==3.1.3
+flask-cors==5.0.1
+google-api-core==2.24.2
+google-api-python-client==2.166.0
+google-auth==2.38.0
+google-auth-httplib2==0.2.0
+googleapis-common-protos==1.69.2
+grpcio==1.78.0
+gunicorn==22.0.0
+httplib2==0.22.0
+idna==3.10
+importlib_metadata==8.7.1
+itsdangerous==2.2.0
+Jinja2==3.1.6
+kombu==5.6.2
+MarkupSafe==3.0.3
+oauth2client==4.1.3
+opentelemetry-api==1.38.0
+opentelemetry-exporter-otlp==1.38.0
+opentelemetry-exporter-otlp-proto-common==1.38.0
+opentelemetry-exporter-otlp-proto-grpc==1.38.0
+opentelemetry-exporter-otlp-proto-http==1.38.0
+opentelemetry-instrumentation==0.59b0
+opentelemetry-instrumentation-celery==0.59b0
+opentelemetry-instrumentation-flask==0.59b0
+opentelemetry-instrumentation-redis==0.59b0
+opentelemetry-instrumentation-requests==0.59b0
+opentelemetry-instrumentation-wsgi==0.59b0
+opentelemetry-proto==1.38.0
+opentelemetry-sdk==1.38.0
+opentelemetry-semantic-conventions==0.59b0
+opentelemetry-util-http==0.59b0
+packaging==26.0
+prometheus_client==0.24.1
+prompt_toolkit==3.0.52
+proto-plus==1.26.1
+protobuf==6.30.2
+pyasn1==0.6.1
+pyasn1_modules==0.4.1
+pycparser==3.0
+PyDrive==1.3.1
+PyJWT==2.11.0
+pyparsing==3.2.3
+python-dateutil==2.9.0.post0
+python-dotenv==1.2.1
+PyYAML==6.0.2
+redis==5.3.1
+requests==2.32.3
+rsa==4.9
+setuptools==82.0.0
+six==1.17.0
+typing_extensions==4.15.0
+tzdata==2025.3
+tzlocal==5.3.1
+uritemplate==4.1.1
+urllib3==2.3.0
+vine==5.1.0
+wcwidth==0.6.0
+Werkzeug==3.1.6
+wheel==0.46.3
+wrapt==1.17.3
+zipp==3.23.0

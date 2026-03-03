@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createOptimisticEvidence, replaceOptimisticEvidence, rollbackOptimisticEvidence } from "./lib/evidenceOptimistic.js";
+import { createOptimisticEvidence, replaceOptimisticEvidence, rollbackOptimisticEvidence } from "../lib/evidenceOptimistic.js";
 
 /**
  * QueenCalifia v2 — Premium SOC Dashboard (single-file component)

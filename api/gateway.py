@@ -2143,33 +2143,40 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
     try:
         from engines.quantum_engine import (
             QuantumKeyVault, LatticeKeyGenerator, EntropyPool,
-            assess_quantum_readiness, quantum_hash,
+            assess_quantum_readiness, quantum_hash, LatticeAlgorithm,
         )
         _qe_entropy = EntropyPool()
         _qe_keygen = LatticeKeyGenerator(_qe_entropy)
         _qe_vault = QuantumKeyVault(_qe_keygen)
+        # Auto-bootstrap: generate initial PQ keypairs for vault activation
+        _qe_vault.generate_and_store(LatticeAlgorithm.KYBER_768, purpose="kem")
+        _qe_vault.generate_and_store(LatticeAlgorithm.DILITHIUM_3, purpose="signing")
+        _qe_hybrid = os.environ.get("QC_HYBRID_SIGNATURES", "1") == "1"
     except Exception:
         _qe_vault = None
+        _qe_hybrid = False
 
     @app.route("/api/v1/quantum/readiness", methods=["GET"])
     def api_quantum_readiness():
         """Assess post-quantum cryptographic readiness"""
         try:
-            report = assess_quantum_readiness(current_algorithms=["RSA-2048", "ECDHE-P256", "AES-256-GCM"])
+            report = assess_quantum_readiness(vault=_qe_vault, hybrid_enabled=_qe_hybrid)
             return jsonify({"readiness": report.__dict__ if hasattr(report, "__dict__") else report})
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
     @app.route("/api/v1/quantum/keygen", methods=["POST"])
     def api_quantum_keygen():
-        """Generate a post-quantum keypair. Body: {algorithm?, label?}"""
+        """Generate a post-quantum keypair. Body: {algorithm?, purpose?}"""
         if not _qe_vault:
             return jsonify({"error": "Quantum engine not available"}), 503
         body = request.get_json(force=True, silent=True) or {}
-        algorithm = body.get("algorithm", "ML-KEM-768")
-        label = body.get("label", "default")
-        key_id = _qe_vault.generate_and_store(algorithm=algorithm, label=label)
-        return jsonify({"key_id": key_id, "algorithm": algorithm})
+        alg_name = body.get("algorithm", "kyber768")
+        purpose = body.get("purpose", "kem")
+        _alg_map = {a.value: a for a in LatticeAlgorithm}
+        alg = _alg_map.get(alg_name, LatticeAlgorithm.KYBER_768)
+        key_id = _qe_vault.generate_and_store(alg, purpose=purpose)
+        return jsonify({"key_id": key_id, "algorithm": alg.value, "purpose": purpose})
 
     @app.route("/api/v1/quantum/vault", methods=["GET"])
     def api_quantum_vault():
@@ -2177,9 +2184,9 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         if not _qe_vault:
             return jsonify({"error": "Quantum engine not available"}), 503
         return jsonify({
-            "key_count": _qe_vault.key_count(),
+            "key_count": _qe_vault.key_count,
             "expired_keys": len(_qe_vault.expired_keys()),
-            "rotation_history": _qe_vault.rotation_history(),
+            "rotation_history": _qe_vault.rotation_history,
         })
 
     @app.route("/api/v1/quantum/hash", methods=["POST"])

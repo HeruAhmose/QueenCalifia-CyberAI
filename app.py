@@ -175,8 +175,9 @@ def main() -> None:
     wsgi_app = system["app"]
 
     logger.info("🚀 Queen Califia CyberAI starting (dev server)")
-    wsgi_app.run(host=args.host, port=args.port, debug=args.debug)
+    print(f"* Running on http://{args.host}:{args.port}"); wsgi_app.run(host=args.host, port=args.port, debug=False, use_reloader=False)
 
 
 if __name__ == "__main__":
     main()
+

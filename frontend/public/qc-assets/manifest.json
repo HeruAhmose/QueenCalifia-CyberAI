@@ -1,0 +1,207 @@
+{
+  "app": "Queen Califia CyberAI",
+  "version": "4.1",
+  "classification": "SOVEREIGN",
+  "generated": "2026-03-02",
+  "states": {
+    "idle": {
+      "name": "Sentinel Mode",
+      "label": "QC::READY",
+      "status": "STATUS: MONITORING",
+      "accent_color": "#D4AF37",
+      "description": "Default monitoring state. Queen Califia stands sentinel in her cyber citadel, scanning for threats.",
+      "use_when": "App is idle, waiting for user input, or passively monitoring",
+      "assets": {
+        "raw": "raw_portraits/idle_raw.png",
+        "raw_dimensions": [
+          1024,
+          1536
+        ],
+        "avatar_lg": "avatars/idle_avatar_lg.png",
+        "avatar_md": "avatars/idle_avatar_md.png",
+        "avatar_sm": "avatars/idle_avatar_sm.png",
+        "icon_lg": "icons/idle_icon_lg.png",
+        "icon_md": "icons/idle_icon_md.png",
+        "icon_sm": "icons/idle_icon_sm.png",
+        "icon_xs": "icons/idle_icon_xs.png",
+        "thumbnail": "thumbnails/idle_thumb.png",
+        "panel": "panels/idle_panel.png",
+        "panel_dimensions": [
+          1224,
+          1696
+        ],
+        "branded_square": "states/idle/idle_branded_square.png"
+      }
+    },
+    "active": {
+      "name": "Defense Active",
+      "label": "QC::ACTIVE",
+      "status": "STATUS: ACTIVE DEFENSE",
+      "accent_color": "#00DCFA",
+      "description": "Active defense mode. Arms spread, energy deployed. Processing queries or responding to threats.",
+      "use_when": "Processing user queries, running scans, active defense operations",
+      "assets": {
+        "raw": "raw_portraits/active_raw.png",
+        "raw_dimensions": [
+          1024,
+          1536
+        ],
+        "avatar_lg": "avatars/active_avatar_lg.png",
+        "avatar_md": "avatars/active_avatar_md.png",
+        "avatar_sm": "avatars/active_avatar_sm.png",
+        "icon_lg": "icons/active_icon_lg.png",
+        "icon_md": "icons/active_icon_md.png",
+        "icon_sm": "icons/active_icon_sm.png",
+        "icon_xs": "icons/active_icon_xs.png",
+        "thumbnail": "thumbnails/active_thumb.png",
+        "panel": "panels/active_panel.png",
+        "panel_dimensions": [
+          1224,
+          1696
+        ],
+        "branded_square": "states/active/active_branded_square.png"
+      }
+    },
+    "ascended": {
+      "name": "Ancestral Link",
+      "label": "QC::ASCENDED",
+      "status": "STATUS: ANCESTORS ONLINE",
+      "accent_color": "#FFE178",
+      "description": "Maximum power state. Ancestral guardians flanking, cosmic energy beam, full divine protection.",
+      "use_when": "Critical security events, deep analysis, system-wide protection activation",
+      "assets": {
+        "raw": "raw_portraits/ascended_raw.png",
+        "raw_dimensions": [
+          1024,
+          1536
+        ],
+        "avatar_lg": "avatars/ascended_avatar_lg.png",
+        "avatar_md": "avatars/ascended_avatar_md.png",
+        "avatar_sm": "avatars/ascended_avatar_sm.png",
+        "icon_lg": "icons/ascended_icon_lg.png",
+        "icon_md": "icons/ascended_icon_md.png",
+        "icon_sm": "icons/ascended_icon_sm.png",
+        "icon_xs": "icons/ascended_icon_xs.png",
+        "thumbnail": "thumbnails/ascended_thumb.png",
+        "panel": "panels/ascended_panel.png",
+        "panel_dimensions": [
+          1224,
+          1696
+        ],
+        "branded_square": "states/ascended/ascended_branded_square.png"
+      }
+    }
+  },
+  "branding": {
+    "sigil": {
+      "name": "Sovereign Sigil",
+      "description": "Hexagonal circuit shield with cyan diamond core. The brand mark of Queen Califia CyberAI.",
+      "use_for": "App icon, favicon, loading animation center, watermark, splash screen logo",
+      "assets": {
+        "icon_512": "branding/sigil/sigil_icon_512.png",
+        "icon_256": "branding/sigil/sigil_icon_256.png",
+        "icon_128": "branding/sigil/sigil_icon_128.png",
+        "icon_64": "branding/sigil/sigil_icon_64.png",
+        "icon_32": "branding/sigil/sigil_icon_32.png",
+        "full": "branding/sigil/sigil_full.png",
+        "square_800": "branding/sigil/sigil_square_800.png",
+        "panel": "branding/sigil/sigil_panel.png",
+        "square_400": "branding/sigil/sigil_square_400.png",
+        "square_200": "branding/sigil/sigil_square_200.png",
+        "square_100": "branding/sigil/sigil_square_100.png"
+      }
+    },
+    "sovereign_circuitry": {
+      "name": "Sovereign Circuitry",
+      "description": "The complete Queen Califia universe \u2014 Celestial Server Vault, Obsidian Archive, Fractured Firewall. The cosmic battleground.",
+      "use_for": "Hero image, about page, marketing materials, presentation backgrounds",
+      "assets": {
+        "full": "branding/sovereign_circuitry/sovereign_circuitry_full.png",
+        "full_dimensions": [
+          1024,
+          1536
+        ],
+        "square_800": "branding/sovereign_circuitry/sovereign_circuitry_square_800.png",
+        "square_400": "branding/sovereign_circuitry/sovereign_circuitry_square_400.png",
+        "square_200": "branding/sovereign_circuitry/sovereign_circuitry_square_200.png",
+        "banner_1920": "branding/sovereign_circuitry/sovereign_circuitry_banner_1920x1080.png",
+        "banner_1200": "branding/sovereign_circuitry/sovereign_circuitry_banner_1200x675.png",
+        "banner_800": "branding/sovereign_circuitry/sovereign_circuitry_banner_800x450.png"
+      }
+    }
+  },
+  "asset_sizes": {
+    "panel": "Full branded panel (varies, ~1224x1696)",
+    "avatar_lg": "800x800 - Large square avatar",
+    "avatar_md": "400x400 - Medium square avatar",
+    "avatar_sm": "200x200 - Small square avatar",
+    "icon_lg": "512x512 - Large icon",
+    "icon_md": "256x256 - Medium icon",
+    "icon_sm": "128x128 - Small icon",
+    "icon_xs": "64x64 - Favicon/tiny icon",
+    "thumbnail": "300x300 - Thumbnail preview",
+    "raw": "Original source image"
+  },
+  "bonus_portraits": {
+    "hex_shield": {
+      "description": "Queen with hexagonal shield \u2014 Cyber defense visualization",
+      "raw": "raw_portraits/hex_shield_raw.png",
+      "avatars": {
+        "lg": "avatars/hex_shield_avatar_lg.png",
+        "md": "avatars/hex_shield_avatar_md.png",
+        "sm": "avatars/hex_shield_avatar_sm.png"
+      }
+    },
+    "energy_spiral": {
+      "description": "Queen channeling spiral energy \u2014 Active spellcasting",
+      "raw": "raw_portraits/energy_spiral_raw.png",
+      "avatars": {
+        "lg": "avatars/energy_spiral_avatar_lg.png",
+        "md": "avatars/energy_spiral_avatar_md.png",
+        "sm": "avatars/energy_spiral_avatar_sm.png"
+      }
+    },
+    "staff_raised": {
+      "description": "Queen with staff raised \u2014 Authority/command pose",
+      "raw": "raw_portraits/staff_raised_raw.png",
+      "avatars": {
+        "lg": "avatars/staff_raised_avatar_lg.png",
+        "md": "avatars/staff_raised_avatar_md.png",
+        "sm": "avatars/staff_raised_avatar_sm.png"
+      }
+    }
+  },
+  "integration": {
+    "state_machine": {
+      "description": "Map these states to your app's AI assistant behavior",
+      "transitions": {
+        "idle -> active": "User sends a message or scan is initiated",
+        "active -> idle": "Response delivered, returning to monitoring",
+        "active -> ascended": "Critical threat detected or deep analysis required",
+        "ascended -> active": "Threat neutralized, returning to active defense",
+        "ascended -> idle": "All clear, returning to sentinel mode",
+        "any -> sigil": "Loading screen, splash, or app initialization"
+      }
+    },
+    "css_variables": {
+      "--qc-gold": "#D4AF37",
+      "--qc-bright-gold": "#F5D241",
+      "--qc-cyan": "#00DCFA",
+      "--qc-deep-cyan": "#0096BE",
+      "--qc-void": "#04020A",
+      "--qc-accent-idle": "#D4AF37",
+      "--qc-accent-active": "#00DCFA",
+      "--qc-accent-ascended": "#FFE178"
+    },
+    "recommended_usage": {
+      "chatbot_avatar": "avatars/{state}_avatar_sm.png (200x200)",
+      "chatbot_panel": "panels/{state}_panel.png (full panel)",
+      "sidebar_icon": "icons/{state}_icon_md.png (256x256)",
+      "favicon": "branding/sigil/sigil_icon_32.png",
+      "app_icon": "branding/sigil/sigil_icon_512.png",
+      "loading_screen": "branding/sigil/sigil_square_800.png",
+      "hero_banner": "branding/sovereign_circuitry/sovereign_circuitry_banner_1920x1080.png",
+      "splash_bg": "branding/sovereign_circuitry/sovereign_circuitry_full.png"
+    }
+  }
+}
