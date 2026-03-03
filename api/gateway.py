@@ -81,6 +81,7 @@ class SecurityConfig:
             "https://queencalifia.tamerian.com",
             "http://localhost:3000",
             "https://queencalifia-cyberai.web.app",
+            "https://*.web.app",
             "http://localhost:5000",
         ]
     )
