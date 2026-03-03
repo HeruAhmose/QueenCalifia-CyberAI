@@ -178,6 +178,16 @@ def main() -> None:
     print(f"* Running on http://{args.host}:{args.port}"); wsgi_app.run(host=args.host, port=args.port, debug=False, use_reloader=False)
 
 
+@wsgi_app.after_request
+def _cors(r):
+    o = request.headers.get("Origin","")
+    if o.endswith(".web.app") or "localhost" in o:
+        r.headers["Access-Control-Allow-Origin"] = o
+        r.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
+        r.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,X-QC-API-Key"
+        r.headers["Access-Control-Allow-Credentials"] = "true"
+    return r
+
 if __name__ == "__main__":
     main()
 
