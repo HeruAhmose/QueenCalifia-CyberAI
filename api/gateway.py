@@ -80,6 +80,7 @@ class SecurityConfig:
         default_factory=lambda: [
             "https://queencalifia.tamerian.com",
             "http://localhost:3000",
+            "https://queencalifia-cyberai.web.app",
             "http://localhost:5000",
         ]
     )
