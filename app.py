@@ -25,6 +25,7 @@ from core.logging_setup import configure_logging
 import argparse
 
 from api.gateway import create_security_api, SecurityConfig
+from flask import request
 from core.tamerian_mesh import TamerianSecurityMesh
 from engines.vulnerability_engine import VulnerabilityEngine
 from engines.incident_response import IncidentResponseOrchestrator
