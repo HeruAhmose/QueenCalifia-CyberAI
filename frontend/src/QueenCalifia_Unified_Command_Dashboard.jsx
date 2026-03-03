@@ -2296,7 +2296,7 @@ function GuidedWizard({ onExit }) {
       const headers = { "Content-Type": "application/json" };
       if (apiKey.trim()) headers["X-QC-API-Key"] = apiKey.trim();
 
-      const res = await fetch("/api/v1/one-click/scan-and-fix", {
+      const res = await fetch(API_BASE + "/api/v1/one-click/scan-and-fix", {
         method: "POST",
         headers,
         body: JSON.stringify({
