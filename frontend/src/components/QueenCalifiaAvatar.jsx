@@ -8,14 +8,40 @@
 
 import { useState, useEffect, useRef } from "react";
 
-// ── Asset paths (relative to /public/qc-assets/) ──────────────────────────
-const AVATAR_PATHS = {
-  idle:          "/qc-assets/idle_avatar",
-  active:        "/qc-assets/active_avatar",
-  ascended:      "/qc-assets/ascended_avatar",
-  hex_shield:    "/qc-assets/hex_shield_avatar",
-  energy_spiral: "/qc-assets/energy_spiral_avatar",
-  staff_raised:  "/qc-assets/staff_raised_avatar",
+// ── CDN-hosted avatar assets ──────────────────────────────────────────────
+const CDN = "https://d2xsxph8kpxj0f.cloudfront.net/310419663029216973/6A6PRiSc2SBdMKdQGVopRa";
+
+const AVATAR_CDN = {
+  idle: {
+    sm: `${CDN}/idle_avatar_sm_6294a66d.png`,
+    md: `${CDN}/idle_avatar_md_01d6b8eb.png`,
+    lg: `${CDN}/idle_avatar_lg_d2e3a5df.png`,
+  },
+  active: {
+    sm: `${CDN}/active_avatar_sm_174d2621.png`,
+    md: `${CDN}/active_avatar_md_d5ff6eb4.png`,
+    lg: `${CDN}/active_avatar_lg_a9c4c09f.png`,
+  },
+  ascended: {
+    sm: `${CDN}/ascended_avatar_sm_f5bbbde2.png`,
+    md: `${CDN}/ascended_avatar_md_6be4ce60.png`,
+    lg: `${CDN}/ascended_avatar_lg_99e7d946.png`,
+  },
+  hex_shield: {
+    sm: `${CDN}/hex_shield_avatar_sm_608c4826.png`,
+    md: `${CDN}/hex_shield_avatar_md_fcb22893.png`,
+    lg: `${CDN}/hex_shield_avatar_lg_271e9d93.png`,
+  },
+  energy_spiral: {
+    sm: `${CDN}/energy_spiral_avatar_sm_6e1beb18.png`,
+    md: `${CDN}/energy_spiral_avatar_md_333b37df.png`,
+    lg: `${CDN}/energy_spiral_avatar_lg_922c01bf.png`,
+  },
+  staff_raised: {
+    sm: `${CDN}/staff_raised_avatar_sm_60d7a369.png`,
+    md: `${CDN}/staff_raised_avatar_md_790bf45a.png`,
+    lg: `${CDN}/staff_raised_avatar_lg_e7119b99.png`,
+  },
 };
 
 const STATE_META = {
@@ -74,8 +100,8 @@ function AvatarImage({ state, size }) {
   const [loaded, setLoaded] = useState(false);
   const [src, setSrc] = useState(null);
 
-  const suffix = size <= 200 ? "_sm" : size <= 400 ? "_md" : "_lg";
-  const path = `${AVATAR_PATHS[state]}${suffix}.png`;
+  const sizeKey = size <= 200 ? "sm" : size <= 400 ? "md" : "lg";
+  const path = AVATAR_CDN[state]?.[sizeKey] || AVATAR_CDN.idle[sizeKey];
 
   useEffect(() => {
     setLoaded(false);
