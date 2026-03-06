@@ -28,6 +28,8 @@ import { SoundContext } from "./contexts/SoundContext.jsx";
  */
 
 // ─── Color System ─────────────────────────────────────────────────────────
+const API_BASE = window.location.hostname === "localhost" ? "" : "https://queencalifia-cyberai.onrender.com";
+
 const C = {
   void: "#020409",
   bg: "#060a14",
@@ -1615,7 +1617,8 @@ function VulnsTab({ setAvatarState = () => {} }) {
   }, [apiKey]);
 
   const apiFetch = useCallback(async (path, init = {}) => {
-    const res = await fetch(path, { ...init, headers: { ...(init.headers || {}), ...headers } });
+    const fullPath = path.startsWith('http') ? path : API_BASE + path;
+    const res = await fetch(fullPath, { ...init, headers: { ...(init.headers || {}), ...headers } });
     const text = await res.text();
     let json = null;
     try { json = text ? JSON.parse(text) : null; } catch { json = null; }
@@ -1743,7 +1746,7 @@ function VulnsTab({ setAvatarState = () => {} }) {
       let scanDone = false;
       while (tries < 60 && !scanDone) {
         await new Promise(r => setTimeout(r, 3000));
-        const pollResp = await fetch("/api/vulns/scan/" + encodeURIComponent(sid), {
+        const pollResp = await fetch(API_BASE + "/api/vulns/scan/" + encodeURIComponent(sid), {
           headers: { "Content-Type": "application/json", ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) }
         });
         const pollJson = await pollResp.json();
@@ -1760,7 +1763,7 @@ function VulnsTab({ setAvatarState = () => {} }) {
       // Step 3: Execute remediation
       setOneClickPhase("remediating");
       ocLog("🛠️ Executing auto-remediation...", "#f59e0b");
-      const remResp = await fetch("/api/vulns/remediation/execute", {
+      const remResp = await fetch(API_BASE + "/api/vulns/remediation/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) },
         body: JSON.stringify({ confirm: "EXECUTE", target: "127.0.0.1", auto_approve: true }),
@@ -1768,7 +1771,7 @@ function VulnsTab({ setAvatarState = () => {} }) {
       const remJson = await remResp.json();
       setOneClickResult(remJson?.data || remJson);
       // Step 4: Load remediation plan
-      const planResp = await fetch("/api/vulns/remediation", {
+      const planResp = await fetch(API_BASE + "/api/vulns/remediation", {
         headers: { ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) }
       });
       const planJson = await planResp.json();
@@ -2288,7 +2291,7 @@ function GuidedWizard({ onExit }) {
       const headers = { "Content-Type": "application/json" };
       if (apiKey.trim()) headers["X-QC-API-Key"] = apiKey.trim();
 
-      const res = await fetch("/api/v1/one-click/scan-and-fix", {
+      const res = await fetch(API_BASE + "/api/v1/one-click/scan-and-fix", {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -2562,8 +2565,6 @@ function GuidedWizard({ onExit }) {
 
 
 
-const API_BASE = window.location.hostname === "localhost" ? "" : "https://queencalifia-cyberai.onrender.com";
-
 export default function QueenCalifiaCommandDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [qcAvatarState, setQcAvatarState] = useState("idle");
@@ -2630,11 +2631,28 @@ export default function QueenCalifiaCommandDashboard() {
         ::-webkit-scrollbar-thumb { background: ${C.gold}40; border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: ${C.gold}60; }
         * { box-sizing: border-box; }
+        /* Tablet */
+        @media (max-width: 1024px) {
+          .qc-hero-grid { grid-template-columns: 1fr 1fr !important; }
+        }
+        /* Mobile */
         @media (max-width: 768px) {
-          .qc-nav-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+          .qc-nav-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
           .qc-nav-scroll::-webkit-scrollbar { display: none; }
           .qc-header-actions { flex-wrap: wrap; gap: 6px !important; }
           .qc-hero-grid { grid-template-columns: 1fr !important; }
+          header { padding: 8px 12px !important; }
+          nav { padding: 0 8px !important; }
+          [style*="padding: 24px"], [style*="padding:24px"] { padding: 12px !important; }
+          [style*="gridTemplateColumns: repeat(auto-fit"] { grid-template-columns: 1fr !important; }
+          [style*="gridTemplateColumns: 2fr 1fr"] { grid-template-columns: 1fr !important; }
+          [style*="gridTemplateColumns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
+          button { min-height: 44px; }
+        }
+        /* Small mobile */
+        @media (max-width: 480px) {
+          header { flex-direction: column; align-items: flex-start !important; }
+          .qc-header-actions { width: 100%; justify-content: space-between; }
         }
       `}</style>
 
