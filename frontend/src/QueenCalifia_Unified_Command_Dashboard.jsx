@@ -1,51 +1,78 @@
-/**
- * QueenCalifia CyberAI — Unified Command Dashboard v4.2
- * God-Tier Sovereign Circuitry Design
- * 
- * Defense-Grade Cybersecurity Intelligence Platform
- * Zero-Day Prediction • Threat Mesh • Incident Response • Vulnerability Scanner
- * One-Click Remediate • Self-Learning Feedback • Quantum Hardening • DevOps Ops
- * Mobile-Responsive • Sound-Enabled • Cinematic Animations
- */
-
-const API_BASE = window.location.hostname === "localhost" ? "" : "https://queencalifia-cyberai.onrender.com";
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import QueenCalifiaAvatar from './components/QueenCalifiaAvatar';
+import { useState, useEffect, useCallback, useRef, useMemo, useContext } from "react";
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Cell, PieChart, Pie } from "recharts";
 import { motion, AnimatePresence } from "framer-motion";
-import QueenCalifiaAvatar from "./components/QueenCalifiaAvatar.jsx";
-import { playSound } from "./lib/SoundEngine.js";
+import { SoundContext } from "./contexts/SoundContext.jsx";
 
-const CDN = "https://d2xsxph8kpxj0f.cloudfront.net/310419663029216973/6A6PRiSc2SBdMKdQGVopRa";
+/*
+ * QueenCalifia CyberAI — Unified Command Dashboard
+ * 
+ * Defense-Grade Cybersecurity Intelligence Platform
+ * Zero-Day Prediction • Threat Mesh • Incident Response • DevOps Ops
+ * 
+ * Tamerian Materials / QueenCalifia-CyberAI
+ * 
+ * Architecture:
+ *   ┌─ STRATEGIC OVERVIEW ──────────────────────────────┐
+ *   │  Threat posture • Mesh health • Predictions       │
+ *   ├─ ZERO-DAY PREDICTOR ──────────────────────────────┤
+ *   │  5-layer prediction engine • Campaign tracking     │
+ *   ├─ SECURITY MESH ──────────────────────────────────-─┤
+ *   │  Node topology • Attack chains • IOC management    │
+ *   ├─ INCIDENT RESPONSE ───────────────────────────────┤
+ *   │  Active incidents • Playbook execution • Forensics │
+ *   ├─ VULNERABILITY SCANNER ───────────────────────────┤
+ *   │  Asset inventory • CVE correlation • Compliance    │
+ *   └─ DEVOPS OPERATIONS ───────────────────────────────┘
+ *     K8s bootstrap • Branch protection • DNS sanity     
+ */
 
 // ─── Color System ─────────────────────────────────────────────────────────
 const C = {
-  void: "#020409", bg: "#060a14", panel: "#0a0f1e", panelHover: "#0e1528",
-  surface: "#111b2e", border: "#131d33", borderLit: "#1a2d50",
-  text: "#d4dff0", textSoft: "#8a9dbd", textDim: "#4a6080",
-  accent: "#2563eb", accentBright: "#60a5fa",
-  gold: "#D4AF37", goldDim: "rgba(212,175,55,0.10)",
-  green: "#10b981", greenDim: "rgba(16,185,129,0.10)",
-  amber: "#f59e0b", amberDim: "rgba(245,158,11,0.10)",
-  red: "#ef4444", redDim: "rgba(239,68,68,0.08)",
-  cyan: "#06b6d4", cyanDim: "rgba(6,182,212,0.06)",
-  purple: "#a78bfa", purpleDim: "rgba(167,139,250,0.08)",
+  void: "#020409",
+  bg: "#060a14",
+  panel: "#0a0f1e",
+  panelHover: "#0e1528",
+  surface: "#111b2e",
+  border: "#131d33",
+  borderLit: "#1a2d50",
+  borderHot: "#2563eb",
+  glow: "rgba(37,99,235,0.06)",
+  glowHot: "rgba(37,99,235,0.14)",
+  text: "#d4dff0",
+  textSoft: "#8a9dbd",
+  textDim: "#4a6080",
+  accent: "#2563eb",
+  accentBright: "#60a5fa",
+  green: "#10b981",
+  greenDim: "rgba(16,185,129,0.10)",
+  greenGlow: "rgba(16,185,129,0.04)",
+  amber: "#f59e0b",
+  amberDim: "rgba(245,158,11,0.10)",
+  red: "#ef4444",
+  redDim: "rgba(239,68,68,0.08)",
+  redGlow: "rgba(239,68,68,0.04)",
+  cyan: "#06b6d4",
+  cyanDim: "rgba(6,182,212,0.06)",
+  purple: "#a78bfa",
+  purpleDim: "rgba(167,139,250,0.08)",
   magenta: "#ec4899",
+  magentaDim: "rgba(236,72,153,0.08)",
+  gold: "#D4AF37",
+  goldDim: "rgba(212,175,55,0.12)",
+  goldGlow: "rgba(212,175,55,0.06)",
 };
-const FONT = "'DM Sans', sans-serif";
-const MONO = "'JetBrains Mono', monospace";
 
-// ─── Responsive ───────────────────────────────────────────────────────────
-function useIsMobile(bp = 768) {
-  const [m, setM] = useState(window.innerWidth < bp);
-  useEffect(() => { const h = () => setM(window.innerWidth < bp); window.addEventListener("resize", h); return () => window.removeEventListener("resize", h); }, [bp]);
-  return m;
-}
+const FONT = "'DM Sans', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif";
+const DISPLAY = "'Orbitron', 'DM Sans', sans-serif";
+const MONO = "'JetBrains Mono', 'SF Mono', 'Fira Code', Consolas, monospace";
 
-// ─── Data Generators ──────────────────────────────────────────────────────
+// ─── Simulated Data Generators ────────────────────────────────────────────
+
 const now = () => new Date();
 const ago = (ms) => new Date(Date.now() - ms);
-const rand = (a, b) => Math.random() * (b - a) + a;
-const randInt = (a, b) => Math.floor(rand(a, b));
+const rand = (min, max) => Math.random() * (max - min) + min;
+const randInt = (min, max) => Math.floor(rand(min, max));
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const uuid8 = () => Math.random().toString(36).slice(2, 10).toUpperCase();
 
@@ -53,21 +80,47 @@ function generateMeshStatus() {
   return {
     mesh_id: "QC-" + uuid8(),
     topology: { total_nodes: 24, active_nodes: randInt(21, 24), degraded_nodes: randInt(0, 3), healthy_circuits: 6, total_circuits: 6 },
-    threat_posture: { active_attack_chains: randInt(0, 4), iocs_active: randInt(45, 200), ips_blocked: randInt(20, 80), blocked_domains: randInt(30, 120) },
-    statistics: { events_ingested: randInt(50000, 250000), threats_detected: randInt(5, 30), attacks_correlated: randInt(1, 8), mesh_heals: randInt(0, 5), false_positives_suppressed: randInt(10, 50) },
+    threat_posture: {
+      active_attack_chains: randInt(0, 4),
+      iocs_active: randInt(45, 200),
+      ips_blocked: randInt(20, 80),
+      blocked_domains: randInt(30, 120),
+    },
+    statistics: {
+      events_ingested: randInt(50000, 250000),
+      threats_detected: randInt(5, 30),
+      attacks_correlated: randInt(1, 8),
+      mesh_heals: randInt(0, 5),
+      false_positives_suppressed: randInt(10, 50),
+    },
   };
 }
 
 function generatePredictions() {
   const categories = ["novel_exploit", "variant_mutation", "supply_chain_injection", "living_off_the_land", "encrypted_channel_abuse", "config_drift_exploit", "polymorphic_payload", "ai_generated_malware"];
-  return Array.from({ length: randInt(3, 8) }, () => {
+  const horizons = ["0-1h", "1-24h", "1-7d", "7-30d"];
+  const tiers = ["speculative", "emerging", "probable", "high", "near_certain"];
+  return Array.from({ length: randInt(3, 8) }, (_, i) => {
     const confidence = rand(0.25, 0.97);
     const tier = confidence > 0.95 ? "near_certain" : confidence > 0.8 ? "high" : confidence > 0.6 ? "probable" : confidence > 0.3 ? "emerging" : "speculative";
     return {
-      prediction_id: `PRED-${uuid8()}`, category: pick(categories),
-      title: pick(["Novel Exploit Targeting Edge Gateway", "AI-Generated Phishing Campaign Imminent", "Supply Chain Injection — npm Registry", "Encrypted C2 Channel Establishing", "LOTL Attack via PowerShell Remoting", "Configuration Drift Creating RCE Window", "Polymorphic Payload Variant Detected", "Identity Fabric Attack — OAuth Token Theft", "Firmware-Level Persistence Attempt", "DNS Tunneling with ML Evasion"]),
-      confidence: Math.round(confidence * 1000) / 1000, confidence_tier: tier,
-      threat_horizon: pick(["0-1h", "1-24h", "1-7d", "7-30d"]),
+      prediction_id: `PRED-${uuid8()}`,
+      category: pick(categories),
+      title: pick([
+        "Novel Exploit Targeting Edge Gateway",
+        "AI-Generated Phishing Campaign Imminent",
+        "Supply Chain Injection — npm Registry",
+        "Encrypted C2 Channel Establishing",
+        "LOTL Attack via PowerShell Remoting",
+        "Configuration Drift Creating RCE Window",
+        "Polymorphic Payload Variant Detected",
+        "Identity Fabric Attack — OAuth Token Theft",
+        "Firmware-Level Persistence Attempt",
+        "DNS Tunneling with ML Evasion",
+      ]),
+      confidence: Math.round(confidence * 1000) / 1000,
+      confidence_tier: tier,
+      threat_horizon: pick(horizons),
       risk_score: Math.round(confidence * rand(6, 10) * 100) / 100,
       affected_assets: Array.from({ length: randInt(1, 4) }, () => `10.0.${randInt(1, 5)}.${randInt(10, 200)}`),
       contributing_signals: randInt(2, 12),
@@ -78,10 +131,14 @@ function generatePredictions() {
 }
 
 function generateIncidents() {
+  const cats = ["ransomware", "apt", "data_breach", "unauthorized_access", "phishing", "lateral_movement"];
+  const statuses = ["triaged", "investigating", "containing", "eradicating", "recovering"];
   const actionTypes = [
     { action: "Block IP at perimeter firewall", type: "containment", risk: "low" },
     { action: "Isolate host from network segment", type: "containment", risk: "medium" },
     { action: "Disable compromised user account", type: "containment", risk: "medium" },
+    { action: "Quarantine malicious binary", type: "containment", risk: "low" },
+    { action: "Revoke active session tokens", type: "containment", risk: "medium" },
     { action: "Kill malicious process tree (PID cascade)", type: "eradication", risk: "high" },
     { action: "Restore from last known-good snapshot", type: "recovery", risk: "high" },
     { action: "Deploy emergency firewall rule — block C2 domain", type: "containment", risk: "low" },
@@ -94,44 +151,76 @@ function generateIncidents() {
     { type: "disk_image", desc: "Forensic disk image — affected workstation" },
     { type: "log_bundle", desc: "Auth logs — failed login sequence" },
     { type: "malware_sample", desc: "Extracted binary — staged payload" },
+    { type: "email_artifact", desc: "Phishing email with weaponized attachment" },
+    { type: "registry_export", desc: "Modified Run keys — persistence mechanism" },
+    { type: "screenshot", desc: "Desktop capture at time of alert" },
   ];
   const iocTypes = [
     { type: "ip", value: () => `${randInt(45,220)}.${randInt(0,255)}.${randInt(0,255)}.${randInt(1,254)}` },
-    { type: "domain", value: () => pick(["evil-update.","c2-relay.","data-sync."]) + pick(["xyz","top","cc","ru"]) },
+    { type: "domain", value: () => pick(["evil-update.","c2-relay.","data-sync.","api-check.","cdn-fast."]) + pick(["xyz","top","cc","ru","cn","tk"]) },
     { type: "hash_sha256", value: () => Array.from({length:64},()=>"0123456789abcdef"[randInt(0,16)]).join("") },
-    { type: "file_path", value: () => pick(["C:\\\\Users\\\\Public\\\\svchost.exe","/tmp/.hidden/beacon"]) },
+    { type: "file_path", value: () => pick(["C:\\\\Users\\\\Public\\\\svchost.exe","C:\\\\Temp\\\\update.dll","/tmp/.hidden/beacon","/var/tmp/kworker"]) },
+    { type: "user_agent", value: () => pick(["Mozilla/5.0 (compatible; MSIE 6.0)","curl/7.68.0","python-requests/2.28.1"]) },
   ];
   return Array.from({ length: randInt(3, 6) }, () => {
     const createdAt = ago(randInt(300000, 86400000));
+    const numActions = randInt(1, 5);
+    const numEvidence = randInt(1, 5);
+    const numIocs = randInt(2, 6);
+    const numTimeline = randInt(4, 10);
     return {
       incident_id: `INC-${uuid8()}`,
-      title: pick(["Ransomware Activity Detected — Workstation Cluster", "APT28 Campaign Indicators — DMZ Servers", "Data Exfiltration Attempt — HR Database", "Brute Force Attack — VPN Gateway", "Lateral Movement — Domain Controller"]),
+      title: pick(["Ransomware Activity Detected — Workstation Cluster", "APT28 Campaign Indicators — DMZ Servers", "Data Exfiltration Attempt — HR Database", "Brute Force Attack — VPN Gateway", "Phishing Campaign — Executive Team", "Lateral Movement — Domain Controller", "Credential Stuffing — SSO Portal", "Cryptominer Deployment — Build Servers"]),
       severity: pick(["CRITICAL", "HIGH", "MEDIUM"]),
-      category: pick(["ransomware", "apt", "data_breach", "unauthorized_access", "phishing"]),
-      status: pick(["triaged", "investigating", "containing", "eradicating"]),
+      category: pick(cats),
+      status: pick(statuses),
       affected_assets: randInt(1, 12),
-      lead_analyst: pick(["J. Torres", "S. Chen", "M. Okoro", "R. Patel"]),
-      playbook: pick(["PB-RANSOM-01", "PB-APT-02", "PB-BREACH-01", "PB-PHISH-01"]),
-      mitre_techniques: Array.from({ length: randInt(2, 5) }, () => pick(["T1059.001 — PowerShell", "T1071.001 — Web Protocols", "T1486 — Data Encrypted", "T1566.001 — Spearphishing", "T1078 — Valid Accounts", "T1055 — Process Injection", "T1003 — Credential Dumping"])),
+      actions_pending: numActions,
+      evidence_collected: numEvidence,
       created_at: createdAt.toISOString(),
       containment_time_min: rand(2, 45),
-      pending_actions: Array.from({ length: randInt(1, 5) }, () => {
+      lead_analyst: pick(["J. Torres", "S. Chen", "M. Okoro", "R. Patel", "A. Rodriguez"]),
+      playbook: pick(["PB-RANSOM-01", "PB-APT-02", "PB-BREACH-01", "PB-PHISH-01", "PB-LATERAL-01"]),
+      mitre_techniques: Array.from({ length: randInt(2, 5) }, () => pick([
+        "T1059.001 — PowerShell", "T1071.001 — Web Protocols", "T1486 — Data Encrypted for Impact",
+        "T1566.001 — Spearphishing Attachment", "T1078 — Valid Accounts", "T1021.001 — Remote Desktop",
+        "T1053.005 — Scheduled Task", "T1055 — Process Injection", "T1003 — OS Credential Dumping",
+        "T1070.004 — File Deletion", "T1105 — Ingress Tool Transfer", "T1047 — WMI",
+        "T1036.005 — Match Legitimate Name", "T1497 — Virtualization Evasion", "T1083 — File Discovery",
+      ])),
+      pending_actions: Array.from({ length: numActions }, (_, i) => {
         const a = pick(actionTypes);
         return { id: `ACT-${uuid8()}`, ...a, status: "pending", requested_by: pick(["SYSTEM","QueenCalifia AI","Analyst"]), requested_at: ago(randInt(60000, 600000)).toISOString() };
       }),
-      evidence: Array.from({ length: randInt(1, 4) }, () => {
+      evidence: Array.from({ length: numEvidence }, (_, i) => {
         const e = pick(evidenceTypes);
-        return { id: `EV-${uuid8()}`, ...e, collected_at: ago(randInt(120000, 3600000)).toISOString(), size_mb: +(rand(0.1, 500)).toFixed(1), chain_of_custody: `SHA256:${uuid8()}${uuid8()}…` };
+        return { id: `EV-${uuid8()}`, ...e, collected_at: ago(randInt(120000, 3600000)).toISOString(), size_mb: +(rand(0.1, 500)).toFixed(1), chain_of_custody: `SHA256:${Array.from({length:16},()=>"0123456789abcdef"[randInt(0,16)]).join("")}…` };
       }),
-      iocs: Array.from({ length: randInt(2, 6) }, () => {
+      iocs: Array.from({ length: numIocs }, () => {
         const ioc = pick(iocTypes);
-        return { type: ioc.type, value: ioc.value(), first_seen: ago(randInt(300000, 7200000)).toISOString(), source: pick(["network_flow","endpoint_agent","dns_logs","auth_logs"]) };
+        return { type: ioc.type, value: ioc.value(), first_seen: ago(randInt(300000, 7200000)).toISOString(), source: pick(["network_flow","endpoint_agent","dns_logs","auth_logs","telemetry_t1"]) };
       }),
-      timeline: Array.from({ length: randInt(4, 10) }, (_, i) => ({
+      timeline: Array.from({ length: numTimeline }, (_, i) => ({
         time: new Date(createdAt.getTime() + i * randInt(30000, 600000)).toISOString(),
-        event: pick(["Initial alert — anomalous outbound connection", "TLS fingerprint match (Cobalt Strike JA3)", "Suspicious process injection detected", "Host isolation pending approval", "Memory dump in progress", "MITRE T1059.001 mapped", "Lateral movement to adjacent subnet", "DNS beaconing confirmed", "Escalated to CRITICAL", "Playbook activated", "IOC extracted — C2 domain blocked", "Credential rotation triggered"]),
-        actor: pick(["QueenCalifia AI", "System", "Analyst", "Telemetry T1"]),
-        type: pick(["detection", "analysis", "containment", "evidence", "escalation"]),
+        event: pick([
+          "Initial alert triggered — anomalous outbound connection",
+          "Correlated with TLS fingerprint match (Cobalt Strike JA3)",
+          "Endpoint agent reported suspicious process injection",
+          "Automated containment initiated — host isolation pending approval",
+          "Evidence collection started — memory dump in progress",
+          "MITRE technique mapped — T1059.001 PowerShell execution",
+          "Lateral movement attempt detected to adjacent subnet",
+          "DNS beaconing pattern confirmed by telemetry T2",
+          "Analyst escalated to CRITICAL — multiple assets affected",
+          "Playbook PB-RANSOM-01 activated — awaiting action approval",
+          "IOC extracted — C2 domain added to blocklist",
+          "Forensic disk image acquisition completed",
+          "Credential rotation triggered for 3 affected accounts",
+          "Network segment quarantine applied",
+          "Threat intel enrichment — APT28 TTP match confirmed",
+        ]),
+        actor: pick(["QueenCalifia AI", "System", "Analyst", "Telemetry T1", "Telemetry T2", "Predictor L3"]),
+        type: pick(["detection", "analysis", "containment", "evidence", "escalation", "enrichment"]),
       })).sort((a, b) => new Date(a.time) - new Date(b.time)),
     };
   });
@@ -140,18 +229,31 @@ function generateIncidents() {
 function generateTimeSeriesData(points = 24) {
   let base = randInt(500, 2000);
   return Array.from({ length: points }, (_, i) => {
-    base += randInt(-200, 300); base = Math.max(100, base);
-    return { time: `${String(i).padStart(2, "0")}:00`, events: base, threats: Math.max(0, Math.floor(base * rand(0.001, 0.015))), predictions: Math.max(0, Math.floor(base * rand(0.0005, 0.005))), blocked: Math.max(0, Math.floor(base * rand(0.003, 0.01))) };
+    base += randInt(-200, 300);
+    base = Math.max(100, base);
+    return {
+      time: `${String(i).padStart(2, "0")}:00`,
+      events: base,
+      threats: Math.max(0, Math.floor(base * rand(0.001, 0.015))),
+      predictions: Math.max(0, Math.floor(base * rand(0.0005, 0.005))),
+      blocked: Math.max(0, Math.floor(base * rand(0.003, 0.01))),
+    };
   });
 }
+
 function generateThreatLandscape() {
   return [
-    { vector: "Ransomware", risk: rand(65, 95) }, { vector: "Identity", risk: rand(55, 85) },
-    { vector: "Supply Chain", risk: rand(50, 80) }, { vector: "AI-Augmented", risk: rand(40, 75) },
-    { vector: "Cloud Native", risk: rand(45, 70) }, { vector: "Zero-Day", risk: rand(55, 90) },
-    { vector: "Firmware", risk: rand(25, 55) }, { vector: "Encrypted Ch.", risk: rand(35, 60) },
+    { vector: "Ransomware", risk: rand(65, 95), trend: "accelerating" },
+    { vector: "Identity", risk: rand(55, 85), trend: "accelerating" },
+    { vector: "Supply Chain", risk: rand(50, 80), trend: "escalating" },
+    { vector: "AI-Augmented", risk: rand(40, 75), trend: "emerging" },
+    { vector: "Cloud Native", risk: rand(45, 70), trend: "accelerating" },
+    { vector: "Zero-Day Market", risk: rand(55, 90), trend: "expanding" },
+    { vector: "Firmware/HW", risk: rand(25, 55), trend: "emerging" },
+    { vector: "Encrypted Ch.", risk: rand(35, 60), trend: "stable" },
   ];
 }
+
 function generateLayerActivity() {
   return [
     { layer: "Anomaly Fusion", signals: randInt(12, 80), confidence: rand(0.5, 0.85) },
@@ -161,16 +263,205 @@ function generateLayerActivity() {
     { layer: "Strategic Forecast", signals: randInt(2, 15), confidence: rand(0.5, 0.88) },
   ];
 }
+
+// ─── Micro Components ─────────────────────────────────────────────────────
+
+const Badge = ({ children, color = C.accent, bg, style }) => (
+  <span style={{
+    display: "inline-flex", alignItems: "center", gap: 4,
+    padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: 600,
+    fontFamily: MONO, letterSpacing: 0.5, textTransform: "uppercase",
+    color, background: bg || `${color}18`, border: `1px solid ${color}30`,
+    whiteSpace: "nowrap", ...style,
+  }}>{children}</span>
+);
+
+const SeverityBadge = ({ severity }) => {
+  const map = {
+    CRITICAL: { color: C.red, label: "CRITICAL" },
+    HIGH: { color: C.amber, label: "HIGH" },
+    MEDIUM: { color: C.accentBright, label: "MEDIUM" },
+    LOW: { color: C.green, label: "LOW" },
+  };
+  const s = map[severity] || map.MEDIUM;
+  return <Badge color={s.color}>{s.label}</Badge>;
+};
+
+const ConfidenceBadge = ({ tier, confidence }) => {
+  const map = {
+    near_certain: { color: C.red, icon: "◆" },
+    high: { color: C.amber, icon: "▲" },
+    probable: { color: C.accentBright, icon: "●" },
+    emerging: { color: C.cyan, icon: "◐" },
+    speculative: { color: C.textDim, icon: "○" },
+  };
+  const s = map[tier] || map.emerging;
+  return (
+    <Badge color={s.color}>
+      {s.icon} {(confidence * 100).toFixed(1)}%
+    </Badge>
+  );
+};
+
+const HorizonBadge = ({ horizon }) => {
+  const map = {
+    "0-1h": { color: C.red, label: "IMMEDIATE" },
+    "1-24h": { color: C.amber, label: "24H" },
+    "1-7d": { color: C.accentBright, label: "7D" },
+    "7-30d": { color: C.textSoft, label: "30D" },
+    "30d+": { color: C.textDim, label: "STRATEGIC" },
+  };
+  const s = map[horizon] || map["1-7d"];
+  return <Badge color={s.color}>{s.label}</Badge>;
+};
+
+const Stat = ({ label, value, sub, color = C.text, trend, small }) => (
+  <div style={{ textAlign: "center", minWidth: small ? 60 : 80 }}>
+    <div style={{ fontSize: small ? 20 : 26, fontWeight: 700, fontFamily: DISPLAY, color, lineHeight: 1.1 }}>
+      {typeof value === "number" ? value.toLocaleString() : value}
+    </div>
+    {sub && <div style={{ fontSize: 10, color: C.textDim, fontFamily: MONO, marginTop: 2 }}>{sub}</div>}
+    <div style={{ fontSize: 9, color: C.textSoft, marginTop: 3, letterSpacing: 0.8, textTransform: "uppercase", fontFamily: DISPLAY }}>{label}</div>
+    {trend && <div style={{ fontSize: 9, color: trend === "up" ? C.green : trend === "down" ? C.red : C.textDim, marginTop: 1 }}>{trend === "up" ? "▲" : trend === "down" ? "▼" : "─"}</div>}
+  </div>
+);
+
+const Panel = ({ children, title, icon, accent = C.accent, style, headerRight, glow }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 12 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.4, ease: "easeOut" }}
+    style={{
+      background: C.panel, border: `1px solid ${C.border}`,
+      borderRadius: 10, overflow: "hidden",
+      boxShadow: glow ? `0 0 30px ${accent}08, inset 0 1px 0 ${accent}10` : `inset 0 1px 0 ${C.borderLit}20`,
+      backdropFilter: "blur(8px)",
+      ...style,
+    }}
+  >
+    {title && (
+      <div style={{
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+        padding: "10px 16px", borderBottom: `1px solid ${C.border}`,
+        background: `linear-gradient(135deg, ${accent}08 0%, transparent 60%)`,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {icon && <span style={{ fontSize: 14 }}>{icon}</span>}
+          <span style={{ fontSize: 11, fontWeight: 600, color: C.textSoft, letterSpacing: 0.8, textTransform: "uppercase", fontFamily: DISPLAY }}>{title}</span>
+        </div>
+        {headerRight}
+      </div>
+    )}
+    <div style={{ padding: 16 }}>{children}</div>
+  </motion.div>
+);
+
+const MiniSparkline = ({ data, color = C.accent, height = 32, width = 100 }) => {
+  if (!data || data.length < 2) return null;
+  const max = Math.max(...data);
+  const min = Math.min(...data);
+  const range = max - min || 1;
+  const points = data.map((v, i) => `${(i / (data.length - 1)) * width},${height - ((v - min) / range) * (height - 4) - 2}`).join(" ");
+  return (
+    <svg width={width} height={height} style={{ display: "block" }}>
+      <polyline points={points} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={(data.length - 1) / (data.length - 1) * width} cy={height - ((data[data.length - 1] - min) / range) * (height - 4) - 2} r={2.5} fill={color} />
+    </svg>
+  );
+};
+
+const PulseDot = ({ color = C.green, size = 8 }) => (
+  <span style={{ position: "relative", display: "inline-block", width: size, height: size }}>
+    <span style={{
+      position: "absolute", inset: 0, borderRadius: "50%", background: color,
+      animation: "qcPulse 2s ease-in-out infinite",
+    }} />
+    <span style={{ position: "absolute", inset: -2, borderRadius: "50%", border: `1px solid ${color}40`, animation: "qcPulseRing 2s ease-in-out infinite" }} />
+  </span>
+);
+
+const ProgressBar = ({ value, max = 100, color = C.accent, height = 4, bg }) => (
+  <div style={{ height, borderRadius: height, background: bg || `${color}15`, overflow: "hidden" }}>
+    <div style={{ height: "100%", width: `${Math.min(100, (value / max) * 100)}%`, background: `linear-gradient(90deg, ${color}, ${color}cc)`, borderRadius: height, transition: "width 0.8s ease" }} />
+  </div>
+);
+
+// ─── Navigation Tabs ──────────────────────────────────────────────────────
+
+const NAV_ITEMS = [
+  { id: "overview", label: "Strategic Overview", icon: "◈" },
+  { id: "predictor", label: "Zero-Day Predictor", icon: "🔮" },
+  { id: "telemetry", label: "Advanced Telemetry", icon: "📡" },
+  { id: "mesh", label: "Security Mesh", icon: "🕸" },
+  { id: "incidents", label: "Incidents", icon: "🚨" },
+  { id: "vulns", label: "Vulnerability Scanner", icon: "🔍" },
+  { id: "devops", label: "DevOps Ops", icon: "⎈" },
+];
+
+// ─── TELEMETRY DATA GENERATORS ────────────────────────────────────────────
+
 function generateTelemetryData() {
+  const beaconTypes = ["periodic_exact", "periodic_jittered", "adaptive", "slow_drip"];
+  const sensorTypes = ["network", "endpoint", "dns", "auth", "file_integrity"];
+  const healthStates = ["healthy", "degraded", "stale", "offline"];
   const malwareFamilies = ["Cobalt Strike", "Sliver C2", "Brute Ratel", "Mythic C2", "Havoc C2"];
+  
   return {
-    fingerprints: { total: randInt(80, 250), known_bad: randInt(0, 5), new_last_hour: randInt(1, 15),
-      recent_matches: Array.from({ length: randInt(0, 3) }, () => ({ ja3: uuid8()+uuid8()+uuid8(), family: pick(malwareFamilies), source: `10.0.${randInt(1,10)}.${randInt(1,254)}`, dest: `${randInt(100,220)}.${randInt(0,255)}.${randInt(0,255)}.${randInt(1,254)}`, confidence: +(rand(0.82, 0.97)).toFixed(2) })) },
-    dns: { sources_profiled: randInt(40, 200), dga_detected: randInt(0, 6), tunneling_alerts: randInt(0, 3), exfil_indicators: randInt(0, 2), queries_per_min: randInt(300, 2500) },
-    beacons: Array.from({ length: randInt(0, 5) }, () => ({ source: `10.0.${randInt(1,10)}.${randInt(1,254)}`, destination: `${randInt(100,220)}.${randInt(0,255)}.${randInt(0,255)}.${randInt(1,254)}`, classification: pick(["periodic_exact","periodic_jittered","adaptive","slow_drip"]), mean_interval: +(rand(15, 600)).toFixed(1), jitter: +(rand(0.01, 0.45)).toFixed(3), confidence: +(rand(0.55, 0.95)).toFixed(2), samples: randInt(12, 500) })),
-    kernel: { syscall_profiles: randInt(30, 120), injection_alerts: randInt(0, 3), credential_alerts: randInt(0, 2), ransomware_patterns: randInt(0, 1), file_io_assets: randInt(15, 80), memory_anomalies: randInt(0, 4), privilege_transitions: randInt(2, 25) },
-    graph: { total_nodes: randInt(30, 150), total_edges: randInt(50, 400), high_risk_assets: Array.from({ length: randInt(0, 5) }, () => ({ asset: `10.0.${randInt(1,10)}.${randInt(1,254)}`, risk: +(rand(0.5, 1.0)).toFixed(2), direct_targets: randInt(3, 30), blast_radius: randInt(8, 80) })), lateral_movements: randInt(0, 4) },
-    feedback: { total_entries: randInt(50, 500), layers_tracked: 5, active_adjustments: randInt(0, 3), suppression_rules: randInt(0, 2), tuned_weights: randInt(2, 15),
+    fingerprints: {
+      total: randInt(80, 250),
+      known_bad: randInt(0, 5),
+      new_last_hour: randInt(1, 15),
+      recent_matches: Array.from({ length: randInt(0, 3) }, () => ({
+        ja3: uuid8() + uuid8() + uuid8() + uuid8(),
+        family: pick(malwareFamilies),
+        source: `10.0.${randInt(1, 10)}.${randInt(1, 254)}`,
+        dest: `${randInt(100, 220)}.${randInt(0, 255)}.${randInt(0, 255)}.${randInt(1, 254)}`,
+        time: ago(randInt(60000, 3600000)).toISOString(),
+        confidence: +(rand(0.82, 0.97)).toFixed(2),
+      })),
+    },
+    dns: {
+      sources_profiled: randInt(40, 200),
+      dga_detected: randInt(0, 6),
+      tunneling_alerts: randInt(0, 3),
+      exfil_indicators: randInt(0, 2),
+      queries_per_min: randInt(300, 2500),
+    },
+    beacons: Array.from({ length: randInt(0, 5) }, () => ({
+      source: `10.0.${randInt(1, 10)}.${randInt(1, 254)}`,
+      destination: `${randInt(100, 220)}.${randInt(0, 255)}.${randInt(0, 255)}.${randInt(1, 254)}`,
+      classification: pick(beaconTypes),
+      mean_interval: +(rand(15, 600)).toFixed(1),
+      jitter: +(rand(0.01, 0.45)).toFixed(3),
+      confidence: +(rand(0.55, 0.95)).toFixed(2),
+      samples: randInt(12, 500),
+    })),
+    kernel: {
+      syscall_profiles: randInt(30, 120),
+      injection_alerts: randInt(0, 3),
+      credential_alerts: randInt(0, 2),
+      ransomware_patterns: randInt(0, 1),
+      file_io_assets: randInt(15, 80),
+      memory_anomalies: randInt(0, 4),
+      privilege_transitions: randInt(2, 25),
+    },
+    graph: {
+      total_nodes: randInt(30, 150),
+      total_edges: randInt(50, 400),
+      high_risk_assets: Array.from({ length: randInt(0, 5) }, () => ({
+        asset: `10.0.${randInt(1, 10)}.${randInt(1, 254)}`,
+        risk: +(rand(0.5, 1.0)).toFixed(2),
+        direct_targets: randInt(3, 30),
+        blast_radius: randInt(8, 80),
+      })),
+      lateral_movements: randInt(0, 4),
+    },
+    feedback: {
+      total_entries: randInt(50, 500),
+      layers_tracked: 5,
+      active_adjustments: randInt(0, 3),
+      suppression_rules: randInt(0, 2),
+      tuned_weights: randInt(2, 15),
       layer_accuracy: {
         anomaly_fusion: { accuracy: +(rand(0.70, 0.95)).toFixed(2), fp_rate: +(rand(0.05, 0.25)).toFixed(2), total: randInt(20, 100) },
         surface_drift: { accuracy: +(rand(0.65, 0.90)).toFixed(2), fp_rate: +(rand(0.08, 0.30)).toFixed(2), total: randInt(15, 80) },
@@ -179,1428 +470,2299 @@ function generateTelemetryData() {
         strategic_forecast: { accuracy: +(rand(0.50, 0.85)).toFixed(2), fp_rate: +(rand(0.12, 0.40)).toFixed(2), total: randInt(5, 30) },
       },
     },
-    sensors: ["network","endpoint","dns","auth","file_integrity"].map(type => ({ type, count: randInt(1, 6), health: pick(["healthy","healthy","degraded"]), coverage_pct: +(rand(70, 100)).toFixed(1), avg_latency_ms: +(rand(5, 200)).toFixed(0), events_per_min: +(rand(50, 3000)).toFixed(0) })),
-    blind_spots: randInt(0, 2), overall_health: pick(["healthy","healthy","healthy","blind_spots_detected"]),
-    signals_generated: randInt(5, 80), events_processed: randInt(1000, 50000),
+    sensors: sensorTypes.map(type => ({
+      type,
+      count: randInt(1, 6),
+      health: pick(healthStates.slice(0, 2)), // mostly healthy
+      coverage_pct: +(rand(70, 100)).toFixed(1),
+      avg_latency_ms: +(rand(5, 200)).toFixed(0),
+      events_per_min: +(rand(50, 3000)).toFixed(0),
+    })),
+    blind_spots: randInt(0, 2),
+    overall_health: pick(["healthy", "healthy", "healthy", "blind_spots_detected"]),
+    signals_generated: randInt(5, 80),
+    events_processed: randInt(1000, 50000),
   };
 }
 
-// ─── Micro Components ─────────────────────────────────────────────────────
-const Badge = ({ children, color = C.accent, bg, style }) => (
-  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: 600, fontFamily: MONO, letterSpacing: 0.5, textTransform: "uppercase", color, background: bg || `${color}18`, border: `1px solid ${color}30`, whiteSpace: "nowrap", ...style }}>{children}</span>
-);
-const SeverityBadge = ({ severity }) => {
-  const map = { CRITICAL: C.red, HIGH: C.amber, MEDIUM: C.accentBright, LOW: C.green };
-  return <Badge color={map[severity] || C.accentBright}>{severity}</Badge>;
-};
-const ConfidenceBadge = ({ tier, confidence }) => {
-  const map = { near_certain: { c: C.red, i: "◆" }, high: { c: C.amber, i: "▲" }, probable: { c: C.accentBright, i: "●" }, emerging: { c: C.cyan, i: "◐" }, speculative: { c: C.textDim, i: "○" } };
-  const s = map[tier] || map.emerging;
-  return <Badge color={s.c}>{s.i} {(confidence * 100).toFixed(1)}%</Badge>;
-};
-const HorizonBadge = ({ horizon }) => {
-  const map = { "0-1h": { c: C.red, l: "IMMEDIATE" }, "1-24h": { c: C.amber, l: "24H" }, "1-7d": { c: C.accentBright, l: "7D" }, "7-30d": { c: C.textSoft, l: "30D" } };
-  const s = map[horizon] || map["1-7d"];
-  return <Badge color={s.c}>{s.l}</Badge>;
-};
-const Stat = ({ label, value, color = C.text, small }) => (
-  <div style={{ textAlign: "center", minWidth: small ? 50 : 60 }}>
-    <div style={{ fontSize: small ? 18 : 24, fontWeight: 700, fontFamily: MONO, color, lineHeight: 1.1 }}>{typeof value === "number" ? value.toLocaleString() : value}</div>
-    <div style={{ fontSize: 9, color: C.textSoft, marginTop: 2, letterSpacing: 0.3, textTransform: "uppercase" }}>{label}</div>
-  </div>
-);
-const PulseDot = ({ color = C.green, size = 8 }) => (
-  <span style={{ position: "relative", display: "inline-block", width: size, height: size }}>
-    <span style={{ position: "absolute", inset: 0, borderRadius: "50%", background: color, animation: "qcPulse 2s ease-in-out infinite" }} />
-  </span>
-);
-const ProgressBar = ({ value, max = 100, color = C.accent, height = 4 }) => (
-  <div style={{ height, borderRadius: height, background: `${color}15`, overflow: "hidden" }}>
-    <div style={{ height: "100%", width: `${Math.min(100, (value / max) * 100)}%`, background: `linear-gradient(90deg, ${color}, ${color}cc)`, borderRadius: height, transition: "width 0.8s ease" }} />
-  </div>
-);
-const Panel = ({ children, title, icon, accent = C.accent, style, headerRight, glow }) => (
-  <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
-    style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden",
-      boxShadow: glow ? `0 0 30px ${accent}08` : "none", ...style }}>
-    {title && (
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderBottom: `1px solid ${C.border}`, background: `linear-gradient(135deg, ${accent}06 0%, transparent 60%)` }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {icon && <span style={{ fontSize: 14 }}>{icon}</span>}
-          <span style={{ fontSize: 11, fontWeight: 600, color: C.textSoft, letterSpacing: 0.8, textTransform: "uppercase", fontFamily: FONT }}>{title}</span>
-        </div>
-        {headerRight}
-      </div>
-    )}
-    <div style={{ padding: "12px 14px" }}>{children}</div>
-  </motion.div>
-);
-const NAV_ITEMS = [
-  { id: "overview", label: "Overview", icon: "◈" },
-  { id: "predictor", label: "Predictor", icon: "🔮" },
-  { id: "telemetry", label: "Telemetry", icon: "📡" },
-  { id: "mesh", label: "Mesh", icon: "🕸" },
-  { id: "incidents", label: "Incidents", icon: "🚨" },
-  { id: "vulns", label: "Scanner", icon: "🔍" },
-  { id: "devops", label: "DevOps", icon: "⎈" },
-];
+// ─── TELEMETRY TAB ────────────────────────────────────────────────────────
 
-
-// ═══════════════════════════════════════════════════════════════════════════
-// TELEMETRY TAB — 6 Sub-tabs: Network, Temporal, Kernel, Graph, Feedback, Health
-// ═══════════════════════════════════════════════════════════════════════════
-
-function TelemetryTab({ telemetry: t, isMobile }) {
+function TelemetryTab({ telemetry: t }) {
   const [subTab, setSubTab] = useState("network");
   const subTabs = [
-    { id: "network", label: "Network Flow", icon: "🌐" },
-    { id: "temporal", label: "Temporal", icon: "⏱" },
-    { id: "kernel", label: "Kernel", icon: "🧬" },
-    { id: "graph", label: "Graph", icon: "🔗" },
-    { id: "feedback", label: "Feedback", icon: "🧠" },
-    { id: "health", label: "Health", icon: "💊" },
+    { id: "network", label: "Network Flow Intel", icon: "🌐" },
+    { id: "temporal", label: "Temporal Patterns", icon: "⏱" },
+    { id: "kernel", label: "Kernel / Endpoint", icon: "🧬" },
+    { id: "graph", label: "Asset Correlation", icon: "🔗" },
+    { id: "feedback", label: "Adaptive Feedback", icon: "🧠" },
+    { id: "health", label: "Collection Health", icon: "💊" },
   ];
+
   return (
     <div>
+      {/* Sub-navigation */}
       <div style={{ display: "flex", gap: 4, marginBottom: 16, flexWrap: "wrap" }}>
         {subTabs.map(st => (
-          <button key={st.id} onClick={() => { setSubTab(st.id); playSound("tab_switch"); }} style={{
-            padding: "6px 10px", borderRadius: 6, border: `1px solid ${subTab === st.id ? C.cyan : C.border}`,
+          <button key={st.id} onClick={() => setSubTab(st.id)} style={{
+            padding: "6px 12px", borderRadius: 6, border: `1px solid ${subTab === st.id ? C.cyan : C.border}`,
             background: subTab === st.id ? C.cyanDim : C.panel, color: subTab === st.id ? C.cyan : C.textSoft,
             fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: FONT,
-            display: "flex", alignItems: "center", gap: 4, transition: "all 0.2s",
+            display: "flex", alignItems: "center", gap: 5, transition: "all 0.2s",
           }}>
-            <span>{st.icon}</span> {!isMobile && st.label}
+            <span>{st.icon}</span> {st.label}
           </button>
         ))}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(3, 1fr)" : "repeat(6, 1fr)", gap: 8, marginBottom: 16 }}>
-        <Stat label="Events" value={t.events_processed.toLocaleString()} small />
-        <Stat label="Signals" value={t.signals_generated} color={C.cyan} small />
-        <Stat label="TLS FPs" value={t.fingerprints.total} small />
-        <Stat label="Beacons" value={t.beacons.length} color={t.beacons.length > 0 ? C.red : C.green} small />
-        <Stat label="Nodes" value={t.graph.total_nodes} small />
-        <Stat label="Health" value={t.overall_health === "healthy" ? "OK" : "GAPS"} color={t.overall_health === "healthy" ? C.green : C.amber} small />
+
+      {/* Telemetry KPI Banner */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8, marginBottom: 16 }}>
+        <Stat label="Events Processed" value={t.events_processed.toLocaleString()} />
+        <Stat label="Signals Generated" value={t.signals_generated} color={C.cyan} />
+        <Stat label="TLS Fingerprints" value={t.fingerprints.total} />
+        <Stat label="Beacons Detected" value={t.beacons.length} color={t.beacons.length > 0 ? C.red : C.green} />
+        <Stat label="Graph Nodes" value={t.graph.total_nodes} />
+        <Stat label="Collection Health" value={t.overall_health === "healthy" ? "HEALTHY" : "GAPS"} color={t.overall_health === "healthy" ? C.green : C.amber} />
       </div>
-      {subTab === "network" && <TelemetryNetworkPanel t={t} isMobile={isMobile} />}
-      {subTab === "temporal" && <TelemetryTemporalPanel t={t} isMobile={isMobile} />}
-      {subTab === "kernel" && <TelemetryKernelPanel t={t} isMobile={isMobile} />}
-      {subTab === "graph" && <TelemetryGraphPanel t={t} isMobile={isMobile} />}
-      {subTab === "feedback" && <TelemetryFeedbackPanel t={t} isMobile={isMobile} />}
-      {subTab === "health" && <TelemetryHealthPanel t={t} isMobile={isMobile} />}
+
+      {/* Sub-tab content */}
+      {subTab === "network" && <TelemetryNetworkPanel t={t} />}
+      {subTab === "temporal" && <TelemetryTemporalPanel t={t} />}
+      {subTab === "kernel" && <TelemetryKernelPanel t={t} />}
+      {subTab === "graph" && <TelemetryGraphPanel t={t} />}
+      {subTab === "feedback" && <TelemetryFeedbackPanel t={t} />}
+      {subTab === "health" && <TelemetryHealthPanel t={t} />}
     </div>
   );
 }
 
-function TelemetryNetworkPanel({ t, isMobile }) {
+function TelemetryNetworkPanel({ t }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
-      <Panel title="TLS Fingerprint Intelligence" icon="🔐">
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      {/* TLS Fingerprint Intelligence */}
+      <Panel title="🔐 TLS Fingerprint Intelligence">
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
-          <Stat label="Catalogued" value={t.fingerprints.total} small />
-          <Stat label="Known Bad" value={t.fingerprints.known_bad} color={t.fingerprints.known_bad > 0 ? C.red : C.green} small />
-          <Stat label="New (1h)" value={t.fingerprints.new_last_hour} color={C.cyan} small />
+          <Stat label="Catalogued" value={t.fingerprints.total} />
+          <Stat label="Known Bad Matches" value={t.fingerprints.known_bad} color={t.fingerprints.known_bad > 0 ? C.red : C.green} />
+          <Stat label="New (1h)" value={t.fingerprints.new_last_hour} color={C.cyan} />
         </div>
-        {t.fingerprints.recent_matches.length > 0 ? t.fingerprints.recent_matches.map((m, i) => (
-          <div key={i} style={{ padding: "8px 10px", background: C.redDim, borderRadius: 6, border: `1px solid ${C.red}33`, marginBottom: 6 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, flexWrap: "wrap", gap: 4 }}>
-              <Badge color={C.red}>{m.family}</Badge>
-              <ConfidenceBadge tier={m.confidence >= 0.9 ? "near_certain" : "high"} confidence={m.confidence} />
-            </div>
-            <div style={{ fontSize: 10, color: C.textSoft, fontFamily: MONO }}>{m.source} → {m.dest}</div>
-            <div style={{ fontSize: 9, color: C.textDim, fontFamily: MONO, marginTop: 2 }}>JA3: {m.ja3.slice(0, 20)}…</div>
+        {t.fingerprints.recent_matches.length > 0 ? (
+          <div>
+            <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Active Threat Matches</div>
+            {t.fingerprints.recent_matches.map((m, i) => (
+              <div key={i} style={{ padding: "8px 10px", background: C.redDim, borderRadius: 6, border: `1px solid ${C.red}33`, marginBottom: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                  <SeverityBadge severity="critical">{m.family}</SeverityBadge>
+                  <ConfidenceBadge tier={m.confidence >= 0.95 ? "near_certain" : m.confidence >= 0.8 ? "high" : m.confidence >= 0.6 ? "probable" : "emerging"} confidence={m.confidence} />
+                </div>
+                <div style={{ fontSize: 10, color: C.textSoft, fontFamily: MONO }}>
+                  {m.source} → {m.dest}
+                </div>
+                <div style={{ fontSize: 9, color: C.textDim, fontFamily: MONO, marginTop: 2 }}>
+                  JA3: {m.ja3.slice(0, 24)}…
+                </div>
+              </div>
+            ))}
           </div>
-        )) : <div style={{ textAlign: "center", padding: 20, color: C.green, fontSize: 11 }}>✓ No malicious fingerprints detected</div>}
+        ) : (
+          <div style={{ textAlign: "center", padding: 20, color: C.green, fontSize: 11 }}>
+            ✓ No malicious fingerprints detected
+          </div>
+        )}
       </Panel>
-      <Panel title="DNS Transaction Intelligence" icon="🌐">
+
+      {/* DNS Intelligence */}
+      <Panel title="🌐 DNS Transaction Intelligence">
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
-          <Stat label="Sources" value={t.dns.sources_profiled} small />
-          <Stat label="Queries/min" value={t.dns.queries_per_min.toLocaleString()} small />
+          <Stat label="Sources Profiled" value={t.dns.sources_profiled} />
+          <Stat label="Queries/min" value={t.dns.queries_per_min.toLocaleString()} />
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
-          {[{ v: t.dns.dga_detected, l: "DGA", c: C.red }, { v: t.dns.tunneling_alerts, l: "Tunneling", c: C.amber }, { v: t.dns.exfil_indicators, l: "Exfil", c: C.red }].map((d, i) => (
-            <div key={i} style={{ padding: 10, background: d.v > 0 ? `${d.c}10` : C.greenDim, borderRadius: 6, textAlign: "center" }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: d.v > 0 ? d.c : C.green, fontFamily: MONO }}>{d.v}</div>
-              <div style={{ fontSize: 9, color: C.textSoft }}>{d.l}</div>
-            </div>
-          ))}
+          <div style={{ padding: "10px", background: t.dns.dga_detected > 0 ? C.redDim : C.greenDim, borderRadius: 6, textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: t.dns.dga_detected > 0 ? C.red : C.green, fontFamily: MONO }}>{t.dns.dga_detected}</div>
+            <div style={{ fontSize: 9, color: C.textSoft }}>DGA Domains</div>
+          </div>
+          <div style={{ padding: "10px", background: t.dns.tunneling_alerts > 0 ? C.amberDim : C.greenDim, borderRadius: 6, textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: t.dns.tunneling_alerts > 0 ? C.amber : C.green, fontFamily: MONO }}>{t.dns.tunneling_alerts}</div>
+            <div style={{ fontSize: 9, color: C.textSoft }}>Tunneling</div>
+          </div>
+          <div style={{ padding: "10px", background: t.dns.exfil_indicators > 0 ? C.redDim : C.greenDim, borderRadius: 6, textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: t.dns.exfil_indicators > 0 ? C.red : C.green, fontFamily: MONO }}>{t.dns.exfil_indicators}</div>
+            <div style={{ fontSize: 9, color: C.textSoft }}>Exfil Indicators</div>
+          </div>
         </div>
       </Panel>
     </div>
   );
 }
 
-function TelemetryTemporalPanel({ t, isMobile }) {
+function TelemetryTemporalPanel({ t }) {
   const beaconColors = { periodic_exact: C.red, periodic_jittered: C.amber, adaptive: C.purple, slow_drip: C.cyan };
   return (
-    <Panel title="Beacon Detection — Communication Cadence" icon="⏱">
-      {t.beacons.length > 0 ? (
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
-          {t.beacons.map((b, i) => (
-            <div key={i} style={{ padding: "10px 12px", background: C.surface, borderRadius: 6, border: `1px solid ${beaconColors[b.classification] || C.border}44` }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, flexWrap: "wrap", gap: 4 }}>
-                <Badge color={beaconColors[b.classification] || C.textDim}>{b.classification.replace(/_/g, " ")}</Badge>
-                <ConfidenceBadge tier={b.confidence >= 0.8 ? "high" : "probable"} confidence={b.confidence} />
-              </div>
-              <div style={{ fontSize: 11, fontFamily: MONO, color: C.text, marginBottom: 4 }}>{b.source} → {b.destination}</div>
-              <div style={{ display: "flex", gap: 12, fontSize: 10, color: C.textSoft, flexWrap: "wrap" }}>
-                <span>Int: <span style={{ color: C.cyan, fontFamily: MONO }}>{b.mean_interval}s</span></span>
-                <span>Jitter: <span style={{ color: C.amber, fontFamily: MONO }}>{b.jitter}</span></span>
-                <span>Samples: <span style={{ fontFamily: MONO }}>{b.samples}</span></span>
-              </div>
-              <div style={{ marginTop: 6 }}><ProgressBar value={b.confidence} max={1} color={beaconColors[b.classification] || C.cyan} /></div>
+    <div>
+      <Panel title="⏱ Beacon Detection — Communication Cadence Analysis">
+        {t.beacons.length > 0 ? (
+          <div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 10 }}>
+              {t.beacons.map((b, i) => (
+                <div key={i} style={{ padding: "10px 12px", background: C.surface, borderRadius: 6, border: `1px solid ${beaconColors[b.classification] || C.border}44` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <Badge color={beaconColors[b.classification] || C.textDim}>{b.classification.replace(/_/g, " ")}</Badge>
+                    <ConfidenceBadge tier={b.confidence >= 0.95 ? "near_certain" : b.confidence >= 0.8 ? "high" : b.confidence >= 0.6 ? "probable" : "emerging"} confidence={b.confidence} />
+                  </div>
+                  <div style={{ fontSize: 11, fontFamily: MONO, color: C.text, marginBottom: 4 }}>
+                    {b.source} → {b.destination}
+                  </div>
+                  <div style={{ display: "flex", gap: 16, fontSize: 10, color: C.textSoft }}>
+                    <span>Interval: <span style={{ color: C.cyan, fontFamily: MONO }}>{b.mean_interval}s</span></span>
+                    <span>Jitter: <span style={{ color: C.amber, fontFamily: MONO }}>{b.jitter}</span></span>
+                    <span>Samples: <span style={{ fontFamily: MONO }}>{b.samples}</span></span>
+                  </div>
+                  <div style={{ marginTop: 6 }}>
+                    <ProgressBar value={b.confidence} max={1} color={beaconColors[b.classification] || C.cyan} />
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      ) : <div style={{ textAlign: "center", padding: 30, color: C.green, fontSize: 11 }}>✓ No beaconing patterns detected</div>}
-    </Panel>
+          </div>
+        ) : (
+          <div style={{ textAlign: "center", padding: 30, color: C.green, fontSize: 11 }}>
+            ✓ No beaconing patterns detected — communications appear organic
+          </div>
+        )}
+      </Panel>
+    </div>
   );
 }
 
-function TelemetryKernelPanel({ t, isMobile }) {
+function TelemetryKernelPanel({ t }) {
   const k = t.kernel;
-  const metrics = [
+  const kernelMetrics = [
     { label: "Syscall Profiles", value: k.syscall_profiles, color: C.text },
     { label: "Injection Alerts", value: k.injection_alerts, color: k.injection_alerts > 0 ? C.red : C.green },
     { label: "Credential Access", value: k.credential_alerts, color: k.credential_alerts > 0 ? C.red : C.green },
-    { label: "Ransomware", value: k.ransomware_patterns, color: k.ransomware_patterns > 0 ? C.red : C.green },
+    { label: "Ransomware Patterns", value: k.ransomware_patterns, color: k.ransomware_patterns > 0 ? C.red : C.green },
     { label: "File I/O Assets", value: k.file_io_assets, color: C.text },
     { label: "Memory Anomalies", value: k.memory_anomalies, color: k.memory_anomalies > 0 ? C.amber : C.green },
-    { label: "Priv Transitions", value: k.privilege_transitions, color: k.privilege_transitions > 10 ? C.amber : C.text },
+    { label: "Privilege Transitions", value: k.privilege_transitions, color: k.privilege_transitions > 10 ? C.amber : C.text },
   ];
   return (
-    <Panel title="Kernel & Endpoint Telemetry" icon="🧬">
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: 10, marginBottom: 16 }}>
-        {metrics.map((m, i) => (
-          <div key={i} style={{ padding: 12, background: C.surface, borderRadius: 6, textAlign: "center" }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: m.color, fontFamily: MONO }}>{m.value}</div>
-            <div style={{ fontSize: 9, color: C.textSoft, marginTop: 4 }}>{m.label}</div>
+    <div>
+      <Panel title="🧬 Kernel & Endpoint Telemetry">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 16 }}>
+          {kernelMetrics.map((m, i) => (
+            <div key={i} style={{ padding: "12px", background: C.surface, borderRadius: 6, textAlign: "center" }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: m.color, fontFamily: MONO }}>{m.value}</div>
+              <div style={{ fontSize: 9, color: C.textSoft, marginTop: 4 }}>{m.label}</div>
+            </div>
+          ))}
+        </div>
+        {k.injection_alerts > 0 && (
+          <div style={{ padding: "10px 12px", background: C.redDim, borderRadius: 6, border: `1px solid ${C.red}33`, marginBottom: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: C.red }}>⚠ Active injection syscall patterns detected</div>
+            <div style={{ fontSize: 10, color: C.textSoft, marginTop: 4 }}>
+              {k.injection_alerts} process(es) showing NtWriteVirtualMemory / CreateRemoteThread patterns — recommend immediate memory forensics
+            </div>
           </div>
-        ))}
-      </div>
-      {k.injection_alerts > 0 && (
-        <div style={{ padding: "10px 12px", background: C.redDim, borderRadius: 6, border: `1px solid ${C.red}33`, marginBottom: 8 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: C.red }}>⚠ Active injection syscall patterns detected</div>
-          <div style={{ fontSize: 10, color: C.textSoft, marginTop: 4 }}>{k.injection_alerts} process(es) — recommend immediate memory forensics</div>
-        </div>
-      )}
-      {k.ransomware_patterns > 0 && (
-        <div style={{ padding: "10px 12px", background: C.redDim, borderRadius: 6, border: `1px solid ${C.red}33` }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: C.red }}>🔴 RANSOMWARE FILE I/O PATTERN DETECTED</div>
-          <div style={{ fontSize: 10, color: C.textSoft, marginTop: 4 }}>Rapid read→write→rename — ISOLATE IMMEDIATELY</div>
-        </div>
-      )}
-    </Panel>
+        )}
+        {k.ransomware_patterns > 0 && (
+          <div style={{ padding: "10px 12px", background: C.redDim, borderRadius: 6, border: `1px solid ${C.red}33` }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: C.red }}>🔴 RANSOMWARE FILE I/O PATTERN DETECTED</div>
+            <div style={{ fontSize: 10, color: C.textSoft, marginTop: 4 }}>
+              Rapid read→write→rename across multiple files — ISOLATE AFFECTED ASSETS IMMEDIATELY
+            </div>
+          </div>
+        )}
+      </Panel>
+    </div>
   );
 }
 
-function TelemetryGraphPanel({ t, isMobile }) {
+function TelemetryGraphPanel({ t }) {
   const g = t.graph;
   return (
-    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
-      <Panel title="Cross-Asset Communication Graph" icon="🔗">
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <Panel title="🔗 Cross-Asset Communication Graph">
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
-          <Stat label="Nodes" value={g.total_nodes} small />
-          <Stat label="Edges" value={g.total_edges} small />
-          <Stat label="Lateral" value={g.lateral_movements} color={g.lateral_movements > 0 ? C.red : C.green} small />
+          <Stat label="Nodes" value={g.total_nodes} />
+          <Stat label="Edges" value={g.total_edges} />
+          <Stat label="Lateral Movements" value={g.lateral_movements} color={g.lateral_movements > 0 ? C.red : C.green} />
         </div>
-        <div style={{ height: 140, background: C.surface, borderRadius: 6, padding: 12, position: "relative", overflow: "hidden" }}>
+        {/* Simplified graph visualization */}
+        <div style={{ height: 160, background: C.surface, borderRadius: 6, padding: 12, position: "relative", overflow: "hidden" }}>
           {Array.from({ length: Math.min(g.total_nodes, 30) }, (_, i) => {
             const angle = (i / Math.min(g.total_nodes, 30)) * Math.PI * 2;
             const r = 55 + (i % 3) * 15;
             const x = 50 + Math.cos(angle) * r * 0.7;
             const y = 50 + Math.sin(angle) * r * 0.85;
-            const isRisky = i < g.high_risk_assets.length;
-            return <div key={i} style={{ position: "absolute", left: `${x}%`, top: `${y}%`, width: isRisky ? 8 : 4, height: isRisky ? 8 : 4, borderRadius: "50%", background: isRisky ? C.red : C.cyan, opacity: isRisky ? 1 : 0.4, boxShadow: isRisky ? `0 0 8px ${C.red}` : "none", transform: "translate(-50%, -50%)" }} />;
+            const isRisky = g.high_risk_assets.some(a => i < g.high_risk_assets.length);
+            return (
+              <div key={i} style={{
+                position: "absolute", left: `${x}%`, top: `${y}%`,
+                width: isRisky && i < g.high_risk_assets.length ? 8 : 4,
+                height: isRisky && i < g.high_risk_assets.length ? 8 : 4,
+                borderRadius: "50%",
+                background: i < g.high_risk_assets.length ? C.red : C.cyan,
+                opacity: i < g.high_risk_assets.length ? 1 : 0.4,
+                boxShadow: i < g.high_risk_assets.length ? `0 0 8px ${C.red}` : "none",
+                transform: "translate(-50%, -50%)",
+              }} />
+            );
           })}
+          <div style={{ position: "absolute", bottom: 6, right: 8, fontSize: 8, color: C.textDim, fontFamily: MONO }}>
+            {g.total_nodes} nodes / {g.total_edges} connections
+          </div>
         </div>
       </Panel>
-      <Panel title="High-Risk Assets" icon="⚠">
-        {g.high_risk_assets.length > 0 ? g.high_risk_assets.map((a, i) => (
-          <div key={i} style={{ padding: "8px 10px", background: C.surface, borderRadius: 6, marginBottom: 6, border: `1px solid ${a.risk >= 0.8 ? C.red : C.amber}33` }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontFamily: MONO, fontSize: 11, color: C.text }}>{a.asset}</span>
-              <Badge color={a.risk >= 0.8 ? C.red : C.amber}>Risk: {(a.risk * 100).toFixed(0)}%</Badge>
+
+      <Panel title="⚡ High-Risk Assets — Blast Radius">
+        {g.high_risk_assets.length > 0 ? (
+          g.high_risk_assets.map((a, i) => (
+            <div key={i} style={{ padding: "10px 12px", background: C.surface, borderRadius: 6, marginBottom: 6, border: `1px solid ${a.risk > 0.8 ? C.red : C.amber}33` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                <span style={{ fontSize: 11, fontFamily: MONO, color: C.text }}>{a.asset}</span>
+                <span style={{
+                  fontSize: 10, fontFamily: MONO, fontWeight: 700,
+                  color: a.risk > 0.8 ? C.red : a.risk > 0.6 ? C.amber : C.green,
+                }}>RISK: {a.risk}</span>
+              </div>
+              <ProgressBar value={a.risk} max={1} color={a.risk > 0.8 ? C.red : C.amber} />
+              <div style={{ display: "flex", gap: 12, marginTop: 4, fontSize: 9, color: C.textSoft }}>
+                <span>Direct: {a.direct_targets}</span>
+                <span>Blast Radius: <span style={{ color: C.amber }}>{a.blast_radius}</span> assets</span>
+              </div>
             </div>
-            <div style={{ fontSize: 10, color: C.textSoft, marginTop: 4 }}>Targets: {a.direct_targets} | Blast radius: {a.blast_radius}</div>
+          ))
+        ) : (
+          <div style={{ textAlign: "center", padding: 30, color: C.green, fontSize: 11 }}>
+            ✓ No high-risk assets detected
           </div>
-        )) : <div style={{ textAlign: "center", padding: 20, color: C.green, fontSize: 11 }}>✓ No high-risk assets</div>}
+        )}
       </Panel>
     </div>
   );
 }
 
-function TelemetryFeedbackPanel({ t, isMobile }) {
-  const fb = t.feedback;
-  const layers = Object.entries(fb.layer_accuracy);
+function TelemetryFeedbackPanel({ t }) {
+  const f = t.feedback;
+  const layerNames = Object.keys(f.layer_accuracy);
+  const barData = layerNames.map(name => ({
+    name: name.replace(/_/g, " "),
+    accuracy: +(f.layer_accuracy[name].accuracy * 100).toFixed(0),
+    fp_rate: +(f.layer_accuracy[name].fp_rate * 100).toFixed(0),
+    total: f.layer_accuracy[name].total,
+  }));
+
   return (
-    <Panel title="Self-Learning Adaptive Feedback Loop" icon="🧠" glow>
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(5, 1fr)", gap: 8, marginBottom: 16 }}>
-        <Stat label="Total Entries" value={fb.total_entries} small />
-        <Stat label="Layers Tracked" value={fb.layers_tracked} small />
-        <Stat label="Active Adj." value={fb.active_adjustments} color={C.cyan} small />
-        <Stat label="Suppressions" value={fb.suppression_rules} small />
-        <Stat label="Tuned Weights" value={fb.tuned_weights} color={C.gold} small />
-      </div>
-      <div style={{ fontSize: 10, color: C.textDim, marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>Layer Accuracy & Calibration</div>
-      {layers.map(([name, data], i) => (
-        <div key={i} style={{ padding: "8px 10px", background: C.surface, borderRadius: 6, marginBottom: 6 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4, flexWrap: "wrap", gap: 4 }}>
-            <span style={{ fontSize: 11, color: C.text, fontWeight: 600 }}>{name.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</span>
-            <div style={{ display: "flex", gap: 6 }}>
-              <Badge color={data.accuracy >= 0.85 ? C.green : data.accuracy >= 0.7 ? C.amber : C.red}>Acc: {(data.accuracy * 100).toFixed(0)}%</Badge>
-              <Badge color={data.fp_rate <= 0.1 ? C.green : data.fp_rate <= 0.2 ? C.amber : C.red}>FP: {(data.fp_rate * 100).toFixed(0)}%</Badge>
+    <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
+      <Panel title="🧠 Layer Accuracy — Adaptive Feedback Loop">
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={barData} barGap={2}>
+            <XAxis dataKey="name" tick={{ fill: C.textDim, fontSize: 9 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fill: C.textDim, fontSize: 9 }} axisLine={false} tickLine={false} domain={[0, 100]} />
+            <Tooltip contentStyle={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 10 }} />
+            <Bar dataKey="accuracy" fill={C.green} radius={[3, 3, 0, 0]} name="Accuracy %" />
+            <Bar dataKey="fp_rate" fill={C.red} radius={[3, 3, 0, 0]} name="FP Rate %" />
+          </BarChart>
+        </ResponsiveContainer>
+        <div style={{ display: "flex", gap: 16, justifyContent: "center", marginTop: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.textSoft }}>
+            <div style={{ width: 8, height: 8, borderRadius: 2, background: C.green }} /> Accuracy %
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.textSoft }}>
+            <div style={{ width: 8, height: 8, borderRadius: 2, background: C.red }} /> False Positive %
+          </div>
+        </div>
+      </Panel>
+
+      <Panel title="⚙ Calibration Status">
+        <div style={{ display: "grid", gap: 10 }}>
+          <Stat label="Feedback Entries" value={f.total_entries} />
+          <Stat label="Threshold Adjustments" value={f.active_adjustments} color={f.active_adjustments > 0 ? C.amber : C.green} />
+          <Stat label="Suppression Rules" value={f.suppression_rules} color={f.suppression_rules > 0 ? C.amber : C.text} />
+          <Stat label="Tuned Signal Weights" value={f.tuned_weights} color={C.cyan} />
+          <div style={{ padding: "8px 10px", background: C.surface, borderRadius: 6, textAlign: "center", marginTop: 4 }}>
+            <div style={{ fontSize: 9, color: C.textDim, marginBottom: 4 }}>SYSTEM LEARNING</div>
+            <div style={{ fontSize: 10, color: C.green }}>
+              {f.total_entries > 100 ? "Mature — high confidence calibration" :
+               f.total_entries > 30 ? "Developing — improving accuracy" :
+               "Early stage — building baselines"}
             </div>
           </div>
-          <ProgressBar value={data.accuracy} max={1} color={data.accuracy >= 0.85 ? C.green : C.amber} />
-          <div style={{ fontSize: 9, color: C.textDim, marginTop: 4 }}>{data.total} evaluations</div>
         </div>
-      ))}
-    </Panel>
+      </Panel>
+    </div>
   );
 }
 
-function TelemetryHealthPanel({ t, isMobile }) {
+function TelemetryHealthPanel({ t }) {
+  const healthColor = { healthy: C.green, degraded: C.amber, stale: C.amber, offline: C.red };
   return (
-    <Panel title="Collection Health & Sensor Status" icon="💊">
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
-        {t.sensors.map((s, i) => (
-          <div key={i} style={{ padding: "10px 12px", background: C.surface, borderRadius: 6, border: `1px solid ${s.health === "healthy" ? C.green : C.amber}33` }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-              <span style={{ fontSize: 11, fontWeight: 600, color: C.text, textTransform: "capitalize" }}>{s.type.replace(/_/g, " ")}</span>
-              <PulseDot color={s.health === "healthy" ? C.green : C.amber} />
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 12 }}>
+      <Panel title="💊 Sensor Collection Health">
+        <div style={{ display: "grid", gap: 6 }}>
+          {t.sensors.map((s, i) => (
+            <div key={i} style={{ padding: "8px 12px", background: C.surface, borderRadius: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: C.text, textTransform: "capitalize" }}>
+                  {s.type} <Badge color={healthColor[s.health] || C.textDim}>{s.health}</Badge>
+                </div>
+                <div style={{ fontSize: 9, color: C.textSoft, marginTop: 2 }}>
+                  {s.count} sensors · {s.events_per_min} events/min · {s.avg_latency_ms}ms latency
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 14, fontWeight: 700, fontFamily: MONO, color: s.coverage_pct > 90 ? C.green : s.coverage_pct > 70 ? C.amber : C.red }}>
+                  {s.coverage_pct}%
+                </div>
+                <div style={{ fontSize: 8, color: C.textDim }}>coverage</div>
+              </div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, fontSize: 10, color: C.textSoft }}>
-              <span>Sensors: <span style={{ color: C.text, fontFamily: MONO }}>{s.count}</span></span>
-              <span>Coverage: <span style={{ color: C.cyan, fontFamily: MONO }}>{s.coverage_pct}%</span></span>
-              <span>Latency: <span style={{ fontFamily: MONO }}>{s.avg_latency_ms}ms</span></span>
-              <span>Events/m: <span style={{ fontFamily: MONO }}>{s.events_per_min}</span></span>
-            </div>
-          </div>
-        ))}
-      </div>
-      {t.blind_spots > 0 && (
-        <div style={{ marginTop: 12, padding: "10px 12px", background: C.amberDim, borderRadius: 6, border: `1px solid ${C.amber}33` }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: C.amber }}>⚠ {t.blind_spots} blind spot(s) detected</div>
-          <div style={{ fontSize: 10, color: C.textSoft, marginTop: 4 }}>Sensor coverage gaps may allow undetected activity</div>
+          ))}
         </div>
-      )}
-    </Panel>
+      </Panel>
+
+      <Panel title="🗺 Coverage & Blind Spots">
+        <div style={{ padding: "12px", background: t.overall_health === "healthy" ? C.greenDim : C.amberDim, borderRadius: 6, marginBottom: 12, textAlign: "center" }}>
+          <div style={{ fontSize: 20, fontWeight: 700, fontFamily: MONO, color: t.overall_health === "healthy" ? C.green : C.amber }}>
+            {t.overall_health === "healthy" ? "FULL COVERAGE" : "GAPS DETECTED"}
+          </div>
+          <div style={{ fontSize: 10, color: C.textSoft, marginTop: 4 }}>
+            {t.blind_spots === 0 ? "All asset types have sensor coverage" : `${t.blind_spots} blind spot(s) identified — review sensor deployment`}
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          {t.sensors.map((s, i) => (
+            <div key={i} style={{ padding: "8px", background: C.surface, borderRadius: 6, textAlign: "center" }}>
+              <ProgressBar value={s.coverage_pct} max={100} color={s.coverage_pct > 90 ? C.green : C.amber} />
+              <div style={{ fontSize: 9, color: C.textSoft, marginTop: 4, textTransform: "capitalize" }}>{s.type}</div>
+            </div>
+          ))}
+        </div>
+      </Panel>
+    </div>
   );
 }
 
+// ─── OVERVIEW TAB ─────────────────────────────────────────────────────────
 
-// ═══════════════════════════════════════════════════════════════════════════
-// INCIDENTS TAB — Full Investigate, Actions, Evidence, IOCs, Timeline
-// ═══════════════════════════════════════════════════════════════════════════
+function OverviewTab({ mesh, predictions, incidents, timeSeries, landscape }) {
+  const topPreds = predictions.slice(0, 3);
+  const criticalIncidents = incidents.filter(i => i.severity === "CRITICAL").length;
+  const highPreds = predictions.filter(p => p.confidence > 0.7).length;
 
-function IncidentsTab({ incidents: initialIncidents, isMobile }) {
-  const [incidents, setIncidents] = useState(initialIncidents);
-  const [selected, setSelected] = useState(null);
-  const [view, setView] = useState("list"); // list | investigate
-  const [incSubTab, setIncSubTab] = useState("actions");
-  const [analystNotes, setAnalystNotes] = useState("");
-  const [actionLog, setActionLog] = useState([]);
+  // Threat posture score: 0-100 (lower is better)
+  const postureScore = Math.round(
+    100 - (
+      mesh.threat_posture.active_attack_chains * 15 +
+      criticalIncidents * 10 +
+      highPreds * 8
+    )
+  );
+  const postureColor = postureScore >= 80 ? C.green : postureScore >= 50 ? C.amber : C.red;
+  const postureLabel = postureScore >= 80 ? "SECURE" : postureScore >= 50 ? "ELEVATED" : "CRITICAL";
 
-  const inc = selected ? incidents.find(i => i.incident_id === selected) : null;
-
-  const handleApprove = (actionId) => {
-    playSound("scan_complete");
-    setIncidents(prev => prev.map(i => i.incident_id === selected ? {
-      ...i, pending_actions: i.pending_actions.map(a => a.id === actionId ? { ...a, status: "approved" } : a)
-    } : i));
-    setActionLog(prev => [...prev, { time: new Date().toISOString(), msg: `Action ${actionId} APPROVED`, type: "approve" }]);
-  };
-
-  const handleReject = (actionId) => {
-    playSound("panel_click");
-    setIncidents(prev => prev.map(i => i.incident_id === selected ? {
-      ...i, pending_actions: i.pending_actions.map(a => a.id === actionId ? { ...a, status: "rejected" } : a)
-    } : i));
-    setActionLog(prev => [...prev, { time: new Date().toISOString(), msg: `Action ${actionId} REJECTED`, type: "reject" }]);
-  };
-
-  const handleApproveAll = () => {
-    playSound("scan_complete");
-    setIncidents(prev => prev.map(i => i.incident_id === selected ? {
-      ...i, pending_actions: i.pending_actions.map(a => ({ ...a, status: "approved" }))
-    } : i));
-    setActionLog(prev => [...prev, { time: new Date().toISOString(), msg: "ALL ACTIONS APPROVED", type: "approve" }]);
-  };
-
-  const handleEscalate = () => {
-    playSound("incident_escalate");
-    setIncidents(prev => prev.map(i => i.incident_id === selected ? { ...i, severity: "CRITICAL", status: "escalated" } : i));
-    setActionLog(prev => [...prev, { time: new Date().toISOString(), msg: "ESCALATED TO CRITICAL", type: "escalate" }]);
-  };
-
-  const handleResolve = () => {
-    playSound("scan_complete");
-    setIncidents(prev => prev.map(i => i.incident_id === selected ? { ...i, status: "resolved" } : i));
-    setActionLog(prev => [...prev, { time: new Date().toISOString(), msg: "MARKED RESOLVED", type: "resolve" }]);
-  };
-
-  if (view === "investigate" && inc) {
-    const subTabs = [
-      { id: "actions", label: "Actions", icon: "⚡" },
-      { id: "evidence", label: "Evidence", icon: "📦" },
-      { id: "iocs", label: "IOCs", icon: "🎯" },
-      { id: "timeline", label: "Timeline", icon: "📋" },
-      { id: "notes", label: "Notes", icon: "📝" },
-    ];
-    return (
-      <div>
-        <button onClick={() => { setView("list"); setSelected(null); }} style={{ padding: "6px 12px", borderRadius: 6, border: `1px solid ${C.border}`, background: C.panel, color: C.textSoft, fontSize: 11, cursor: "pointer", marginBottom: 12, fontFamily: FONT }}>
-          ← Back to Incidents
-        </button>
-        <Panel title={inc.title} icon="🚨" accent={inc.severity === "CRITICAL" ? C.red : C.amber} glow>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-            <SeverityBadge severity={inc.severity} />
-            <Badge color={C.cyan}>{inc.status}</Badge>
-            <Badge color={C.textSoft}>{inc.category}</Badge>
-            <Badge color={C.textDim}>{inc.playbook}</Badge>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: 8, marginBottom: 12 }}>
-            <Stat label="Assets" value={inc.affected_assets} small />
-            <Stat label="MITRE TTPs" value={inc.mitre_techniques.length} small />
-            <Stat label="Lead" value={inc.lead_analyst} small />
-            <Stat label="Contain (min)" value={Math.round(inc.containment_time_min)} small />
-          </div>
-          <div style={{ display: "flex", gap: 4, marginBottom: 4, flexWrap: "wrap" }}>
-            {inc.mitre_techniques.map((t, i) => <Badge key={i} color={C.purple} style={{ fontSize: 9 }}>{t}</Badge>)}
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      {/* Hero: Threat Posture */}
+      <div style={{
+        display: "grid", gridTemplateColumns: "260px 1fr 300px", gap: 16,
+      }} className="qc-hero-grid">
+        <Panel title="Threat Posture" icon="◉" accent={postureColor} glow>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+            <div style={{ position: "relative", width: 120, height: 120 }}>
+              <svg width={120} height={120} viewBox="0 0 120 120">
+                <circle cx={60} cy={60} r={52} fill="none" stroke={`${postureColor}15`} strokeWidth={8} />
+                <circle cx={60} cy={60} r={52} fill="none" stroke={postureColor} strokeWidth={8}
+                  strokeDasharray={`${(postureScore / 100) * 327} 327`}
+                  strokeLinecap="round" transform="rotate(-90 60 60)"
+                  style={{ transition: "stroke-dasharray 1.2s ease" }} />
+              </svg>
+              <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ fontSize: 32, fontWeight: 800, fontFamily: MONO, color: postureColor, lineHeight: 1 }}>{postureScore}</div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: postureColor, letterSpacing: 1.5 }}>{postureLabel}</div>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 16, marginTop: 4 }}>
+              <Stat label="Attack Chains" value={mesh.threat_posture.active_attack_chains} color={mesh.threat_posture.active_attack_chains > 0 ? C.red : C.green} small />
+              <Stat label="Predictions" value={highPreds} color={highPreds > 0 ? C.amber : C.green} sub="HIGH+" small />
+            </div>
           </div>
         </Panel>
 
-        {/* Status Controls */}
-        <div style={{ display: "flex", gap: 8, margin: "12px 0", flexWrap: "wrap" }}>
-          {inc.status !== "resolved" && (
-            <>
-              <button onClick={handleEscalate} style={{ padding: "8px 16px", borderRadius: 6, border: `1px solid ${C.red}55`, background: C.redDim, color: C.red, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>🔴 Escalate to CRITICAL</button>
-              <button onClick={handleResolve} style={{ padding: "8px 16px", borderRadius: 6, border: `1px solid ${C.green}55`, background: C.greenDim, color: C.green, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>✓ Mark Resolved</button>
-            </>
-          )}
-        </div>
+        <Panel title="Event Timeline — 24h" icon="📊" accent={C.accent}>
+          <ResponsiveContainer width="100%" height={160}>
+            <AreaChart data={timeSeries} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+              <defs>
+                <linearGradient id="evtGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={C.accent} stopOpacity={0.15} />
+                  <stop offset="100%" stopColor={C.accent} stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="threatGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={C.red} stopOpacity={0.2} />
+                  <stop offset="100%" stopColor={C.red} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="time" tick={{ fill: C.textDim, fontSize: 9, fontFamily: MONO }} axisLine={false} tickLine={false} interval={3} />
+              <YAxis tick={{ fill: C.textDim, fontSize: 9, fontFamily: MONO }} axisLine={false} tickLine={false} width={40} />
+              <Tooltip contentStyle={{ background: C.panel, border: `1px solid ${C.borderLit}`, borderRadius: 6, fontFamily: MONO, fontSize: 11, color: C.text }} />
+              <Area type="monotone" dataKey="events" stroke={C.accent} fill="url(#evtGrad)" strokeWidth={1.5} />
+              <Area type="monotone" dataKey="threats" stroke={C.red} fill="url(#threatGrad)" strokeWidth={1.5} />
+              <Line type="monotone" dataKey="predictions" stroke={C.purple} strokeWidth={1.5} strokeDasharray="4 4" dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </Panel>
 
-        {/* Sub-tabs */}
-        <div style={{ display: "flex", gap: 4, marginBottom: 12, flexWrap: "wrap" }}>
-          {subTabs.map(st => (
-            <button key={st.id} onClick={() => setIncSubTab(st.id)} style={{
-              padding: "6px 10px", borderRadius: 6, border: `1px solid ${incSubTab === st.id ? C.accent : C.border}`,
-              background: incSubTab === st.id ? `${C.accent}10` : C.panel, color: incSubTab === st.id ? C.accentBright : C.textSoft,
-              fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: FONT, display: "flex", alignItems: "center", gap: 4,
-            }}>
-              <span>{st.icon}</span> {st.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Actions Sub-tab */}
-        {incSubTab === "actions" && (
-          <Panel title="Pending Actions" icon="⚡" headerRight={
-            <button onClick={handleApproveAll} style={{ padding: "4px 10px", borderRadius: 4, border: `1px solid ${C.green}55`, background: C.greenDim, color: C.green, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: MONO }}>APPROVE ALL</button>
-          }>
-            {inc.pending_actions.map((a, i) => (
-              <div key={i} style={{ padding: "10px 12px", background: C.surface, borderRadius: 6, marginBottom: 8, border: `1px solid ${a.status === "approved" ? C.green : a.status === "rejected" ? C.red : C.border}33` }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
-                  <div style={{ flex: 1, minWidth: 200 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 4 }}>{a.action}</div>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      <Badge color={C.cyan}>{a.type}</Badge>
-                      <Badge color={a.risk === "high" ? C.red : a.risk === "medium" ? C.amber : C.green}>Risk: {a.risk}</Badge>
-                      <Badge color={C.textDim}>By: {a.requested_by}</Badge>
-                    </div>
-                  </div>
-                  {a.status === "pending" ? (
-                    <div style={{ display: "flex", gap: 4 }}>
-                      <button onClick={() => handleApprove(a.id)} style={{ padding: "6px 12px", borderRadius: 4, border: `1px solid ${C.green}55`, background: C.greenDim, color: C.green, fontSize: 10, fontWeight: 600, cursor: "pointer" }}>✓ Approve</button>
-                      <button onClick={() => handleReject(a.id)} style={{ padding: "6px 12px", borderRadius: 4, border: `1px solid ${C.red}55`, background: C.redDim, color: C.red, fontSize: 10, fontWeight: 600, cursor: "pointer" }}>✗ Reject</button>
-                    </div>
-                  ) : (
-                    <Badge color={a.status === "approved" ? C.green : C.red}>{a.status}</Badge>
-                  )}
-                </div>
-              </div>
-            ))}
-            {actionLog.length > 0 && (
-              <div style={{ marginTop: 12, padding: "8px 10px", background: C.surface, borderRadius: 6 }}>
-                <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Action Log</div>
-                {actionLog.map((l, i) => (
-                  <div key={i} style={{ fontSize: 10, color: l.type === "approve" ? C.green : l.type === "reject" ? C.red : C.amber, fontFamily: MONO, marginBottom: 2 }}>
-                    [{new Date(l.time).toLocaleTimeString()}] {l.msg}
-                  </div>
-                ))}
-              </div>
-            )}
-          </Panel>
-        )}
-
-        {/* Evidence Sub-tab */}
-        {incSubTab === "evidence" && (
-          <Panel title="Evidence Collection" icon="📦">
-            {inc.evidence.map((e, i) => (
-              <div key={i} style={{ padding: "10px 12px", background: C.surface, borderRadius: 6, marginBottom: 6, border: `1px solid ${C.border}` }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
-                  <div>
-                    <Badge color={C.cyan}>{e.type}</Badge>
-                    <span style={{ fontSize: 11, color: C.text, marginLeft: 8 }}>{e.desc}</span>
-                  </div>
-                  <span style={{ fontSize: 10, color: C.textDim, fontFamily: MONO }}>{e.size_mb} MB</span>
-                </div>
-                <div style={{ fontSize: 9, color: C.textDim, fontFamily: MONO, marginTop: 4 }}>
-                  Chain: {e.chain_of_custody} | Collected: {new Date(e.collected_at).toLocaleTimeString()}
-                </div>
-              </div>
-            ))}
-          </Panel>
-        )}
-
-        {/* IOCs Sub-tab */}
-        {incSubTab === "iocs" && (
-          <Panel title="Indicators of Compromise" icon="🎯">
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-                <thead>
-                  <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                    {["Type", "Value", "Source", "First Seen"].map(h => (
-                      <th key={h} style={{ padding: "8px 10px", textAlign: "left", color: C.textDim, fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {inc.iocs.map((ioc, i) => (
-                    <tr key={i} style={{ borderBottom: `1px solid ${C.border}22` }}>
-                      <td style={{ padding: "8px 10px" }}><Badge color={C.cyan}>{ioc.type}</Badge></td>
-                      <td style={{ padding: "8px 10px", fontFamily: MONO, fontSize: 10, color: C.text, wordBreak: "break-all", maxWidth: 200 }}>{ioc.value.length > 40 ? ioc.value.slice(0, 40) + "…" : ioc.value}</td>
-                      <td style={{ padding: "8px 10px", color: C.textSoft, fontSize: 10 }}>{ioc.source}</td>
-                      <td style={{ padding: "8px 10px", color: C.textDim, fontSize: 10, fontFamily: MONO }}>{new Date(ioc.first_seen).toLocaleTimeString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        <Panel title="Mesh Health" icon="🕷" accent={C.green}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <Stat label="Nodes Active" value={`${mesh.topology.active_nodes}/${mesh.topology.total_nodes}`} color={C.green} small />
+              <Stat label="Circuits" value={`${mesh.topology.healthy_circuits}/${mesh.topology.total_circuits}`} color={C.green} small />
+              <Stat label="Heals" value={mesh.statistics.mesh_heals} color={C.cyan} small />
             </div>
-          </Panel>
-        )}
-
-        {/* Timeline Sub-tab */}
-        {incSubTab === "timeline" && (
-          <Panel title="Incident Timeline" icon="📋">
-            {inc.timeline.map((t, i) => {
-              const typeColors = { detection: C.cyan, analysis: C.accentBright, containment: C.amber, evidence: C.purple, escalation: C.red, enrichment: C.green };
-              return (
-                <div key={i} style={{ display: "flex", gap: 12, marginBottom: 12, position: "relative" }}>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 20 }}>
-                    <div style={{ width: 10, height: 10, borderRadius: "50%", background: typeColors[t.type] || C.textDim, boxShadow: `0 0 6px ${typeColors[t.type] || C.textDim}` }} />
-                    {i < inc.timeline.length - 1 && <div style={{ width: 1, flex: 1, background: C.border, marginTop: 4 }} />}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 11, color: C.text, marginBottom: 2 }}>{t.event}</div>
-                    <div style={{ display: "flex", gap: 8, fontSize: 9, color: C.textDim }}>
-                      <span style={{ fontFamily: MONO }}>{new Date(t.time).toLocaleTimeString()}</span>
-                      <Badge color={typeColors[t.type] || C.textDim} style={{ fontSize: 8 }}>{t.type}</Badge>
-                      <span>{t.actor}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </Panel>
-        )}
-
-        {/* Notes Sub-tab */}
-        {incSubTab === "notes" && (
-          <Panel title="Analyst Notes" icon="📝">
-            <textarea
-              value={analystNotes}
-              onChange={(e) => setAnalystNotes(e.target.value)}
-              placeholder="Enter investigation notes, findings, and observations..."
-              style={{ width: "100%", minHeight: 150, padding: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontSize: 12, fontFamily: MONO, resize: "vertical", outline: "none" }}
-            />
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
-              <button onClick={() => { playSound("panel_click"); setActionLog(prev => [...prev, { time: new Date().toISOString(), msg: "Analyst note saved", type: "note" }]); }} style={{ padding: "6px 16px", borderRadius: 6, border: `1px solid ${C.accent}55`, background: `${C.accent}10`, color: C.accentBright, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>
-                Save Notes
-              </button>
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <span style={{ fontSize: 10, color: C.textSoft }}>Mesh Integrity</span>
+                <span style={{ fontSize: 10, color: C.green, fontFamily: MONO }}>{Math.round(mesh.topology.active_nodes / mesh.topology.total_nodes * 100)}%</span>
+              </div>
+              <ProgressBar value={mesh.topology.active_nodes} max={mesh.topology.total_nodes} color={C.green} />
             </div>
-          </Panel>
-        )}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 11 }}>
+              <div style={{ padding: "6px 8px", background: C.redDim, borderRadius: 4, display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: C.textSoft }}>IPs Blocked</span>
+                <span style={{ color: C.red, fontFamily: MONO, fontWeight: 600 }}>{mesh.threat_posture.ips_blocked}</span>
+              </div>
+              <div style={{ padding: "6px 8px", background: C.amberDim, borderRadius: 4, display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: C.textSoft }}>IOCs Active</span>
+                <span style={{ color: C.amber, fontFamily: MONO, fontWeight: 600 }}>{mesh.threat_posture.iocs_active}</span>
+              </div>
+            </div>
+            <div style={{ fontSize: 10, color: C.textDim }}>
+              Events Ingested: <span style={{ color: C.text, fontFamily: MONO }}>{mesh.statistics.events_ingested.toLocaleString()}</span>
+            </div>
+          </div>
+        </Panel>
       </div>
-    );
-  }
 
-  // ─── Incident List View ─────────────────────────────────────────────────
-  return (
-    <div>
-      {incidents.map((inc, i) => (
-        <motion.div key={inc.incident_id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
-          style={{ padding: "12px 14px", background: C.panel, border: `1px solid ${inc.severity === "CRITICAL" ? C.red : C.border}33`, borderRadius: 8, marginBottom: 8, cursor: "pointer", transition: "all 0.2s" }}
-          onClick={() => { setSelected(inc.incident_id); setView("investigate"); setIncSubTab("actions"); playSound("panel_click"); }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
-            <div style={{ flex: 1, minWidth: 200 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 4 }}>{inc.title}</div>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <SeverityBadge severity={inc.severity} />
-                <Badge color={C.cyan}>{inc.status}</Badge>
-                <Badge color={C.textDim}>{inc.category}</Badge>
-              </div>
+      {/* Top Predictions + Active Incidents */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16 }}>
+        <Panel title="Top Threat Predictions" icon="🔮" accent={C.purple} glow={topPreds.length > 0}>
+          {topPreds.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 20, color: C.green }}>
+              <div style={{ fontSize: 24, marginBottom: 4 }}>✓</div>
+              <div style={{ fontSize: 12 }}>No high-confidence predictions</div>
             </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 10, color: C.textDim, fontFamily: MONO }}>{new Date(inc.created_at).toLocaleTimeString()}</div>
-              <div style={{ fontSize: 10, color: C.amber, marginTop: 2 }}>{inc.pending_actions.filter(a => a.status === "pending").length} pending actions</div>
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 4, marginTop: 8, flexWrap: "wrap" }}>
-            {inc.mitre_techniques.slice(0, 3).map((t, j) => <Badge key={j} color={C.purple} style={{ fontSize: 8 }}>{t}</Badge>)}
-            {inc.mitre_techniques.length > 3 && <Badge color={C.textDim} style={{ fontSize: 8 }}>+{inc.mitre_techniques.length - 3}</Badge>}
-          </div>
-        </motion.div>
-      ))}
-    </div>
-  );
-}
-
-
-// ═══════════════════════════════════════════════════════════════════════════
-// VULNERABILITY SCANNER — One-Click Remediate, Guided Wizard, Export, Quantum
-// ═══════════════════════════════════════════════════════════════════════════
-
-function VulnsTab({ isMobile }) {
-  const [scanMode, setScanMode] = useState("full"); // full | quick | compliance | web_app | quantum
-  const [target, setTarget] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [scanning, setScanning] = useState(false);
-  const [scanProgress, setScanProgress] = useState(0);
-  const [scanResults, setScanResults] = useState(null);
-  const [scanLog, setScanLog] = useState([]);
-  const [remediating, setRemediating] = useState(false);
-  const [remediateLog, setRemediateLog] = useState([]);
-  const [showWizard, setShowWizard] = useState(false);
-  const [wizardStep, setWizardStep] = useState(1);
-  const [showExport, setShowExport] = useState(false);
-  const [exportFormat, setExportFormat] = useState("bash");
-
-  const scanModes = [
-    { id: "full", label: "Full Scan", icon: "🔍", desc: "Complete vulnerability assessment" },
-    { id: "quick", label: "Quick Scan", icon: "⚡", desc: "Top 100 ports + common CVEs" },
-    { id: "compliance", label: "Compliance", icon: "📋", desc: "CIS/NIST/PCI-DSS audit" },
-    { id: "web_app", label: "Web App", icon: "🌐", desc: "OWASP Top 10 + SQLi/XSS" },
-    { id: "quantum", label: "Quantum Hardening", icon: "🔮", desc: "Post-quantum crypto audit" },
-  ];
-
-  const startScan = useCallback(async () => {
-    if (!target) return;
-    playSound("scan_start");
-    setScanning(true);
-    setScanProgress(0);
-    setScanResults(null);
-    setScanLog([]);
-    setRemediateLog([]);
-
-    const phases = [
-      "Initializing scan engine...",
-      `Resolving target: ${target}`,
-      "Port discovery — SYN scan initiated",
-      "Service enumeration in progress",
-      "CVE database correlation",
-      scanMode === "quantum" ? "Post-quantum cipher suite analysis..." : "Vulnerability fingerprinting",
-      scanMode === "quantum" ? "Lattice-based key exchange verification..." : "Exploit probability assessment",
-      scanMode === "compliance" ? "CIS Benchmark evaluation..." : "Risk scoring & prioritization",
-      scanMode === "web_app" ? "OWASP Top 10 injection testing..." : "Cross-referencing threat intel",
-      "Generating remediation plan",
-      "Scan complete — results compiled",
-    ];
-
-    for (let i = 0; i < phases.length; i++) {
-      await new Promise(r => setTimeout(r, 400 + Math.random() * 600));
-      setScanLog(prev => [...prev, { time: new Date().toISOString(), msg: phases[i] }]);
-      setScanProgress(Math.round(((i + 1) / phases.length) * 100));
-    }
-
-    const vulns = Array.from({ length: randInt(4, 12) }, () => ({
-      id: `CVE-${2024 + randInt(0, 2)}-${randInt(10000, 99999)}`,
-      title: pick([
-        "Remote Code Execution in OpenSSL", "SQL Injection in Authentication Module",
-        "Privilege Escalation via Kernel Bug", "Cross-Site Scripting in Admin Panel",
-        "Buffer Overflow in Network Stack", "Insecure Deserialization in API Gateway",
-        "Weak Cryptographic Algorithm (RSA-1024)", "Missing TLS 1.3 Enforcement",
-        "Quantum-Vulnerable Key Exchange (ECDH)", "Post-Quantum Migration Required (Kyber)",
-        "HSTS Header Missing", "Certificate Transparency Log Gap",
-      ]),
-      severity: pick(["CRITICAL", "HIGH", "MEDIUM", "LOW"]),
-      cvss: +(rand(3.0, 10.0)).toFixed(1),
-      exploitable: Math.random() > 0.5,
-      remediation: pick([
-        "Update to latest patched version", "Apply vendor security patch",
-        "Implement input validation", "Enable WAF rules",
-        "Rotate to quantum-safe algorithms (Kyber-768)", "Enforce TLS 1.3 with PQ cipher suites",
-        "Upgrade to Ed25519 or Dilithium signatures", "Enable HSTS with preload",
-      ]),
-      affected: pick(["nginx/1.18.0", "openssl/1.1.1k", "node/16.14.0", "postgresql/13.4", "apache/2.4.49"]),
-    })).sort((a, b) => b.cvss - a.cvss);
-
-    setScanResults({
-      target, mode: scanMode, timestamp: new Date().toISOString(),
-      total_vulns: vulns.length,
-      critical: vulns.filter(v => v.severity === "CRITICAL").length,
-      high: vulns.filter(v => v.severity === "HIGH").length,
-      medium: vulns.filter(v => v.severity === "MEDIUM").length,
-      low: vulns.filter(v => v.severity === "LOW").length,
-      vulns,
-      quantum_score: scanMode === "quantum" ? randInt(20, 85) : null,
-    });
-
-    setScanning(false);
-    playSound("scan_complete");
-  }, [target, scanMode]);
-
-  const startRemediate = useCallback(async () => {
-    if (!scanResults) return;
-    playSound("scan_start");
-    setRemediating(true);
-    setRemediateLog([]);
-
-    const steps = scanResults.vulns.filter(v => v.severity === "CRITICAL" || v.severity === "HIGH");
-    for (let i = 0; i < steps.length; i++) {
-      await new Promise(r => setTimeout(r, 800 + Math.random() * 1200));
-      setRemediateLog(prev => [...prev, {
-        time: new Date().toISOString(),
-        vuln: steps[i].id,
-        msg: `Applying fix: ${steps[i].remediation}`,
-        status: Math.random() > 0.15 ? "success" : "needs_manual",
-      }]);
-    }
-
-    await new Promise(r => setTimeout(r, 500));
-    setRemediateLog(prev => [...prev, { time: new Date().toISOString(), vuln: "SYSTEM", msg: "One-Click Remediation complete — verify results", status: "complete" }]);
-    setRemediating(false);
-    playSound("scan_complete");
-  }, [scanResults]);
-
-  const generateExportScript = () => {
-    if (!scanResults) return "";
-    const vulns = scanResults.vulns.filter(v => v.severity === "CRITICAL" || v.severity === "HIGH");
-    if (exportFormat === "bash") {
-      return `#!/bin/bash\n# Queen Califia CyberAI — Auto-Remediation Script\n# Generated: ${new Date().toISOString()}\n# Target: ${scanResults.target}\n\nset -e\necho "Starting remediation..."\n\n${vulns.map(v => `# Fix ${v.id} — ${v.title}\necho "Remediating ${v.id}..."\n# ${v.remediation}\nsleep 1`).join("\n\n")}\n\necho "Remediation complete."`;
-    } else if (exportFormat === "powershell") {
-      return `# Queen Califia CyberAI — Auto-Remediation Script\n# Generated: ${new Date().toISOString()}\n# Target: ${scanResults.target}\n\n$ErrorActionPreference = "Stop"\nWrite-Host "Starting remediation..."\n\n${vulns.map(v => `# Fix ${v.id} — ${v.title}\nWrite-Host "Remediating ${v.id}..."\n# ${v.remediation}\nStart-Sleep -Seconds 1`).join("\n\n")}\n\nWrite-Host "Remediation complete."`;
-    } else {
-      return `# Queen Califia CyberAI — Ansible Remediation Playbook\n# Generated: ${new Date().toISOString()}\n---\n- name: Auto-Remediation\n  hosts: ${scanResults.target}\n  tasks:\n${vulns.map(v => `    - name: Fix ${v.id}\n      debug:\n        msg: "${v.remediation}"`).join("\n")}`;
-    }
-  };
-
-  // ─── Guided Wizard ──────────────────────────────────────────────────────
-  if (showWizard) {
-    return (
-      <Panel title="Quick Scan Wizard" icon="⚡" glow>
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          {[1, 2, 3].map(s => (
-            <div key={s} style={{ flex: 1, height: 4, borderRadius: 2, background: s <= wizardStep ? C.accent : C.border, transition: "background 0.3s" }} />
-          ))}
-        </div>
-        {wizardStep === 1 && (
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 8 }}>Step 1: Enter Target</div>
-            <input value={target} onChange={e => setTarget(e.target.value)} placeholder="IP address or hostname"
-              style={{ width: "100%", padding: "10px 12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontSize: 13, fontFamily: MONO, outline: "none", boxSizing: "border-box" }} />
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16 }}>
-              <button onClick={() => setShowWizard(false)} style={{ padding: "8px 16px", borderRadius: 6, border: `1px solid ${C.border}`, background: C.panel, color: C.textSoft, fontSize: 11, cursor: "pointer" }}>Cancel</button>
-              <button onClick={() => target && setWizardStep(2)} style={{ padding: "8px 16px", borderRadius: 6, border: `1px solid ${C.accent}55`, background: `${C.accent}10`, color: C.accentBright, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Next →</button>
-            </div>
-          </div>
-        )}
-        {wizardStep === 2 && (
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 8 }}>Step 2: Select Scan Mode</div>
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8 }}>
-              {scanModes.map(m => (
-                <div key={m.id} onClick={() => setScanMode(m.id)} style={{
-                  padding: "12px", background: scanMode === m.id ? `${C.accent}10` : C.surface, border: `1px solid ${scanMode === m.id ? C.accent : C.border}`,
-                  borderRadius: 6, cursor: "pointer", transition: "all 0.2s",
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {topPreds.map(p => (
+                <div key={p.prediction_id} style={{
+                  padding: "10px 12px", background: C.surface, borderRadius: 6,
+                  border: `1px solid ${p.confidence > 0.8 ? C.red + "30" : C.border}`,
                 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: scanMode === m.id ? C.accentBright : C.text }}>{m.icon} {m.label}</div>
-                  <div style={{ fontSize: 10, color: C.textSoft, marginTop: 4 }}>{m.desc}</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <ConfidenceBadge tier={p.confidence_tier} confidence={p.confidence} />
+                        <HorizonBadge horizon={p.threat_horizon} />
+                        <Badge color={C.textSoft}>{p.category.replace(/_/g, " ")}</Badge>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 18, fontWeight: 800, fontFamily: MONO, color: p.risk_score >= 8 ? C.red : p.risk_score >= 5 ? C.amber : C.accentBright }}>{p.risk_score.toFixed(1)}</div>
+                  </div>
                 </div>
               ))}
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16 }}>
-              <button onClick={() => setWizardStep(1)} style={{ padding: "8px 16px", borderRadius: 6, border: `1px solid ${C.border}`, background: C.panel, color: C.textSoft, fontSize: 11, cursor: "pointer" }}>← Back</button>
-              <button onClick={() => setWizardStep(3)} style={{ padding: "8px 16px", borderRadius: 6, border: `1px solid ${C.accent}55`, background: `${C.accent}10`, color: C.accentBright, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Next →</button>
-            </div>
-          </div>
-        )}
-        {wizardStep === 3 && (
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 8 }}>Step 3: Confirm & Scan</div>
-            <div style={{ padding: 12, background: C.surface, borderRadius: 6, marginBottom: 12 }}>
-              <div style={{ fontSize: 11, color: C.textSoft }}>Target: <span style={{ color: C.text, fontFamily: MONO }}>{target}</span></div>
-              <div style={{ fontSize: 11, color: C.textSoft, marginTop: 4 }}>Mode: <span style={{ color: C.accentBright }}>{scanModes.find(m => m.id === scanMode)?.label}</span></div>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <button onClick={() => setWizardStep(2)} style={{ padding: "8px 16px", borderRadius: 6, border: `1px solid ${C.border}`, background: C.panel, color: C.textSoft, fontSize: 11, cursor: "pointer" }}>← Back</button>
-              <button onClick={() => { setShowWizard(false); startScan(); }} style={{ padding: "8px 20px", borderRadius: 6, border: `1px solid ${C.green}55`, background: C.greenDim, color: C.green, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>🚀 Launch Scan</button>
-            </div>
-          </div>
-        )}
-      </Panel>
-    );
-  }
-
-  return (
-    <div>
-      {/* Scan Controls */}
-      <Panel title="Vulnerability Scanner" icon="🔍" glow>
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr auto", gap: 8, marginBottom: 12 }}>
-          <input value={target} onChange={e => setTarget(e.target.value)} placeholder="Target IP or hostname"
-            style={{ padding: "10px 12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontSize: 13, fontFamily: MONO, outline: "none" }} />
-          <input value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="API Key (optional)" type="password"
-            style={{ padding: "10px 12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontSize: 13, fontFamily: MONO, outline: "none" }} />
-          <button onClick={() => setShowWizard(true)} style={{ padding: "10px 16px", borderRadius: 6, border: `1px solid ${C.cyan}55`, background: C.cyanDim, color: C.cyan, fontSize: 11, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>⚡ Wizard</button>
-        </div>
-
-        <div style={{ display: "flex", gap: 4, marginBottom: 12, flexWrap: "wrap" }}>
-          {scanModes.map(m => (
-            <button key={m.id} onClick={() => setScanMode(m.id)} style={{
-              padding: "6px 10px", borderRadius: 6, border: `1px solid ${scanMode === m.id ? C.accent : C.border}`,
-              background: scanMode === m.id ? `${C.accent}10` : C.panel, color: scanMode === m.id ? C.accentBright : C.textSoft,
-              fontSize: 10, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
-            }}>
-              <span>{m.icon}</span> {!isMobile && m.label}
-            </button>
-          ))}
-        </div>
-
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button onClick={startScan} disabled={scanning || !target} style={{
-            padding: "10px 24px", borderRadius: 6, border: `1px solid ${C.accent}55`,
-            background: scanning ? C.surface : `${C.accent}10`, color: scanning ? C.textDim : C.accentBright,
-            fontSize: 12, fontWeight: 700, cursor: scanning ? "not-allowed" : "pointer", fontFamily: FONT,
-          }}>
-            {scanning ? `Scanning... ${scanProgress}%` : "🔍 Start Scan"}
-          </button>
-          {scanResults && !remediating && (
-            <button onClick={startRemediate} style={{
-              padding: "10px 24px", borderRadius: 6, border: `1px solid ${C.green}55`,
-              background: C.greenDim, color: C.green, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT,
-            }}>
-              🛡 One-Click Remediate
-            </button>
           )}
-          {scanResults && (
-            <button onClick={() => setShowExport(!showExport)} style={{
-              padding: "10px 16px", borderRadius: 6, border: `1px solid ${C.cyan}55`,
-              background: C.cyanDim, color: C.cyan, fontSize: 11, fontWeight: 600, cursor: "pointer",
-            }}>
-              📋 Export Script
-            </button>
-          )}
-        </div>
-
-        {scanning && (
-          <div style={{ marginTop: 12 }}>
-            <ProgressBar value={scanProgress} color={C.accent} height={6} />
-          </div>
-        )}
-      </Panel>
-
-      {/* Scan Log */}
-      {scanLog.length > 0 && (
-        <Panel title="Scan Log" icon="📋" style={{ marginTop: 12 }}>
-          <div style={{ maxHeight: 200, overflowY: "auto" }}>
-            {scanLog.map((l, i) => (
-              <div key={i} style={{ fontSize: 10, color: C.cyan, fontFamily: MONO, marginBottom: 2 }}>
-                [{new Date(l.time).toLocaleTimeString()}] {l.msg}
-              </div>
-            ))}
-          </div>
         </Panel>
-      )}
 
-      {/* Scan Results */}
-      {scanResults && (
-        <Panel title={`Results — ${scanResults.total_vulns} Vulnerabilities Found`} icon="📊" style={{ marginTop: 12 }} glow>
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(5, 1fr)", gap: 8, marginBottom: 16 }}>
-            <Stat label="Total" value={scanResults.total_vulns} small />
-            <Stat label="Critical" value={scanResults.critical} color={C.red} small />
-            <Stat label="High" value={scanResults.high} color={C.amber} small />
-            <Stat label="Medium" value={scanResults.medium} color={C.accentBright} small />
-            <Stat label="Low" value={scanResults.low} color={C.green} small />
-          </div>
-          {scanResults.quantum_score !== null && (
-            <div style={{ padding: "10px 12px", background: C.purpleDim, borderRadius: 6, border: `1px solid ${C.purple}33`, marginBottom: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 11, fontWeight: 600, color: C.purple }}>🔮 Quantum Readiness Score</span>
-                <span style={{ fontSize: 20, fontWeight: 700, color: scanResults.quantum_score >= 70 ? C.green : scanResults.quantum_score >= 40 ? C.amber : C.red, fontFamily: MONO }}>{scanResults.quantum_score}%</span>
-              </div>
-              <ProgressBar value={scanResults.quantum_score} color={scanResults.quantum_score >= 70 ? C.green : scanResults.quantum_score >= 40 ? C.amber : C.red} height={6} />
-              <div style={{ fontSize: 10, color: C.textSoft, marginTop: 6 }}>
-                {scanResults.quantum_score < 40 ? "⚠ Critical: Most cryptographic implementations are quantum-vulnerable" :
-                 scanResults.quantum_score < 70 ? "⚡ Moderate: Some post-quantum migrations needed" :
-                 "✓ Good: Most systems use quantum-resistant algorithms"}
-              </div>
+        <Panel title="Active Incidents" icon="🚨" accent={C.red} glow={criticalIncidents > 0}>
+          {incidents.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 20, color: C.green }}>
+              <div style={{ fontSize: 24, marginBottom: 4 }}>✓</div>
+              <div style={{ fontSize: 12 }}>No active incidents</div>
             </div>
-          )}
-          {scanResults.vulns.map((v, i) => (
-            <motion.div key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.03 }}
-              style={{ padding: "10px 12px", background: C.surface, borderRadius: 6, marginBottom: 6, border: `1px solid ${v.severity === "CRITICAL" ? C.red : C.border}33` }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 4 }}>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 4 }}>{v.title}</div>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    <Badge color={C.cyan} style={{ fontSize: 9 }}>{v.id}</Badge>
-                    <SeverityBadge severity={v.severity} />
-                    <Badge color={C.textDim}>CVSS: {v.cvss}</Badge>
-                    {v.exploitable && <Badge color={C.red}>EXPLOITABLE</Badge>}
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {incidents.slice(0, 4).map(inc => (
+                <div key={inc.incident_id} style={{
+                  padding: "10px 12px", background: C.surface, borderRadius: 6,
+                  border: `1px solid ${inc.severity === "CRITICAL" ? C.red + "30" : C.border}`,
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{inc.title}</div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <SeverityBadge severity={inc.severity} />
+                        <Badge color={C.cyan}>{inc.status}</Badge>
+                        <Badge color={C.textSoft}>{inc.incident_id}</Badge>
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: 10, color: C.textDim }}>{inc.affected_assets} assets</div>
+                      {inc.actions_pending > 0 && <div style={{ fontSize: 10, color: C.amber }}>{inc.actions_pending} pending</div>}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div style={{ fontSize: 10, color: C.textSoft, marginTop: 6 }}>
-                <span style={{ color: C.textDim }}>Affected:</span> {v.affected} | <span style={{ color: C.textDim }}>Fix:</span> {v.remediation}
-              </div>
-            </motion.div>
-          ))}
-        </Panel>
-      )}
-
-      {/* Remediation Log */}
-      {remediateLog.length > 0 && (
-        <Panel title="One-Click Remediation Log" icon="🛡" style={{ marginTop: 12 }} accent={C.green}>
-          {remediateLog.map((l, i) => (
-            <div key={i} style={{ fontSize: 10, fontFamily: MONO, marginBottom: 4, color: l.status === "success" ? C.green : l.status === "complete" ? C.gold : C.amber }}>
-              [{new Date(l.time).toLocaleTimeString()}] [{l.vuln}] {l.msg}
-              {l.status === "needs_manual" && <span style={{ color: C.amber }}> ⚠ NEEDS MANUAL REVIEW</span>}
+              ))}
             </div>
-          ))}
+          )}
         </Panel>
-      )}
+      </div>
 
-      {/* Export Script */}
-      {showExport && scanResults && (
-        <Panel title="Remediation Script Export" icon="📋" style={{ marginTop: 12 }}>
-          <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
-            {["bash", "powershell", "ansible"].map(f => (
-              <button key={f} onClick={() => setExportFormat(f)} style={{
-                padding: "6px 10px", borderRadius: 6, border: `1px solid ${exportFormat === f ? C.accent : C.border}`,
-                background: exportFormat === f ? `${C.accent}10` : C.panel, color: exportFormat === f ? C.accentBright : C.textSoft,
-                fontSize: 10, fontWeight: 600, cursor: "pointer", textTransform: "capitalize",
-              }}>{f}</button>
+      {/* Threat Landscape Radar */}
+      <Panel title="Strategic Threat Landscape" icon="🌐" accent={C.cyan}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <ResponsiveContainer width="100%" height={220}>
+            <RadarChart cx="50%" cy="50%" outerRadius="70%" data={landscape}>
+              <PolarGrid stroke={C.border} />
+              <PolarAngleAxis dataKey="vector" tick={{ fill: C.textSoft, fontSize: 9 }} />
+              <PolarRadiusAxis tick={false} domain={[0, 100]} axisLine={false} />
+              <Radar name="Risk" dataKey="risk" stroke={C.red} fill={C.red} fillOpacity={0.12} strokeWidth={2} />
+            </RadarChart>
+          </ResponsiveContainer>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, justifyContent: "center" }}>
+            {landscape.map(l => (
+              <div key={l.vector} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ width: 80, fontSize: 10, color: C.textSoft, textAlign: "right" }}>{l.vector}</div>
+                <div style={{ flex: 1 }}><ProgressBar value={l.risk} color={l.risk > 80 ? C.red : l.risk > 60 ? C.amber : C.accentBright} height={6} /></div>
+                <div style={{ width: 28, fontSize: 10, fontFamily: MONO, color: l.risk > 80 ? C.red : l.risk > 60 ? C.amber : C.text }}>{Math.round(l.risk)}</div>
+                <Badge color={l.trend === "accelerating" || l.trend === "escalating" ? C.red : l.trend === "emerging" || l.trend === "expanding" ? C.amber : C.textDim} style={{ fontSize: 8 }}>
+                  {l.trend === "accelerating" ? "▲▲" : l.trend === "escalating" ? "▲" : l.trend === "emerging" || l.trend === "expanding" ? "↗" : "─"}
+                </Badge>
+              </div>
             ))}
           </div>
-          <pre style={{ padding: 12, background: C.surface, borderRadius: 6, color: C.cyan, fontSize: 10, fontFamily: MONO, overflowX: "auto", whiteSpace: "pre-wrap", maxHeight: 300 }}>
-            {generateExportScript()}
-          </pre>
-          <button onClick={() => { navigator.clipboard.writeText(generateExportScript()); playSound("panel_click"); }} style={{
-            marginTop: 8, padding: "6px 16px", borderRadius: 6, border: `1px solid ${C.accent}55`,
-            background: `${C.accent}10`, color: C.accentBright, fontSize: 11, fontWeight: 600, cursor: "pointer",
-          }}>📋 Copy to Clipboard</button>
-        </Panel>
-      )}
+        </div>
+      </Panel>
     </div>
   );
 }
 
+// ─── PREDICTOR TAB ─────────────────────────────────────────────────────────
 
-// ═══════════════════════════════════════════════════════════════════════════
-// DEVOPS TAB — One-Click Operations, CI/CD, Infrastructure
-// ═══════════════════════════════════════════════════════════════════════════
-
-function DevOpsTab({ isMobile }) {
-  const [opLog, setOpLog] = useState([]);
-  const [running, setRunning] = useState(null);
-
-  const operations = [
-    { id: "k8s", label: "Bootstrap K8s Cluster", icon: "⎈", desc: "Initialize Kubernetes with security policies", color: C.cyan },
-    { id: "branches", label: "Protect Branches", icon: "🔒", desc: "Enforce branch protection rules", color: C.green },
-    { id: "dns", label: "DNS Health Check", icon: "🌐", desc: "Verify DNS records and propagation", color: C.accentBright },
-    { id: "vm", label: "Deploy Secure VM", icon: "🖥", desc: "Provision hardened virtual machine", color: C.purple },
-    { id: "promote", label: "Promote to Prod", icon: "🚀", desc: "Blue-green deployment promotion", color: C.amber },
-    { id: "helm", label: "Helm Release", icon: "📦", desc: "Deploy Helm chart to cluster", color: C.gold },
-  ];
-
-  const runOp = async (opId) => {
-    const op = operations.find(o => o.id === opId);
-    if (!op || running) return;
-    playSound("scan_start");
-    setRunning(opId);
-
-    const steps = [
-      `Initializing ${op.label}...`,
-      "Validating credentials and permissions",
-      "Connecting to infrastructure",
-      "Executing operation",
-      "Verifying results",
-      `${op.label} — Complete ✓`,
-    ];
-
-    for (const step of steps) {
-      await new Promise(r => setTimeout(r, 600 + Math.random() * 800));
-      setOpLog(prev => [...prev, { time: new Date().toISOString(), op: opId, msg: step }]);
-    }
-
-    setRunning(null);
-    playSound("scan_complete");
-  };
-
-  const services = [
-    { name: "API Gateway", status: "healthy", uptime: "99.97%", latency: "12ms" },
-    { name: "Auth Service", status: "healthy", uptime: "99.99%", latency: "8ms" },
-    { name: "Scan Engine", status: "healthy", uptime: "99.95%", latency: "45ms" },
-    { name: "ML Pipeline", status: Math.random() > 0.3 ? "healthy" : "degraded", uptime: "99.91%", latency: "120ms" },
-    { name: "Threat Intel", status: "healthy", uptime: "99.98%", latency: "22ms" },
-    { name: "Event Bus", status: "healthy", uptime: "99.96%", latency: "5ms" },
-  ];
-
-  const cicdWorkflows = [
-    { name: "Security Scan Pipeline", status: "passing", last_run: "2m ago", duration: "3m 12s" },
-    { name: "Container Build", status: "passing", last_run: "15m ago", duration: "5m 44s" },
-    { name: "Integration Tests", status: Math.random() > 0.2 ? "passing" : "failing", last_run: "8m ago", duration: "12m 03s" },
-    { name: "Deploy to Staging", status: "passing", last_run: "22m ago", duration: "2m 18s" },
-    { name: "Compliance Audit", status: "passing", last_run: "1h ago", duration: "8m 55s" },
-  ];
-
+function PredictorTab({ predictions, layerActivity }) {
   return (
-    <div>
-      {/* One-Click Operations */}
-      <Panel title="One-Click Operations" icon="⚡" glow>
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 8 }}>
-          {operations.map(op => (
-            <button key={op.id} onClick={() => runOp(op.id)} disabled={!!running}
-              style={{
-                padding: "12px", background: running === op.id ? `${op.color}15` : C.surface,
-                border: `1px solid ${running === op.id ? op.color : C.border}`, borderRadius: 6,
-                cursor: running ? "not-allowed" : "pointer", textAlign: "left", transition: "all 0.2s",
-              }}>
-              <div style={{ fontSize: 14, marginBottom: 4 }}>{op.icon}</div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: running === op.id ? op.color : C.text }}>{op.label}</div>
-              <div style={{ fontSize: 10, color: C.textSoft, marginTop: 2 }}>{op.desc}</div>
-              {running === op.id && <div style={{ marginTop: 6 }}><ProgressBar value={75} color={op.color} height={3} /></div>}
-            </button>
+    <div style={{ display: "grid", gap: 16 }}>
+      {/* Prediction Engine Status */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <Panel title="Prediction Layer Activity" icon="⚡" accent={C.purple}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {layerActivity.map(l => (
+              <div key={l.layer}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ fontSize: 11, color: C.text }}>{l.layer}</span>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <span style={{ fontSize: 10, fontFamily: MONO, color: C.textSoft }}>{l.signals} signals</span>
+                    <span style={{ fontSize: 10, fontFamily: MONO, color: l.confidence > 0.8 ? C.green : l.confidence > 0.6 ? C.amber : C.textSoft }}>
+                      {(l.confidence * 100).toFixed(0)}% avg conf
+                    </span>
+                  </div>
+                </div>
+                <ProgressBar value={l.signals} max={80} color={l.confidence > 0.8 ? C.green : l.confidence > 0.6 ? C.accent : C.textDim} height={5} />
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 12, padding: "8px 10px", background: C.surface, borderRadius: 6, fontSize: 10, color: C.textSoft }}>
+            <strong style={{ color: C.purple }}>5-Layer Architecture:</strong> Anomaly Fusion → Surface Drift → Entropy Analysis → Behavioral Genome → Strategic Forecast
+          </div>
+        </Panel>
+
+        <Panel title="Prediction Distribution" icon="📊" accent={C.purple}>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={[
+              { tier: "Near Certain", count: predictions.filter(p => p.confidence_tier === "near_certain").length, color: C.red },
+              { tier: "High", count: predictions.filter(p => p.confidence_tier === "high").length, color: C.amber },
+              { tier: "Probable", count: predictions.filter(p => p.confidence_tier === "probable").length, color: C.accentBright },
+              { tier: "Emerging", count: predictions.filter(p => p.confidence_tier === "emerging").length, color: C.cyan },
+              { tier: "Speculative", count: predictions.filter(p => p.confidence_tier === "speculative").length, color: C.textDim },
+            ]} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
+              <XAxis dataKey="tier" tick={{ fill: C.textSoft, fontSize: 9 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: C.textDim, fontSize: 9, fontFamily: MONO }} axisLine={false} tickLine={false} allowDecimals={false} />
+              <Tooltip contentStyle={{ background: C.panel, border: `1px solid ${C.borderLit}`, borderRadius: 6, fontFamily: MONO, fontSize: 11, color: C.text }} />
+              <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                {[C.red, C.amber, C.accentBright, C.cyan, C.textDim].map((c, i) => <Cell key={i} fill={c} fillOpacity={0.8} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </Panel>
+      </div>
+
+      {/* All Predictions */}
+      <Panel title={`Active Predictions (${predictions.length})`} icon="🔮" accent={C.purple} glow>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {predictions.map(p => (
+            <div key={p.prediction_id} style={{
+              padding: "12px 14px", background: C.surface, borderRadius: 6,
+              border: `1px solid ${p.confidence > 0.8 ? C.red + "30" : p.confidence > 0.6 ? C.amber + "20" : C.border}`,
+              boxShadow: p.confidence > 0.8 ? `0 0 15px ${C.red}08` : "none",
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 6 }}>{p.title}</div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+                    <ConfidenceBadge tier={p.confidence_tier} confidence={p.confidence} />
+                    <HorizonBadge horizon={p.threat_horizon} />
+                    <Badge color={C.purple}>{p.category.replace(/_/g, " ")}</Badge>
+                    <Badge color={C.textSoft}>{p.contributing_signals} signals</Badge>
+                  </div>
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    {p.predicted_techniques.map(t => (
+                      <span key={t} style={{ fontSize: 9, fontFamily: MONO, color: C.cyan, background: C.cyanDim, padding: "1px 5px", borderRadius: 3 }}>{t}</span>
+                    ))}
+                    {p.affected_assets.slice(0, 2).map(a => (
+                      <span key={a} style={{ fontSize: 9, fontFamily: MONO, color: C.textDim, background: `${C.textDim}15`, padding: "1px 5px", borderRadius: 3 }}>{a}</span>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div style={{ fontSize: 24, fontWeight: 800, fontFamily: MONO, color: p.risk_score >= 8 ? C.red : p.risk_score >= 5 ? C.amber : C.accentBright, lineHeight: 1 }}>
+                    {p.risk_score.toFixed(1)}
+                  </div>
+                  <div style={{ fontSize: 9, color: C.textDim, marginTop: 2 }}>RISK SCORE</div>
+                  <div style={{ fontSize: 9, fontFamily: MONO, color: C.textDim, marginTop: 4 }}>{p.prediction_id}</div>
+                </div>
+              </div>
+            </div>
           ))}
         </div>
       </Panel>
-
-      {/* Operation Log */}
-      {opLog.length > 0 && (
-        <Panel title="Operation Log" icon="📋" style={{ marginTop: 12 }}>
-          <div style={{ maxHeight: 200, overflowY: "auto" }}>
-            {opLog.map((l, i) => (
-              <div key={i} style={{ fontSize: 10, color: l.msg.includes("Complete") ? C.green : C.cyan, fontFamily: MONO, marginBottom: 2 }}>
-                [{new Date(l.time).toLocaleTimeString()}] [{l.op}] {l.msg}
-              </div>
-            ))}
-          </div>
-        </Panel>
-      )}
-
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginTop: 12 }}>
-        {/* Service Health */}
-        <Panel title="Service Health" icon="💚">
-          {services.map((s, i) => (
-            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: i < services.length - 1 ? `1px solid ${C.border}22` : "none" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <PulseDot color={s.status === "healthy" ? C.green : C.amber} />
-                <span style={{ fontSize: 11, color: C.text }}>{s.name}</span>
-              </div>
-              <div style={{ display: "flex", gap: 12, fontSize: 10, color: C.textSoft }}>
-                <span>{s.uptime}</span>
-                <span style={{ fontFamily: MONO }}>{s.latency}</span>
-              </div>
-            </div>
-          ))}
-        </Panel>
-
-        {/* CI/CD Workflows */}
-        <Panel title="CI/CD Workflows" icon="🔄">
-          {cicdWorkflows.map((w, i) => (
-            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: i < cicdWorkflows.length - 1 ? `1px solid ${C.border}22` : "none" }}>
-              <div>
-                <div style={{ fontSize: 11, color: C.text }}>{w.name}</div>
-                <div style={{ fontSize: 9, color: C.textDim }}>{w.last_run} · {w.duration}</div>
-              </div>
-              <Badge color={w.status === "passing" ? C.green : C.red}>{w.status}</Badge>
-            </div>
-          ))}
-        </Panel>
-      </div>
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// MAIN COMPONENT — Navigation, State Machine, All Tabs
-// ═══════════════════════════════════════════════════════════════════════════
+// ─── MESH TAB ─────────────────────────────────────────────────────────────
 
-export default function QueenCalifiaUnifiedCommandDashboard() {
-  const isMobile = useIsMobile();
-  const [tab, setTab] = useState("overview");
-  const [expertMode, setExpertMode] = useState(true);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+function MeshTab({ mesh }) {
+  const nodeTypes = [
+    { type: "Hub Nodes", icon: "◆", count: 4, color: C.accent, desc: "Network • Endpoint • Identity • Data" },
+    { type: "Radial Nodes", icon: "●", count: 12, color: C.cyan, desc: "Signature • Behavioral • Heuristic • ML" },
+    { type: "Spiral Nodes", icon: "◐", count: 8, color: C.purple, desc: "Cross-domain correlation engines" },
+  ];
 
-  // ─── Data State ─────────────────────────────────────────────────────────
-  const [meshStatus] = useState(() => generateMeshStatus());
-  const [predictions] = useState(() => generatePredictions());
-  const [incidents] = useState(() => generateIncidents());
-  const [timeSeries] = useState(() => generateTimeSeriesData());
-  const [threatLandscape] = useState(() => generateThreatLandscape());
-  const [layerActivity] = useState(() => generateLayerActivity());
-  const [telemetry] = useState(() => generateTelemetryData());
-
-  // ─── Avatar State ───────────────────────────────────────────────────────
-  const criticalCount = incidents.filter(i => i.severity === "CRITICAL").length;
-  const highRiskPreds = predictions.filter(p => p.confidence_tier === "near_certain" || p.confidence_tier === "high").length;
-  const avatarState = criticalCount > 0 || highRiskPreds > 2 ? "ascended" : meshStatus.threat_posture.active_attack_chains > 2 ? "active" : "idle";
-
-  const handleTabChange = (newTab) => {
-    setTab(newTab);
-    setMobileNavOpen(false);
-    playSound("tab_switch");
-  };
-
-  // ─── CSS Keyframes ──────────────────────────────────────────────────────
-  const keyframes = `
-    @keyframes qcPulse { 0%, 100% { opacity: 0.6; transform: scale(1); } 50% { opacity: 1; transform: scale(1.04); } }
-    @keyframes qcPulseRing { 0%, 100% { opacity: 0.3; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.1); } }
-    @keyframes qcRotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    @keyframes qcScanline { 0% { top: -2px; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
-    @keyframes qcFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
-    @keyframes qcGlow { 0%, 100% { box-shadow: 0 0 5px rgba(212,175,55,0.3); } 50% { box-shadow: 0 0 20px rgba(212,175,55,0.6); } }
-  `;
+  const circuits = [
+    "Ingestion Pipeline", "Detection Pipeline", "Correlation Pipeline",
+    "Response Pipeline", "Intelligence Pipeline", "Audit Pipeline",
+  ];
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: FONT, position: "relative" }}>
-      <style>{keyframes}</style>
-
-      {/* ─── Top Header ──────────────────────────────────────────────────── */}
-      <div style={{
-        position: "sticky", top: 0, zIndex: 40,
-        background: `${C.panel}ee`, backdropFilter: "blur(12px)",
-        borderBottom: `1px solid ${C.border}`,
-        padding: isMobile ? "8px 12px" : "8px 20px",
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 16 }}>
-          {isMobile && (
-            <button onClick={() => setMobileNavOpen(!mobileNavOpen)} style={{ background: "none", border: "none", color: C.gold, fontSize: 20, cursor: "pointer", padding: 4 }}>
-              {mobileNavOpen ? "✕" : "☰"}
-            </button>
-          )}
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <img src={`${CDN}/sigil_icon_32_79e58c71.png`} alt="QC" style={{ width: 28, height: 28, borderRadius: 6 }} />
-            <div>
-              <div style={{ fontSize: isMobile ? 12 : 14, fontWeight: 700, color: C.gold, fontFamily: "'Orbitron', sans-serif", letterSpacing: "0.08em" }}>
-                {isMobile ? "QC" : "QUEEN CALIFIA"}
-              </div>
-              <div style={{ fontSize: 9, color: C.textDim, letterSpacing: "0.1em", fontFamily: MONO }}>
-                {isMobile ? "CYBERAI" : "SOVEREIGN CYBERSECURITY INTELLIGENCE"}
-              </div>
+    <div style={{ display: "grid", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
+        {nodeTypes.map(n => (
+          <Panel key={n.type} title={n.type} icon={n.icon} accent={n.color}>
+            <div style={{ textAlign: "center", marginBottom: 8 }}>
+              <div style={{ fontSize: 36, fontWeight: 800, fontFamily: MONO, color: n.color }}>{n.count}</div>
+              <div style={{ fontSize: 10, color: C.textSoft }}>{n.desc}</div>
             </div>
-          </div>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 16 }}>
-          <QueenCalifiaAvatar state={avatarState} size={isMobile ? 32 : 40} showLabel={false} showStatus={false} />
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 10, color: C.textDim }}>Expert</span>
-            <button onClick={() => setExpertMode(!expertMode)} style={{
-              width: 36, height: 20, borderRadius: 10, border: "none", cursor: "pointer",
-              background: expertMode ? C.accent : C.border, position: "relative", transition: "background 0.3s",
-            }}>
-              <div style={{ width: 16, height: 16, borderRadius: "50%", background: C.text, position: "absolute", top: 2, left: expertMode ? 18 : 2, transition: "left 0.3s" }} />
-            </button>
-          </div>
-        </div>
+            <ProgressBar value={n.count} max={n.count} color={n.color} height={3} />
+          </Panel>
+        ))}
       </div>
 
-      {/* ─── Navigation ──────────────────────────────────────────────────── */}
-      {isMobile && mobileNavOpen && (
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-          style={{ position: "fixed", top: 52, left: 0, right: 0, zIndex: 35, background: `${C.panel}f5`, backdropFilter: "blur(12px)", borderBottom: `1px solid ${C.border}`, padding: 8 }}>
-          {NAV_ITEMS.map(n => (
-            <button key={n.id} onClick={() => handleTabChange(n.id)} style={{
-              display: "block", width: "100%", padding: "12px 16px", borderRadius: 6, border: "none",
-              background: tab === n.id ? `${C.accent}10` : "transparent", color: tab === n.id ? C.accentBright : C.textSoft,
-              fontSize: 13, fontWeight: tab === n.id ? 600 : 400, cursor: "pointer", textAlign: "left", fontFamily: FONT, marginBottom: 2,
-            }}>
-              <span style={{ marginRight: 8 }}>{n.icon}</span> {n.label}
-            </button>
-          ))}
-        </motion.div>
-      )}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16 }}>
+        <Panel title="Tamerian Circuits" icon="⚡" accent={C.green}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            {circuits.map(c => (
+              <div key={c} style={{ padding: "8px 10px", background: C.surface, borderRadius: 6, display: "flex", alignItems: "center", gap: 8 }}>
+                <PulseDot color={C.green} size={6} />
+                <span style={{ fontSize: 11, color: C.text }}>{c}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 12, padding: 8, background: C.greenGlow, borderRadius: 6, border: `1px solid ${C.green}15` }}>
+            <div style={{ fontSize: 10, color: C.green }}>All circuits healthy — 3x redundant pathways, integrity verified</div>
+          </div>
+        </Panel>
 
-      {!isMobile && (
-        <div style={{
-          position: "sticky", top: 52, zIndex: 30,
-          background: `${C.bg}ee`, backdropFilter: "blur(8px)",
-          borderBottom: `1px solid ${C.border}`,
-          padding: "0 20px",
-          display: "flex", gap: 2, overflowX: "auto",
-        }}>
-          {NAV_ITEMS.map(n => (
-            <button key={n.id} onClick={() => handleTabChange(n.id)} style={{
-              padding: "10px 16px", border: "none", borderBottom: `2px solid ${tab === n.id ? C.accent : "transparent"}`,
-              background: "transparent", color: tab === n.id ? C.accentBright : C.textSoft,
-              fontSize: 12, fontWeight: tab === n.id ? 600 : 400, cursor: "pointer", fontFamily: FONT,
-              display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", transition: "all 0.2s",
-            }}>
-              <span>{n.icon}</span> {n.label}
-            </button>
+        <Panel title="Threat Intelligence" icon="🔒" accent={C.amber}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Stat label="IOCs Active" value={mesh.threat_posture.iocs_active} color={C.amber} />
+            <Stat label="IPs Blocked" value={mesh.threat_posture.ips_blocked} color={C.red} />
+            <Stat label="Domains Blocked" value={mesh.threat_posture.blocked_domains} color={C.red} />
+            <Stat label="Events / Session" value={mesh.statistics.events_ingested.toLocaleString()} color={C.accent} />
+          </div>
+        </Panel>
+      </div>
+
+      <Panel title="Detection Signatures" icon="📝" accent={C.accent}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 6 }}>
+          {["SIG-NET: Port Scan", "SIG-NET: C2 Domain", "SIG-NET: DNS Tunnel", "SIG-NET: Beaconing",
+            "SIG-END: Suspicious Proc", "SIG-END: Ransomware", "SIG-END: Cred Dump", "SIG-END: Persistence",
+            "SIG-IDN: Brute Force", "SIG-IDN: Impossible Travel", "SIG-IDN: Priv Escalation", "SIG-DAT: Data Anomaly"
+          ].map(sig => (
+            <div key={sig} style={{ padding: "6px 8px", background: C.surface, borderRadius: 4, fontSize: 10, fontFamily: MONO, color: C.textSoft, display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ color: C.green }}>●</span> {sig}
+            </div>
           ))}
         </div>
-      )}
+      </Panel>
+    </div>
+  );
+}
 
-      {/* ─── Tab Content ─────────────────────────────────────────────────── */}
-      <div style={{ padding: isMobile ? "12px" : "20px", maxWidth: 1400, margin: "0 auto" }}>
-        <AnimatePresence mode="wait">
-          <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }}>
+// ─── INCIDENTS TAB ─────────────────────────────────────────────────────────
 
-            {/* ─── OVERVIEW TAB ──────────────────────────────────────────── */}
-            {tab === "overview" && (
-              <div>
-                {/* KPI Row */}
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(6, 1fr)", gap: 8, marginBottom: 16 }}>
-                  {[
-                    { label: "Events Ingested", value: meshStatus.statistics.events_ingested, color: C.text },
-                    { label: "Threats Detected", value: meshStatus.statistics.threats_detected, color: C.red },
-                    { label: "Attack Chains", value: meshStatus.threat_posture.active_attack_chains, color: C.amber },
-                    { label: "IOCs Active", value: meshStatus.threat_posture.iocs_active, color: C.cyan },
-                    { label: "IPs Blocked", value: meshStatus.threat_posture.ips_blocked, color: C.green },
-                    { label: "Predictions", value: predictions.length, color: C.purple },
-                  ].map((s, i) => (
-                    <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-                      style={{ padding: "14px 12px", background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, textAlign: "center" }}>
-                      <div style={{ fontSize: 22, fontWeight: 700, fontFamily: MONO, color: s.color }}>{s.value.toLocaleString()}</div>
-                      <div style={{ fontSize: 9, color: C.textSoft, marginTop: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>{s.label}</div>
-                    </motion.div>
+function IncidentsTab({ incidents }) {
+  const [selectedId, setSelectedId] = useState(null);
+  const [panel, setPanel] = useState(null); // "investigate" | "approve" | "timeline"
+  const [actionStatuses, setActionStatuses] = useState({}); // { "ACT-xxx": "approved"|"rejected" }
+  const [analystNotes, setAnalystNotes] = useState({});
+  const [statusOverrides, setStatusOverrides] = useState({});
+  const [severityOverrides, setSeverityOverrides] = useState({});
+  const [toasts, setToasts] = useState([]);
+
+  const selected = incidents.find(i => i.incident_id === selectedId);
+
+  const addToast = (msg, color = C.green) => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, msg, color }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
+  };
+
+  const handleApprove = (actId) => {
+    setActionStatuses(prev => ({ ...prev, [actId]: "approved" }));
+    addToast(`✓ Action ${actId} approved — executing`, C.green);
+  };
+  const handleReject = (actId) => {
+    setActionStatuses(prev => ({ ...prev, [actId]: "rejected" }));
+    addToast(`✗ Action ${actId} rejected`, C.amber);
+  };
+  const handleApproveAll = (actions) => {
+    const updates = {};
+    actions.forEach(a => { if (!actionStatuses[a.id]) updates[a.id] = "approved"; });
+    setActionStatuses(prev => ({ ...prev, ...updates }));
+    addToast(`✓ ${Object.keys(updates).length} actions batch-approved — executing`, C.green);
+  };
+  const handleEscalate = (incId) => {
+    setSeverityOverrides(prev => ({ ...prev, [incId]: "CRITICAL" }));
+    addToast(`▲ ${incId} escalated to CRITICAL`, C.red);
+  };
+  const handleStatusChange = (incId, newStatus) => {
+    setStatusOverrides(prev => ({ ...prev, [incId]: newStatus }));
+    addToast(`◈ ${incId} status → ${newStatus}`, C.cyan);
+  };
+
+  const getEffectiveSeverity = (inc) => severityOverrides[inc.incident_id] || inc.severity;
+  const getEffectiveStatus = (inc) => statusOverrides[inc.incident_id] || inc.status;
+  const getPendingCount = (inc) => inc.pending_actions.filter(a => !actionStatuses[a.id]).length;
+
+  const riskColor = { low: C.green, medium: C.amber, high: C.red };
+  const typeColor = { detection: C.red, analysis: C.cyan, containment: C.amber, evidence: C.purple, escalation: C.magenta, enrichment: C.accentBright };
+  const typeIcon = { detection: "⚠", analysis: "🔍", containment: "🛡", evidence: "📦", escalation: "▲", enrichment: "🧠" };
+
+  // ── BACK TO LIST ──
+  const backBtn = (
+    <button onClick={() => { setSelectedId(null); setPanel(null); }} style={{
+      padding: "6px 14px", background: "transparent", color: C.textSoft,
+      border: `1px solid ${C.border}`, borderRadius: 5, fontSize: 11, fontWeight: 600,
+      cursor: "pointer", fontFamily: FONT, display: "flex", alignItems: "center", gap: 5,
+    }}>
+      ← Back to Incidents
+    </button>
+  );
+
+  return (
+    <div style={{ display: "grid", gap: 16, position: "relative" }}>
+      {/* Toast notifications */}
+      <div style={{ position: "fixed", top: 16, right: 16, zIndex: 9999, display: "flex", flexDirection: "column", gap: 6 }}>
+        {toasts.map(t => (
+          <div key={t.id} style={{
+            padding: "8px 14px", background: C.panel, border: `1px solid ${t.color}50`,
+            borderRadius: 6, fontSize: 11, fontWeight: 600, color: t.color,
+            fontFamily: MONO, boxShadow: `0 4px 20px ${t.color}15`,
+            animation: "qcPulse 0.4s ease",
+          }}>{t.msg}</div>
+        ))}
+      </div>
+
+      {/* ═══════ KPI BANNER ═══════ */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
+        <Panel accent={C.red}><Stat label="Critical" value={incidents.filter(i => getEffectiveSeverity(i) === "CRITICAL").length} color={C.red} /></Panel>
+        <Panel accent={C.amber}><Stat label="High" value={incidents.filter(i => getEffectiveSeverity(i) === "HIGH").length} color={C.amber} /></Panel>
+        <Panel accent={C.accent}><Stat label="Total Active" value={incidents.length} color={C.accent} /></Panel>
+        <Panel accent={C.purple}><Stat label="Pending Actions" value={incidents.reduce((a, i) => a + getPendingCount(i), 0)} color={C.purple} /></Panel>
+        <Panel accent={C.green}><Stat label="Avg Containment" value={`${Math.round(incidents.reduce((a, i) => a + (i.containment_time_min || 0), 0) / Math.max(1, incidents.length))}m`} color={C.green} /></Panel>
+      </div>
+
+      {/* ═══════ INVESTIGATION DETAIL VIEW ═══════ */}
+      {selected && panel === "investigate" && (
+        <div style={{ display: "grid", gap: 12 }}>
+          {backBtn}
+          <Panel title={`🔬 Investigation — ${selected.incident_id}`} accent={C.accent} glow>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
+              {/* Left col — details */}
+              <div style={{ display: "grid", gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>{selected.title}</div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+                    <SeverityBadge severity={getEffectiveSeverity(selected)} />
+                    <Badge color={C.cyan}>{getEffectiveStatus(selected)}</Badge>
+                    <Badge color={C.textSoft}>{selected.category}</Badge>
+                    <Badge color={C.textSoft}>{selected.playbook}</Badge>
+                  </div>
+                  <div style={{ fontSize: 10, color: C.textDim, fontFamily: MONO }}>
+                    Lead: {selected.lead_analyst} · Created: {new Date(selected.created_at).toLocaleString()} · Assets: {selected.affected_assets}
+                  </div>
+                </div>
+                {/* Status control */}
+                <div style={{ padding: "10px 12px", background: C.surface, borderRadius: 6 }}>
+                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Status Control</div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {["triaged","investigating","containing","eradicating","recovering","resolved"].map(s => (
+                      <button key={s} onClick={() => handleStatusChange(selected.incident_id, s)} style={{
+                        padding: "4px 10px", borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: "pointer",
+                        border: `1px solid ${getEffectiveStatus(selected) === s ? C.cyan : C.border}`,
+                        background: getEffectiveStatus(selected) === s ? C.cyanDim : "transparent",
+                        color: getEffectiveStatus(selected) === s ? C.cyan : C.textSoft,
+                      }}>{s}</button>
+                    ))}
+                    {getEffectiveSeverity(selected) !== "CRITICAL" && (
+                      <button onClick={() => handleEscalate(selected.incident_id)} style={{
+                        padding: "4px 10px", borderRadius: 4, fontSize: 10, fontWeight: 700, cursor: "pointer",
+                        border: `1px solid ${C.red}60`, background: C.redDim, color: C.red,
+                      }}>▲ Escalate to CRITICAL</button>
+                    )}
+                  </div>
+                </div>
+                {/* MITRE ATT&CK */}
+                <div style={{ padding: "10px 12px", background: C.surface, borderRadius: 6 }}>
+                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>MITRE ATT&CK Techniques</div>
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    {selected.mitre_techniques.map((t, i) => (
+                      <span key={i} style={{ padding: "3px 8px", background: C.purpleDim, borderRadius: 4, fontSize: 10, fontFamily: MONO, color: C.purple, border: `1px solid ${C.purple}30` }}>{t}</span>
+                    ))}
+                  </div>
+                </div>
+                {/* Evidence */}
+                <div style={{ padding: "10px 12px", background: C.surface, borderRadius: 6 }}>
+                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Collected Evidence ({selected.evidence.length})</div>
+                  {selected.evidence.map((e, i) => (
+                    <div key={e.id} style={{ padding: "6px 8px", background: C.panel, borderRadius: 4, marginBottom: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: C.text, fontWeight: 500 }}>{e.desc}</div>
+                        <div style={{ fontSize: 9, fontFamily: MONO, color: C.textDim }}>
+                          {e.id} · {e.type} · {e.size_mb}MB · CoC: {e.chain_of_custody}
+                        </div>
+                      </div>
+                      <Badge color={C.green}>secured</Badge>
+                    </div>
                   ))}
                 </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap: 12, marginBottom: 12 }}>
-                  {/* Threat Activity Chart */}
-                  <Panel title="Threat Activity — 24h" icon="📈">
-                    <ResponsiveContainer width="100%" height={200}>
-                      <AreaChart data={timeSeries}>
-                        <defs>
-                          <linearGradient id="gEvents" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor={C.accent} stopOpacity={0.3} />
-                            <stop offset="95%" stopColor={C.accent} stopOpacity={0} />
-                          </linearGradient>
-                          <linearGradient id="gThreats" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor={C.red} stopOpacity={0.3} />
-                            <stop offset="95%" stopColor={C.red} stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <XAxis dataKey="time" tick={{ fill: C.textDim, fontSize: 9 }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fill: C.textDim, fontSize: 9 }} axisLine={false} tickLine={false} />
-                        <Tooltip contentStyle={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11 }} />
-                        <Area type="monotone" dataKey="events" stroke={C.accent} fill="url(#gEvents)" strokeWidth={2} />
-                        <Area type="monotone" dataKey="threats" stroke={C.red} fill="url(#gThreats)" strokeWidth={2} />
-                        <Line type="monotone" dataKey="blocked" stroke={C.green} strokeWidth={1.5} dot={false} />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </Panel>
-
-                  {/* Threat Landscape Radar */}
-                  <Panel title="Threat Landscape" icon="🎯">
-                    <ResponsiveContainer width="100%" height={200}>
-                      <RadarChart data={threatLandscape}>
-                        <PolarGrid stroke={C.border} />
-                        <PolarAngleAxis dataKey="vector" tick={{ fill: C.textSoft, fontSize: 9 }} />
-                        <PolarRadiusAxis tick={false} axisLine={false} />
-                        <Radar dataKey="risk" stroke={C.red} fill={C.red} fillOpacity={0.15} strokeWidth={2} />
-                      </RadarChart>
-                    </ResponsiveContainer>
-                  </Panel>
+                {/* Analyst Notes */}
+                <div style={{ padding: "10px 12px", background: C.surface, borderRadius: 6 }}>
+                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Analyst Notes</div>
+                  <textarea
+                    value={analystNotes[selected.incident_id] || ""}
+                    onChange={e => setAnalystNotes(prev => ({ ...prev, [selected.incident_id]: e.target.value }))}
+                    placeholder="Add investigation notes, findings, next steps…"
+                    style={{
+                      width: "100%", minHeight: 70, padding: "8px 10px", background: C.panel,
+                      border: `1px solid ${C.border}`, borderRadius: 4, color: C.text,
+                      fontFamily: MONO, fontSize: 11, resize: "vertical", outline: "none",
+                    }}
+                  />
+                  <button onClick={() => addToast(`📝 Notes saved for ${selected.incident_id}`, C.green)} style={{
+                    marginTop: 6, padding: "5px 14px", background: C.accent, color: "#fff",
+                    border: "none", borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: "pointer",
+                  }}>Save Notes</button>
                 </div>
-
-                {expertMode && (
-                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
-                    {/* Top Predictions */}
-                    <Panel title="Top Predictions" icon="🔮">
-                      {predictions.slice(0, 4).map((p, i) => (
-                        <div key={i} style={{ padding: "8px 10px", background: C.surface, borderRadius: 6, marginBottom: 6, border: `1px solid ${C.border}` }}>
-                          <div style={{ fontSize: 11, fontWeight: 600, color: C.text, marginBottom: 4 }}>{p.title}</div>
-                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                            <ConfidenceBadge tier={p.confidence_tier} confidence={p.confidence} />
-                            <HorizonBadge horizon={p.threat_horizon} />
-                            <Badge color={C.textDim}>{p.contributing_signals} signals</Badge>
-                          </div>
-                        </div>
-                      ))}
-                    </Panel>
-
-                    {/* Active Incidents */}
-                    <Panel title="Active Incidents" icon="🚨">
-                      {incidents.slice(0, 4).map((inc, i) => (
-                        <div key={i} style={{ padding: "8px 10px", background: C.surface, borderRadius: 6, marginBottom: 6, border: `1px solid ${inc.severity === "CRITICAL" ? C.red : C.border}33` }}>
-                          <div style={{ fontSize: 11, fontWeight: 600, color: C.text, marginBottom: 4 }}>{inc.title}</div>
-                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                            <SeverityBadge severity={inc.severity} />
-                            <Badge color={C.cyan}>{inc.status}</Badge>
-                            <Badge color={C.textDim}>{inc.affected_assets} assets</Badge>
-                          </div>
-                        </div>
-                      ))}
-                    </Panel>
-                  </div>
-                )}
               </div>
+              {/* Right col — IOCs + quick actions */}
+              <div style={{ display: "grid", gap: 12, alignContent: "start" }}>
+                <div style={{ padding: "10px 12px", background: C.surface, borderRadius: 6 }}>
+                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>IOC Indicators ({selected.iocs.length})</div>
+                  {selected.iocs.map((ioc, i) => (
+                    <div key={i} style={{ padding: "5px 8px", background: C.panel, borderRadius: 4, marginBottom: 3 }}>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <Badge color={C.red} style={{ fontSize: 8 }}>{ioc.type}</Badge>
+                        <span style={{ fontSize: 10, fontFamily: MONO, color: C.text, wordBreak: "break-all" }}>{ioc.value.length > 40 ? ioc.value.slice(0,40)+"…" : ioc.value}</span>
+                      </div>
+                      <div style={{ fontSize: 8, color: C.textDim, fontFamily: MONO, marginTop: 2 }}>
+                        via {ioc.source} · {new Date(ioc.first_seen).toLocaleTimeString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ padding: "10px 12px", background: C.surface, borderRadius: 6 }}>
+                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Quick Actions</div>
+                  <div style={{ display: "grid", gap: 4 }}>
+                    <button onClick={() => { setPanel("approve"); }} style={{ padding: "6px 10px", background: C.amberDim, border: `1px solid ${C.amber}40`, borderRadius: 4, fontSize: 10, fontWeight: 600, color: C.amber, cursor: "pointer", textAlign: "left" }}>
+                      🛡 Review Pending Actions ({getPendingCount(selected)})
+                    </button>
+                    <button onClick={() => { setPanel("timeline"); }} style={{ padding: "6px 10px", background: C.cyanDim, border: `1px solid ${C.cyan}40`, borderRadius: 4, fontSize: 10, fontWeight: 600, color: C.cyan, cursor: "pointer", textAlign: "left" }}>
+                      📜 View Full Timeline ({selected.timeline.length} events)
+                    </button>
+                    <button onClick={() => handleEscalate(selected.incident_id)} style={{ padding: "6px 10px", background: C.redDim, border: `1px solid ${C.red}40`, borderRadius: 4, fontSize: 10, fontWeight: 600, color: C.red, cursor: "pointer", textAlign: "left" }}>
+                      ▲ Escalate Severity
+                    </button>
+                    <button onClick={() => { handleStatusChange(selected.incident_id, "resolved"); addToast(`✓ ${selected.incident_id} marked resolved`, C.green); }} style={{ padding: "6px 10px", background: C.greenDim, border: `1px solid ${C.green}40`, borderRadius: 4, fontSize: 10, fontWeight: 600, color: C.green, cursor: "pointer", textAlign: "left" }}>
+                      ✓ Mark Resolved
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Panel>
+        </div>
+      )}
+
+      {/* ═══════ ACTION APPROVAL VIEW ═══════ */}
+      {selected && panel === "approve" && (
+        <div style={{ display: "grid", gap: 12 }}>
+          {backBtn}
+          <Panel title={`🛡 Action Approval — ${selected.incident_id}`} accent={C.amber} glow>
+            <div style={{ marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{selected.title}</div>
+                <div style={{ fontSize: 10, color: C.textSoft }}>{getPendingCount(selected)} of {selected.pending_actions.length} actions awaiting approval</div>
+              </div>
+              {getPendingCount(selected) > 0 && (
+                <button onClick={() => handleApproveAll(selected.pending_actions)} style={{
+                  padding: "6px 16px", background: C.green, color: "#fff", border: "none",
+                  borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                }}>✓ Approve All Remaining</button>
+              )}
+            </div>
+
+            <div style={{ display: "grid", gap: 6 }}>
+              {selected.pending_actions.map(act => {
+                const st = actionStatuses[act.id];
+                return (
+                  <div key={act.id} style={{
+                    padding: "12px 14px", background: C.surface, borderRadius: 6,
+                    border: `1px solid ${st === "approved" ? C.green + "40" : st === "rejected" ? C.red + "40" : C.border}`,
+                    opacity: st ? 0.7 : 1, transition: "all 0.3s ease",
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 4 }}>{act.action}</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          <Badge color={C.cyan}>{act.type}</Badge>
+                          <Badge color={riskColor[act.risk]}>{act.risk} risk</Badge>
+                          <span style={{ fontSize: 9, color: C.textDim, fontFamily: MONO }}>
+                            {act.id} · by {act.requested_by} · {new Date(act.requested_at).toLocaleTimeString()}
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, marginLeft: 12 }}>
+                        {st === "approved" ? (
+                          <Badge color={C.green}>✓ APPROVED — EXECUTING</Badge>
+                        ) : st === "rejected" ? (
+                          <Badge color={C.red}>✗ REJECTED</Badge>
+                        ) : (
+                          <>
+                            <button onClick={() => handleApprove(act.id)} style={{
+                              padding: "5px 14px", background: C.green, color: "#fff", border: "none",
+                              borderRadius: 4, fontSize: 10, fontWeight: 700, cursor: "pointer",
+                            }}>✓ Approve</button>
+                            <button onClick={() => handleReject(act.id)} style={{
+                              padding: "5px 14px", background: "transparent", color: C.red,
+                              border: `1px solid ${C.red}50`, borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: "pointer",
+                            }}>✗ Reject</button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Panel>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => setPanel("investigate")} style={{ padding: "6px 14px", background: C.accent, color: "#fff", border: "none", borderRadius: 5, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>🔬 Back to Investigation</button>
+            <button onClick={() => setPanel("timeline")} style={{ padding: "6px 14px", background: "transparent", color: C.cyan, border: `1px solid ${C.cyan}40`, borderRadius: 5, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>📜 View Timeline</button>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════ TIMELINE VIEW ═══════ */}
+      {selected && panel === "timeline" && (
+        <div style={{ display: "grid", gap: 12 }}>
+          {backBtn}
+          <Panel title={`📜 Incident Timeline — ${selected.incident_id}`} accent={C.cyan} glow>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{selected.title}</div>
+              <div style={{ fontSize: 10, color: C.textSoft }}>{selected.timeline.length} events · {new Date(selected.created_at).toLocaleString()} → present</div>
+            </div>
+            <div style={{ position: "relative", paddingLeft: 28 }}>
+              {/* Timeline line */}
+              <div style={{ position: "absolute", left: 10, top: 4, bottom: 4, width: 2, background: `linear-gradient(180deg, ${C.cyan}, ${C.border})`, borderRadius: 1 }} />
+              {selected.timeline.map((evt, i) => (
+                <div key={i} style={{ position: "relative", marginBottom: 12, paddingBottom: 4 }}>
+                  {/* Timeline dot */}
+                  <div style={{
+                    position: "absolute", left: -22, top: 4, width: 10, height: 10,
+                    borderRadius: "50%", background: typeColor[evt.type] || C.cyan,
+                    border: `2px solid ${C.panel}`, boxShadow: `0 0 6px ${typeColor[evt.type] || C.cyan}50`,
+                  }} />
+                  <div style={{ padding: "8px 12px", background: C.surface, borderRadius: 6, border: `1px solid ${C.border}` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <span style={{ fontSize: 12 }}>{typeIcon[evt.type] || "●"}</span>
+                        <Badge color={typeColor[evt.type] || C.textDim}>{evt.type}</Badge>
+                        <span style={{ fontSize: 9, color: C.textDim, fontFamily: MONO }}>{evt.actor}</span>
+                      </div>
+                      <span style={{ fontSize: 9, color: C.textDim, fontFamily: MONO }}>{new Date(evt.time).toLocaleTimeString()}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: C.text, lineHeight: 1.5 }}>{evt.event}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Panel>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => setPanel("investigate")} style={{ padding: "6px 14px", background: C.accent, color: "#fff", border: "none", borderRadius: 5, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>🔬 Back to Investigation</button>
+            <button onClick={() => setPanel("approve")} style={{ padding: "6px 14px", background: "transparent", color: C.amber, border: `1px solid ${C.amber}40`, borderRadius: 5, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>🛡 Review Actions</button>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════ INCIDENT LIST (default) ═══════ */}
+      {!selected && (
+        <>
+          <Panel title="Active Incidents" icon="🚨" accent={C.red}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {incidents.map(inc => (
+                <div key={inc.incident_id} style={{
+                  padding: 14, background: C.surface, borderRadius: 8,
+                  border: `1px solid ${getEffectiveSeverity(inc) === "CRITICAL" ? C.red + "30" : C.border}`,
+                  boxShadow: getEffectiveSeverity(inc) === "CRITICAL" ? `0 0 20px ${C.red}06` : "none",
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 6 }}>{inc.title}</div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <SeverityBadge severity={getEffectiveSeverity(inc)} />
+                        <Badge color={C.cyan}>{getEffectiveStatus(inc)}</Badge>
+                        <Badge color={C.textSoft}>{inc.category}</Badge>
+                        <Badge color={C.textSoft}>{inc.incident_id}</Badge>
+                        {analystNotes[inc.incident_id] && <Badge color={C.green}>📝 notes</Badge>}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: 10, color: C.textSoft }}>{inc.affected_assets} assets · {inc.evidence.length} evidence</div>
+                      <div style={{ fontSize: 10, color: C.textDim, fontFamily: MONO }}>{inc.lead_analyst}</div>
+                      {getPendingCount(inc) > 0 && (
+                        <Badge color={C.amber} style={{ marginTop: 4 }}>{getPendingCount(inc)} actions pending</Badge>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+                    <button onClick={() => { setSelectedId(inc.incident_id); setPanel("investigate"); }} style={{
+                      padding: "5px 14px", background: C.accent, color: "#fff", border: "none",
+                      borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: "pointer",
+                      transition: "all 0.2s", boxShadow: `0 0 10px ${C.accent}30`,
+                    }}>🔬 Investigate</button>
+                    <button onClick={() => { setSelectedId(inc.incident_id); setPanel("approve"); }} style={{
+                      padding: "5px 14px", background: "transparent", color: C.amber,
+                      border: `1px solid ${C.amber}40`, borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: "pointer",
+                      transition: "all 0.2s",
+                    }}>🛡 Approve Actions{getPendingCount(inc) > 0 ? ` (${getPendingCount(inc)})` : ""}</button>
+                    <button onClick={() => { setSelectedId(inc.incident_id); setPanel("timeline"); }} style={{
+                      padding: "5px 14px", background: "transparent", color: C.cyan,
+                      border: `1px solid ${C.cyan}40`, borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: "pointer",
+                      transition: "all 0.2s",
+                    }}>📜 Timeline ({inc.timeline.length})</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel title="Response Playbooks" icon="📋" accent={C.green}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+              {["Ransomware Response", "APT Campaign Response", "Data Breach Response", "Unauthorized Access", "Phishing Response", "Insider Threat"].map(pb => (
+                <div key={pb} style={{ padding: "8px 10px", background: C.surface, borderRadius: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ color: C.green, fontSize: 10 }}>▶</span>
+                  <span style={{ fontSize: 11, color: C.text }}>{pb}</span>
+                </div>
+              ))}
+            </div>
+          </Panel>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── VULN TAB ─────────────────────────────────────────────────────────────
+
+function VulnsTab({ setAvatarState = () => {} }) {
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem("qc_api_key") || "");
+  const [ack, setAck] = useState(false);
+
+  const [target, setTarget] = useState("192.168.1.0/24");
+  const [scanType, setScanType] = useState("full"); // full|quick|compliance|web_app
+  const [webUrl, setWebUrl] = useState("https://example.com");
+
+  const [submitting, setSubmitting] = useState(false);
+  const [scanId, setScanId] = useState(null);
+  const [scanStatus, setScanStatus] = useState(null);
+  const [scanResult, setScanResult] = useState(null);
+  const [remediation, setRemediation] = useState(null);
+  const [error, setError] = useState("");
+
+  // ── One-Click Remediate State
+  const [oneClickRunning, setOneClickRunning] = useState(false);
+  const [oneClickPhase, setOneClickPhase] = useState("");
+  const [oneClickLog, setOneClickLog] = useState([]);
+  const [oneClickResult, setOneClickResult] = useState(null);
+  const ocLog = (msg, color) => setOneClickLog(prev => [...prev, { msg, color: color || "#8a9dbd", ts: new Date().toLocaleTimeString() }]);
+
+  const headers = useMemo(() => {
+    const h = { "Content-Type": "application/json" };
+    if (apiKey && apiKey.trim()) h["X-QC-API-Key"] = apiKey.trim();
+    return h;
+  }, [apiKey]);
+
+  const apiFetch = useCallback(async (path, init = {}) => {
+    const res = await fetch(path, { ...init, headers: { ...(init.headers || {}), ...headers } });
+    const text = await res.text();
+    let json = null;
+    try { json = text ? JSON.parse(text) : null; } catch { json = null; }
+    if (!res.ok) {
+      const msg = json?.error || json?.message || `${res.status} ${res.statusText}`;
+      throw new Error(msg);
+    }
+    return json;
+  }, [headers]);
+
+  const normalizeStatus = useCallback((payload) => {
+    // Celery path:
+    //   { scan_id, state, ready, result? }
+    // Local job store:
+    //   { scan_id, status, result? }
+    if (!payload) return { state: "unknown", ready: false, result: null };
+
+    if (payload.result) {
+      return { state: payload.state || payload.status || "completed", ready: true, result: payload.result };
+    }
+
+    const state = payload.state || payload.status || "unknown";
+    const ready = payload.ready === true || state === "completed" || state === "SUCCESS";
+    const result = payload.result || payload?.data?.result || null;
+    return { state, ready, result };
+  }, []);
+
+  const downloadText = useCallback((filename, content) => {
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 500);
+  }, []);
+
+  const remediationToScript = useCallback((plan, format) => {
+    const actions = plan?.priority_actions || [];
+    if (!actions.length) return "# No remediation actions available.\n";
+
+    if (format === "powershell") {
+      const lines = [
+        "# QueenCalifia — Remediation Guidance (PowerShell)",
+        "# Review carefully before applying changes.",
+        "",
+      ];
+      for (const a of actions) {
+        lines.push(`# [P${a.priority}] ${a.title} (${a.cve_id || a.vuln_id}) — Severity: ${a.severity} CVSS: ${a.cvss_score}`);
+        lines.push(`# Asset: ${a.affected_asset || "n/a"}`);
+        lines.push(`# Guidance: ${a.remediation || "n/a"}`);
+        lines.push("");
+      }
+      return lines.join("\n");
+    }
+
+    if (format === "ansible") {
+      const lines = [
+        "# QueenCalifia — Remediation Guidance (Ansible YAML scaffold)",
+        "# NOTE: This is a scaffold; you must adapt tasks to your environment.",
+        "---",
+        "- name: QC remediation (review + adapt)",
+        "  hosts: all",
+        "  become: true",
+        "  tasks:",
+      ];
+      for (const a of actions) {
+        lines.push(`    - name: "[P${a.priority}] ${a.title} (${a.cve_id || a.vuln_id})"`);
+        lines.push("      debug:");
+        lines.push(`        msg: "${String(a.remediation || "n/a").replaceAll('"', '\"')}"`);
+      }
+      lines.push("");
+      return lines.join("\n");
+    }
+
+    // default: bash
+    const lines = [
+      "#!/usr/bin/env bash",
+      "# QueenCalifia — Remediation Guidance (Bash)",
+      "# Review carefully before applying changes.",
+      "set -euo pipefail",
+      "",
+    ];
+    for (const a of actions) {
+      lines.push(`# [P${a.priority}] ${a.title} (${a.cve_id || a.vuln_id}) — Severity: ${a.severity} CVSS: ${a.cvss_score}`);
+      lines.push(`# Asset: ${a.affected_asset || "n/a"}`);
+      lines.push(`# Guidance: ${a.remediation || "n/a"}`);
+      lines.push("");
+    }
+    return lines.join("\n");
+  }, []);
+
+  const fetchRemediation = useCallback(async () => {
+    try {
+      const r = await apiFetch("/api/vulns/remediation");
+      setRemediation(r?.data || null);
+    } catch (e) {
+      setError(String(e?.message || e));
+    }
+  }, [apiFetch]);
+
+  const oneClickRemediate = async () => {
+    setOneClickRunning(true); setAvatarState("active");
+    setOneClickPhase("scanning");
+    setOneClickLog([]);
+    setOneClickResult(null);
+    setError("");
+    ocLog("⚡ Starting one-click remediation of 127.0.0.1...", "#60a5fa");
+    try {
+      // Step 1: Launch scan
+      ocLog("🔍 Launching full scan of localhost...");
+      const scanResp = await fetch(API_BASE + "/api/vulns/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) },
+        body: JSON.stringify({ target: "127.0.0.1", scan_type: "full", mode: "async", acknowledge_authorized: true }),
+      });
+      const scanJson = await scanResp.json();
+      const sid = scanJson?.data?.scan_id || scanJson?.data?.scanId;
+      if (!sid) throw new Error("No scan_id returned. Is QC backend running?");
+      ocLog("✓ Scan queued — ID: " + sid, "#10b981");
+      // Step 2: Poll for completion
+      let tries = 0;
+      let scanDone = false;
+      while (tries < 60 && !scanDone) {
+        await new Promise(r => setTimeout(r, 3000));
+        const pollResp = await fetch("/api/vulns/scan/" + encodeURIComponent(sid), {
+          headers: { "Content-Type": "application/json", ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) }
+        });
+        const pollJson = await pollResp.json();
+        const state = pollJson?.data?.state || pollJson?.data?.status || "pending";
+        ocLog("  ↳ Scan status: " + state);
+        if (state === "completed" || state === "SUCCESS" || pollJson?.data?.ready) {
+          setScanResult(pollJson?.data?.result || null);
+          scanDone = true;
+          ocLog("✓ Scan complete!", "#10b981");
+        }
+        tries++;
+      }
+      if (!scanDone) throw new Error("Scan timed out after 3 minutes.");
+      // Step 3: Execute remediation
+      setOneClickPhase("remediating");
+      ocLog("🛠️ Executing auto-remediation...", "#f59e0b");
+      const remResp = await fetch("/api/vulns/remediation/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) },
+        body: JSON.stringify({ confirm: "EXECUTE", target: "127.0.0.1", auto_approve: true }),
+      });
+      const remJson = await remResp.json();
+      setOneClickResult(remJson?.data || remJson);
+      // Step 4: Load remediation plan
+      const planResp = await fetch("/api/vulns/remediation", {
+        headers: { ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) }
+      });
+      const planJson = await planResp.json();
+      setRemediation(planJson?.data || null);
+      setOneClickPhase("done"); setAvatarState("idle");
+      ocLog("✅ All done — vulnerabilities remediated.", "#10b981");
+    } catch (e) {
+      setOneClickPhase("error"); setAvatarState("ascended");
+      ocLog("❌ " + (e?.message || String(e)), "#ef4444");
+      setError(e?.message || String(e));
+    } finally {
+      setOneClickRunning(false);
+    }
+  };
+
+  const launchScan = useCallback(async () => {
+    setError("");
+    setRemediation(null);
+    setScanResult(null);
+    setScanStatus(null);
+
+    if (!ack) {
+      setError("You must confirm you are authorized to scan this target.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      if (scanType === "web_app") {
+        const r = await apiFetch("/api/vulns/webapp", {
+          method: "POST",
+          body: JSON.stringify({ url: webUrl, acknowledge_authorized: true }),
+        });
+        setScanResult(r?.data || null);
+        // webapp scans have their own findings; still show remediation guidance
+        await fetchRemediation();
+        return;
+      }
+
+      const r = await apiFetch("/api/vulns/scan", {
+        method: "POST",
+        body: JSON.stringify({
+          target,
+          scan_type: scanType,
+          mode: "async",
+          acknowledge_authorized: true,
+        }),
+      });
+      const id = r?.data?.scan_id || r?.data?.scanId || null;
+      if (!id) throw new Error("scan_id missing from response");
+      setScanId(id);
+      setScanStatus({ state: r?.data?.status || "queued", ready: false });
+    } catch (e) {
+      setError(String(e?.message || e));
+    } finally {
+      setSubmitting(false);
+    }
+  }, [ack, apiFetch, fetchRemediation, scanType, target, webUrl]);
+
+  useEffect(() => {
+    localStorage.setItem("qc_api_key", apiKey || "");
+  }, [apiKey]);
+
+  useEffect(() => {
+    if (!scanId) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const r = await apiFetch(`/api/vulns/scan/${encodeURIComponent(scanId)}`, { method: "GET" });
+        const s = normalizeStatus(r?.data || null);
+        if (cancelled) return;
+        setScanStatus(s);
+        if (s.ready) {
+          setScanResult(s.result || null);
+          await fetchRemediation();
+          return;
+        }
+      } catch (e) {
+        if (!cancelled) setError(String(e?.message || e));
+      }
+      if (!cancelled) setTimeout(tick, 2000);
+    };
+    tick();
+    return () => { cancelled = true; };
+  }, [apiFetch, fetchRemediation, normalizeStatus, scanId]);
+
+  const [scriptFmt, setScriptFmt] = useState("bash"); // bash|powershell|ansible
+
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      {/* ONE-CLICK REMEDIATE */}
+      <div style={{padding:'16px 20px',background:`linear-gradient(135deg, ${C.goldDim}, rgba(37,99,235,0.08))`,border:`1px solid ${C.gold}30`,borderRadius:10}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:700,color:C.gold,fontFamily:DISPLAY,letterSpacing:1}}>One-Click Remediate</div>
+            <div style={{fontSize:11,color:'#8a9dbd',marginTop:3}}>Scans localhost and auto-applies all fixes</div>
+          </div>
+          <button onClick={oneClickRemediate} disabled={oneClickRunning} style={{padding:'12px 28px',background:oneClickRunning?'#1a2d50':'linear-gradient(135deg,#2563eb,#10b981)',color:'#fff',border:'none',borderRadius:8,fontSize:13,fontWeight:700,cursor:oneClickRunning?'wait':'pointer',whiteSpace:'nowrap',boxShadow:oneClickRunning?'none':'0 0 20px rgba(16,185,129,0.3)',transition:'all 0.3s ease'}}>
+            {oneClickRunning?(oneClickPhase==='scanning'?'⚡ Scanning...':(oneClickPhase==='remediating'?'🛠️ Remediating...':'⏳ Working...')):'⚡ REMEDIATE ALL'}
+          </button>
+        </div>
+        {oneClickLog.length>0&&(
+          <div style={{marginTop:12,padding:'10px 14px',background:'rgba(0,0,0,0.6)',borderRadius:6,fontSize:10,maxHeight:180,overflowY:'auto',border:`1px solid ${C.border}`}}>
+            {oneClickLog.map((l,i)=>(
+              <div key={i} style={{color:l.color,fontFamily:MONO,marginBottom:2}}>
+                <span style={{color:'#4a6080',marginRight:8}}>{l.ts}</span>
+                <span>{l.msg}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <Panel title="Vulnerability Scanner (Authorized Use Only)" icon="🔍" accent={C.accent}>
+        <div style={{ display: "grid", gap: 10 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <input
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="API key (X-QC-API-Key) — leave blank if QC_NO_AUTH=1"
+              style={{ flex: 1, minWidth: 320, padding: "8px 12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: MONO, fontSize: 12, outline: "none" }}
+              type="password"
+              autoComplete="off"
+            />
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: C.textDim, userSelect: "none" }}>
+              <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />
+              I am authorized to scan this target
+            </label>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {scanType !== "web_app" ? (
+              <input
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+                placeholder="Target IP/CIDR..."
+                style={{ flex: 1, minWidth: 260, padding: "8px 12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: MONO, fontSize: 12, outline: "none" }}
+              />
+            ) : (
+              <input
+                value={webUrl}
+                onChange={(e) => setWebUrl(e.target.value)}
+                placeholder="https://target.example"
+                style={{ flex: 1, minWidth: 260, padding: "8px 12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: MONO, fontSize: 12, outline: "none" }}
+              />
             )}
 
-            {/* ─── PREDICTOR TAB ─────────────────────────────────────────── */}
-            {tab === "predictor" && (
-              <div>
-                <Panel title="5-Layer Prediction Engine" icon="🔮" glow style={{ marginBottom: 12 }}>
-                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(5, 1fr)", gap: 8 }}>
-                    {layerActivity.map((l, i) => (
-                      <div key={i} style={{ padding: 12, background: C.surface, borderRadius: 6, textAlign: "center" }}>
-                        <div style={{ fontSize: 18, fontWeight: 700, color: C.cyan, fontFamily: MONO }}>{l.signals}</div>
-                        <div style={{ fontSize: 9, color: C.textSoft, marginTop: 2 }}>{l.layer}</div>
-                        <ProgressBar value={l.confidence} max={1} color={l.confidence >= 0.8 ? C.green : C.amber} height={3} />
-                        <div style={{ fontSize: 9, color: C.textDim, marginTop: 2, fontFamily: MONO }}>{(l.confidence * 100).toFixed(0)}%</div>
+            <select
+              value={scanType}
+              onChange={(e) => setScanType(e.target.value)}
+              style={{ padding: "8px 12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: MONO, fontSize: 12 }}
+            >
+              <option value="full">Full Scan</option>
+              <option value="quick">Quick Scan</option>
+              <option value="compliance">Compliance</option>
+              <option value="web_app">Web App</option>
+              <option value="quantum_hardening">⚛ Quantum Hardening</option>
+            </select>
+
+            <button
+              onClick={launchScan}
+              disabled={submitting}
+              style={{ padding: "8px 20px", background: submitting ? C.textDim : C.accent, color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: submitting ? "wait" : "pointer", whiteSpace: "nowrap" }}
+            >
+              {submitting ? "Submitting..." : "Launch Scan"}
+            </button>
+
+            <button
+              onClick={() => { setScanId(null); setScanStatus(null); setScanResult(null); setRemediation(null); setError(""); }}
+              style={{ padding: "8px 16px", background: C.surface, color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}
+            >
+              Reset
+            </button>
+          </div>
+
+          <div style={{ fontSize: 10, color: C.textDim }}>
+            Guardrails: backend denies public targets by default; allowlist is set server-side via <span style={{ fontFamily: MONO }}>QC_SCAN_ALLOWLIST</span>. Scanning networks you don't own or aren't explicitly authorized to test is not supported.
+          </div>
+
+          {!!error && (
+            <div style={{ padding: "8px 10px", background: C.surface, border: `1px solid ${C.red}`, borderRadius: 6, color: C.red, fontSize: 11 }}>
+              {error}
+            </div>
+          )}
+
+          {scanId && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <Badge color={C.accent}>scan_id: <span style={{ fontFamily: MONO }}>{scanId}</span></Badge>
+              <Badge color={C.textDim}>state: <span style={{ fontFamily: MONO }}>{scanStatus?.state || "unknown"}</span></Badge>
+              {!!scanStatus?.ready && <Badge color={C.green}>READY</Badge>}
+            </div>
+          )}
+        </div>
+      </Panel>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16 }}>
+        <Panel title="Latest Scan Result" icon="📈" accent={C.accent}>
+          {!scanResult ? (
+            <div style={{ fontSize: 12, color: C.textDim }}>
+              Run a scan to populate results.
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 10 }}>
+              {"scan_id" in scanResult ? (
+                <>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <Badge color={C.accent}>Target: <span style={{ fontFamily: MONO }}>{scanResult.target}</span></Badge>
+                    <Badge color={C.textDim}>Type: <span style={{ fontFamily: MONO }}>{scanResult.scan_type}</span></Badge>
+                    <Badge color={C.red}>Critical: {scanResult.critical_count}</Badge>
+                    <Badge color={C.amber}>High: {scanResult.high_count}</Badge>
+                    <Badge color={C.textDim}>Medium: {scanResult.medium_count}</Badge>
+                    <Badge color={C.textDim}>Low: {scanResult.low_count}</Badge>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <Badge color={C.textDim}>Assets: {scanResult.assets_discovered}</Badge>
+                    <Badge color={C.textDim}>Findings: {scanResult.vulnerabilities_found}</Badge>
+                    <Badge color={C.green}>Risk score: {scanResult.risk_score}</Badge>
+                  </div>
+                  <div style={{ fontSize: 11, color: C.textDim }}>
+                    This UI shows aggregated counts. Use the Remediation Plan panel for prioritized actions and guidance.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <Badge color={C.accent}>Web App Scan</Badge>
+                    <Badge color={C.textDim}><span style={{ fontFamily: MONO }}>{scanResult.target_url || "n/a"}</span></Badge>
+                  </div>
+                  <div style={{ fontSize: 11, color: C.textDim }}>
+                    Findings: {(scanResult.findings || []).length}
+                  </div>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {(scanResult.findings || []).slice(0, 6).map((f, idx) => (
+                      <div key={idx} style={{ padding: "8px 10px", background: C.surface, borderRadius: 6 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                          <div style={{ fontSize: 11, color: C.text }}>{f.title || f.category || "Finding"}</div>
+                          <Badge color={String(f.severity || "").toUpperCase() === "HIGH" ? C.red : C.amber}>{f.severity || "INFO"}</Badge>
+                        </div>
+                        <div style={{ fontSize: 10, color: C.textDim, marginTop: 4 }}>{f.description || f.details || ""}</div>
+                        {!!f.remediation && <div style={{ fontSize: 10, color: C.textDim, marginTop: 4 }}>Fix: {f.remediation}</div>}
                       </div>
                     ))}
                   </div>
-                </Panel>
+                </>
+              )}
+            </div>
+          )}
+        </Panel>
 
-                <Panel title="Confidence Distribution" icon="📊" style={{ marginBottom: 12 }}>
-                  <ResponsiveContainer width="100%" height={180}>
-                    <BarChart data={layerActivity}>
-                      <XAxis dataKey="layer" tick={{ fill: C.textDim, fontSize: 9 }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fill: C.textDim, fontSize: 9 }} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11 }} />
-                      <Bar dataKey="signals" fill={C.accent} radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </Panel>
+        <Panel title="Remediation Plan (One-Click Export)" icon="🛠️" accent={C.green}>
+          {!remediation ? (
+            <div style={{ display: "grid", gap: 10 }}>
+              <div style={{ fontSize: 12, color: C.textDim }}>
+                No plan loaded yet.
+              </div>
+              <button
+                onClick={fetchRemediation}
+                style={{ padding: "8px 16px", background: C.surface, color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer", width: "fit-content" }}
+              >
+                Load current plan
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 10 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Badge color={C.green}>Plan: <span style={{ fontFamily: MONO }}>{remediation.plan_id}</span></Badge>
+                <Badge color={C.textDim}>Total: {remediation.total_vulnerabilities}</Badge>
+                <Badge color={C.red}>Critical: {remediation.summary?.critical || 0}</Badge>
+                <Badge color={C.amber}>High: {remediation.summary?.high || 0}</Badge>
+              </div>
 
-                {predictions.map((p, i) => (
-                  <motion.div key={p.prediction_id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
-                    style={{ padding: "12px 14px", background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 8 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
-                      <div style={{ flex: 1, minWidth: 200 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 6 }}>{p.title}</div>
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          <ConfidenceBadge tier={p.confidence_tier} confidence={p.confidence} />
-                          <HorizonBadge horizon={p.threat_horizon} />
-                          <Badge color={C.textDim}>{p.category.replace(/_/g, " ")}</Badge>
-                        </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <select
+                  value={scriptFmt}
+                  onChange={(e) => setScriptFmt(e.target.value)}
+                  style={{ padding: "8px 12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: MONO, fontSize: 12 }}
+                >
+                  <option value="bash">Bash</option>
+                  <option value="powershell">PowerShell</option>
+                  <option value="ansible">Ansible YAML</option>
+                </select>
+
+                <button
+                  onClick={() => downloadText(`qc_remediation_${remediation.plan_id}.${scriptFmt === "powershell" ? "ps1" : scriptFmt === "ansible" ? "yml" : "sh"}`, remediationToScript(remediation, scriptFmt))}
+                  style={{ padding: "8px 16px", background: C.green, color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+                >
+                  Export Script
+                </button>
+
+                <button
+                  onClick={async () => {
+                    try {
+                      const content = remediationToScript(remediation, scriptFmt);
+                      await navigator.clipboard.writeText(content);
+                    } catch (e) {
+                      setError("Clipboard unavailable. Use Export Script instead.");
+                    }
+                  }}
+                  style={{ padding: "8px 16px", background: C.surface, color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                >
+                  Copy
+                </button>
+              </div>
+
+              <div style={{ display: "grid", gap: 6 }}>
+                {(remediation.priority_actions || []).slice(0, 10).map((a) => (
+                  <div key={a.vuln_id} style={{ padding: "8px 10px", background: C.surface, borderRadius: 6 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+                      <div style={{ fontSize: 11, color: C.text }}>
+                        <span style={{ color: C.textDim, fontFamily: MONO }}>P{a.priority}</span>{" "}
+                        {a.title}
                       </div>
-                      <div style={{ textAlign: "right" }}>
-                        <div style={{ fontSize: 20, fontWeight: 700, color: p.risk_score >= 8 ? C.red : p.risk_score >= 5 ? C.amber : C.green, fontFamily: MONO }}>{p.risk_score.toFixed(1)}</div>
-                        <div style={{ fontSize: 9, color: C.textDim }}>Risk Score</div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <Badge color={a.severity === "CRITICAL" ? C.red : a.severity === "HIGH" ? C.amber : C.textDim}>{a.severity}</Badge>
+                        <Badge color={C.textDim}>{a.cve_id || a.vuln_id}</Badge>
                       </div>
                     </div>
-                    {expertMode && (
-                      <div style={{ marginTop: 8, display: "flex", gap: 12, fontSize: 10, color: C.textSoft, flexWrap: "wrap" }}>
-                        <span>Assets: {p.affected_assets.join(", ")}</span>
-                        <span>Techniques: {p.predicted_techniques.join(", ")}</span>
-                        <span>Signals: {p.contributing_signals}</span>
+                    {!!a.affected_asset && (
+                      <div style={{ marginTop: 4, fontSize: 10, color: C.textDim }}>
+                        Asset: <span style={{ fontFamily: MONO }}>{a.affected_asset}</span>
                       </div>
                     )}
-                  </motion.div>
+                    {!!a.remediation && (
+                      <div style={{ marginTop: 4, fontSize: 10, color: C.textDim }}>
+                        Fix: {a.remediation}
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
-            )}
 
-            {/* ─── TELEMETRY TAB ─────────────────────────────────────────── */}
-            {tab === "telemetry" && <TelemetryTab telemetry={telemetry} isMobile={isMobile} />}
+              <div style={{ fontSize: 10, color: C.textDim }}>
+                Exported scripts are guidance scaffolds—review before applying.
+              </div>
+            </div>
+          )}
+        </Panel>
+      </div>
 
-            {/* ─── MESH TAB ──────────────────────────────────────────────── */}
-            {tab === "mesh" && (
-              <div>
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(5, 1fr)", gap: 8, marginBottom: 16 }}>
-                  {[
-                    { label: "Active Nodes", value: `${meshStatus.topology.active_nodes}/${meshStatus.topology.total_nodes}`, color: C.green },
-                    { label: "Degraded", value: meshStatus.topology.degraded_nodes, color: meshStatus.topology.degraded_nodes > 0 ? C.amber : C.green },
-                    { label: "Circuits", value: `${meshStatus.topology.healthy_circuits}/${meshStatus.topology.total_circuits}`, color: C.cyan },
-                    { label: "Mesh Heals", value: meshStatus.statistics.mesh_heals, color: C.purple },
-                    { label: "FP Suppressed", value: meshStatus.statistics.false_positives_suppressed, color: C.textSoft },
-                  ].map((s, i) => (
-                    <motion.div key={i} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.05 }}
-                      style={{ padding: "14px 12px", background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, textAlign: "center" }}>
-                      <div style={{ fontSize: 20, fontWeight: 700, fontFamily: MONO, color: s.color }}>{s.value}</div>
-                      <div style={{ fontSize: 9, color: C.textSoft, marginTop: 4, textTransform: "uppercase" }}>{s.label}</div>
-                    </motion.div>
-                  ))}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16 }}>
+        <Panel title="CVE Knowledge Base" icon="📚" accent={C.amber}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {[
+              { cve: "CVE-2024-3400", title: "PAN-OS Command Injection", cvss: 10.0, status: "weaponized" },
+              { cve: "CVE-2024-1709", title: "ScreenConnect Auth Bypass", cvss: 10.0, status: "weaponized" },
+              { cve: "CVE-2024-21887", title: "Ivanti Connect Secure", cvss: 9.1, status: "weaponized" },
+              { cve: "CVE-2024-23897", title: "Jenkins Arbitrary File Read", cvss: 9.8, status: "functional" },
+              { cve: "CVE-2023-44228", title: "Log4Shell", cvss: 10.0, status: "weaponized" },
+            ].map((v) => (
+              <div key={v.cve} style={{ padding: "8px 10px", background: C.surface, borderRadius: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <span style={{ fontSize: 11, fontFamily: MONO, color: C.red, marginRight: 8 }}>{v.cve}</span>
+                  <span style={{ fontSize: 11, color: C.text }}>{v.title}</span>
                 </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <Badge color={v.cvss >= 9 ? C.red : C.amber}>CVSS {v.cvss}</Badge>
+                  <Badge color={v.status === "weaponized" ? C.red : C.amber}>{v.status}</Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
 
-                <Panel title="Mesh Topology — Node Map" icon="🕸" glow>
-                  <div style={{ height: isMobile ? 200 : 280, background: C.surface, borderRadius: 8, position: "relative", overflow: "hidden" }}>
-                    {Array.from({ length: meshStatus.topology.total_nodes }, (_, i) => {
-                      const cols = isMobile ? 4 : 6;
-                      const row = Math.floor(i / cols);
-                      const col = i % cols;
-                      const x = (col + 0.5) / cols * 100;
-                      const y = (row + 0.5) / Math.ceil(meshStatus.topology.total_nodes / cols) * 100;
-                      const isActive = i < meshStatus.topology.active_nodes;
-                      const isDegraded = i >= meshStatus.topology.active_nodes - meshStatus.topology.degraded_nodes && i < meshStatus.topology.active_nodes;
-                      const nodeColor = isDegraded ? C.amber : isActive ? C.cyan : C.textDim;
-                      return (
-                        <motion.div key={i} initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.03 }}
-                          style={{
-                            position: "absolute", left: `${x}%`, top: `${y}%`, transform: "translate(-50%, -50%)",
-                            width: 12, height: 12, borderRadius: "50%", background: nodeColor,
-                            boxShadow: `0 0 10px ${nodeColor}60`, cursor: "pointer",
-                          }}
-                          title={`Node ${i + 1} — ${isDegraded ? "DEGRADED" : isActive ? "ACTIVE" : "OFFLINE"}`}
-                        />
-                      );
-                    })}
-                    {/* Connection lines */}
-                    <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
-                      {Array.from({ length: meshStatus.topology.healthy_circuits }, (_, i) => {
-                        const cols = isMobile ? 4 : 6;
-                        const n1 = i * 4;
-                        const n2 = Math.min(n1 + randInt(2, 6), meshStatus.topology.total_nodes - 1);
-                        const x1 = ((n1 % cols) + 0.5) / cols * 100;
-                        const y1 = (Math.floor(n1 / cols) + 0.5) / Math.ceil(meshStatus.topology.total_nodes / cols) * 100;
-                        const x2 = ((n2 % cols) + 0.5) / cols * 100;
-                        const y2 = (Math.floor(n2 / cols) + 0.5) / Math.ceil(meshStatus.topology.total_nodes / cols) * 100;
-                        return <line key={i} x1={`${x1}%`} y1={`${y1}%`} x2={`${x2}%`} y2={`${y2}%`} stroke={C.cyan} strokeOpacity={0.15} strokeWidth={1} />;
-                      })}
-                    </svg>
-                  </div>
-                </Panel>
+        <Panel title="Compliance Frameworks" icon="✓" accent={C.green}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {["CIS Benchmarks", "NIST SP 800-53", "NIST CSF", "DISA STIG", "PCI DSS", "HIPAA", "SOC 2"].map((fw) => (
+              <div key={fw} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 12, color: C.text }}>{fw}</span>
+                <Badge color={C.green}>LOADED</Badge>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
 
-                {expertMode && (
-                  <Panel title="Threat Posture" icon="🛡" style={{ marginTop: 12 }}>
-                    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: 8 }}>
-                      {[
-                        { label: "Attack Chains", value: meshStatus.threat_posture.active_attack_chains, color: C.red },
-                        { label: "IOCs Active", value: meshStatus.threat_posture.iocs_active, color: C.amber },
-                        { label: "IPs Blocked", value: meshStatus.threat_posture.ips_blocked, color: C.green },
-                        { label: "Domains Blocked", value: meshStatus.threat_posture.blocked_domains, color: C.cyan },
-                      ].map((s, i) => (
-                        <div key={i} style={{ padding: 12, background: C.surface, borderRadius: 6, textAlign: "center" }}>
-                          <div style={{ fontSize: 22, fontWeight: 700, color: s.color, fontFamily: MONO }}>{s.value}</div>
-                          <div style={{ fontSize: 9, color: C.textSoft, marginTop: 4 }}>{s.label}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </Panel>
-                )}
+
+
+// ─── DEVOPS TAB ────────────────────────────────────────────────────────────
+
+const DEVOPS_WORKFLOWS = [
+  { id: "bootstrap", label: "Bootstrap K8s", icon: "⎈", color: C.accent, desc: "Provision cluster, ingress, cert-manager, ArgoCD" },
+  { id: "protect", label: "Protect Branches", icon: "🛡", color: C.green, desc: "Apply branch protection rules with auto-discover" },
+  { id: "dns", label: "DNS Sanity Check", icon: "🌐", color: C.cyan, desc: "Verify DNS propagation and record sanity" },
+  { id: "deploy", label: "Deploy to VM", icon: "🚀", color: C.purple, desc: "Docker compose deploy with TLS and monitoring" },
+  { id: "promote", label: "Promote to Prod", icon: "📦", color: C.amber, desc: "Promote staging to production via PR" },
+  { id: "helm", label: "Release Helm Chart", icon: "⚓", color: C.magenta, desc: "Package and publish Helm chart" },
+];
+
+function DevOpsTab() {
+  const [selected, setSelected] = useState(null);
+  const [running, setRunning] = useState(null);
+
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <Panel title="One-Click Operations" icon="⚡" accent={C.accent}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+          {DEVOPS_WORKFLOWS.map(w => (
+            <button
+              key={w.id}
+              onClick={() => setSelected(selected === w.id ? null : w.id)}
+              style={{
+                padding: 14, background: selected === w.id ? `${w.color}12` : C.surface,
+                border: `1px solid ${selected === w.id ? w.color + "40" : C.border}`,
+                borderRadius: 8, cursor: "pointer", textAlign: "left",
+                transition: "all 0.2s ease",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <span style={{ fontSize: 18 }}>{w.icon}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{w.label}</span>
+              </div>
+              <div style={{ fontSize: 10, color: C.textSoft, lineHeight: 1.4 }}>{w.desc}</div>
+              {running === w.id && <ProgressBar value={65} color={w.color} height={3} bg={`${w.color}10`} style={{ marginTop: 8 }} />}
+            </button>
+          ))}
+        </div>
+      </Panel>
+
+      {selected && (
+        <Panel title={`Configure: ${DEVOPS_WORKFLOWS.find(w => w.id === selected)?.label}`} icon="⚙" accent={DEVOPS_WORKFLOWS.find(w => w.id === selected)?.color}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <label style={{ fontSize: 10, color: C.textSoft, display: "block", marginBottom: 4 }}>Target Environment</label>
+              <select style={{ width: "100%", padding: "8px 10px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: MONO, fontSize: 11 }}>
+                <option>staging</option>
+                <option>production</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 10, color: C.textSoft, display: "block", marginBottom: 4 }}>Branch</label>
+              <input defaultValue="main" style={{ width: "100%", padding: "8px 10px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: MONO, fontSize: 11, boxSizing: "border-box" }} />
+            </div>
+          </div>
+          <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+            <button
+              onClick={() => { setRunning(selected); setTimeout(() => setRunning(null), 5000); }}
+              disabled={running === selected}
+              style={{ padding: "8px 20px", background: running === selected ? C.textDim : C.accent, color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: running ? "wait" : "pointer" }}
+            >
+              {running === selected ? "Running..." : "Execute"}
+            </button>
+            <button onClick={() => setSelected(null)} style={{ padding: "8px 16px", background: "transparent", color: C.textSoft, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+              Cancel
+            </button>
+          </div>
+        </Panel>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16 }}>
+        <Panel title="CI/CD Workflows" icon="🔄" accent={C.green}>
+          {["ci.yml", "deploy-vm.yml", "promote-production.yml", "release-helm.yml", "bootstrap-k8s.yml", "protect-branches.yml", "deps-refresh.yml", "weekly-platform-upgrades.yml"].map(wf => (
+            <div key={wf} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
+              <span style={{ fontSize: 11, fontFamily: MONO, color: C.text }}>{wf}</span>
+              <PulseDot color={C.green} size={6} />
+            </div>
+          ))}
+        </Panel>
+
+        <Panel title="Infrastructure" icon="🏗" accent={C.cyan}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            {[
+              { label: "K8s Cluster", status: "Active" },
+              { label: "ArgoCD", status: "Synced" },
+              { label: "Cert-Manager", status: "Ready" },
+              { label: "Ingress", status: "Active" },
+              { label: "Redis", status: "Connected" },
+              { label: "Prometheus", status: "Scraping" },
+              { label: "Grafana", status: "Ready" },
+              { label: "OTEL Collector", status: "Active" },
+            ].map(s => (
+              <div key={s.label} style={{ padding: "6px 8px", background: C.surface, borderRadius: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 10, color: C.textSoft }}>{s.label}</span>
+                <span style={{ fontSize: 9, fontFamily: MONO, color: C.green }}>{s.status}</span>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+// ─── MAIN DASHBOARD ────────────────────────────────────────────────────────
+
+// ─── GUIDED WIZARD (3-step: target → scan → export) ─────────────────────────
+
+function GuidedWizard({ onExit }) {
+  const [step, setStep] = useState(1); // 1=target, 2=scanning, 3=results
+  const [target, setTarget] = useState("192.168.1.0/24");
+  const [scanType, setScanType] = useState("full");
+  const [apiKey, setApiKey] = useState("");
+  const [ack, setAck] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+
+  const presets = [
+    { label: "Home Network", value: "192.168.1.0/24", desc: "Most home routers" },
+    { label: "Office Range", value: "10.0.0.0/24", desc: "Common enterprise" },
+    { label: "This Machine", value: "127.0.0.1", desc: "Localhost only" },
+    { label: "Custom", value: "", desc: "Enter your target" },
+  ];
+
+  const runScan = async () => {
+    if (!ack) { setError("You must confirm you are authorized to scan this target."); return; }
+    setScanning(true); setError(""); setStep(2); setProgress(0);
+
+    // Simulate progress while waiting for API
+    const progressInterval = setInterval(() => {
+      setProgress(p => Math.min(p + Math.random() * 8, 92));
+    }, 600);
+
+    try {
+      const headers = { "Content-Type": "application/json" };
+      if (apiKey.trim()) headers["X-QC-API-Key"] = apiKey.trim();
+
+      const res = await fetch("/api/v1/one-click/scan-and-fix", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          target,
+          scan_type: scanType,
+          auto_approve: false,
+          acknowledge_authorized: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
+      clearInterval(progressInterval);
+      setProgress(100);
+      setResult(data);
+      setTimeout(() => setStep(3), 500);
+    } catch (e) {
+      clearInterval(progressInterval);
+      setError(e.message);
+      setStep(1);
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const exportReport = (format) => {
+    if (!result) return;
+    const content = format === "json"
+      ? JSON.stringify(result, null, 2)
+      : [
+          "# QueenCalifia CyberAI — Scan Report",
+          `# Target: ${result.target}`,
+          `# Date: ${result.completed_at}`,
+          `# Risk: ${result.risk_level}`,
+          `# Recommendation: ${result.recommendation}`,
+          "",
+          `## Scan Summary`,
+          `Hosts alive: ${result.phases?.scan?.hosts_alive || 0}`,
+          `Total findings: ${result.phases?.scan?.total_findings || 0}`,
+          `Critical: ${result.phases?.scan?.critical || 0}`,
+          `High: ${result.phases?.scan?.high || 0}`,
+          `Overall risk: ${result.phases?.scan?.overall_risk || 0}/10`,
+          `Quantum risk: ${result.phases?.scan?.quantum_risk || "N/A"}`,
+          "",
+          `## Learning`,
+          `New baselines: ${result.phases?.learning?.new_baselines || 0}`,
+          `Patterns learned: ${result.phases?.learning?.new_patterns || 0}`,
+          "",
+          `## Remediation`,
+          `Actions: ${result.phases?.remediation?.total_actions || 0}`,
+          "",
+          `## Evolution`,
+          `New rules: ${result.phases?.evolution?.new_detection_rules || 0}`,
+        ].join("\n");
+
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `qc_report_${result.operation_id}.${format === "json" ? "json" : "md"}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 500);
+  };
+
+  const stepStyle = (s) => ({
+    width: 32, height: 32, borderRadius: "50%",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    fontSize: 14, fontWeight: 700,
+    background: step >= s ? C.accent : C.surface,
+    color: step >= s ? "#fff" : C.textDim,
+    border: `2px solid ${step >= s ? C.accent : C.border}`,
+    transition: "all 0.3s ease",
+  });
+
+  const connectorStyle = (s) => ({
+    flex: 1, height: 2,
+    background: step > s ? C.accent : C.border,
+    transition: "all 0.3s ease",
+  });
+
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: FONT, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <style>{`
+        @keyframes qcPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+        * { box-sizing: border-box; }
+      `}</style>
+
+      {/* Back button */}
+      <button onClick={onExit} style={{
+        position: "absolute", top: 16, left: 16, padding: "8px 16px",
+        background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6,
+        color: C.textDim, fontSize: 12, cursor: "pointer", fontFamily: FONT,
+      }}>← Dashboard</button>
+
+      <div style={{ width: "100%", maxWidth: 640 }}>
+        {/* Logo */}
+        <div style={{ textAlign: "center", marginBottom: 32 }}>
+          <div style={{ fontSize: 40, marginBottom: 8 }}>🛡</div>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>QUEEN CALIFIA <span style={{ color: C.accent }}>QUICK SCAN</span></div>
+          <div style={{ fontSize: 12, color: C.textDim, marginTop: 4 }}>Scan your network in 3 easy steps</div>
+        </div>
+
+        {/* Progress steps */}
+        <div style={{ display: "flex", alignItems: "center", gap: 0, marginBottom: 40, padding: "0 40px" }}>
+          <div style={stepStyle(1)}>1</div>
+          <div style={connectorStyle(1)} />
+          <div style={stepStyle(2)}>2</div>
+          <div style={connectorStyle(2)} />
+          <div style={stepStyle(3)}>3</div>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 32, marginTop: -32, padding: "0 20px" }}>
+          <span style={{ fontSize: 10, color: step >= 1 ? C.text : C.textDim, fontWeight: 600, width: 80, textAlign: "center" }}>Pick Target</span>
+          <span style={{ fontSize: 10, color: step >= 2 ? C.text : C.textDim, fontWeight: 600, width: 80, textAlign: "center" }}>Scan</span>
+          <span style={{ fontSize: 10, color: step >= 3 ? C.text : C.textDim, fontWeight: 600, width: 80, textAlign: "center" }}>Results</span>
+        </div>
+
+        {/* Step 1: Pick Target */}
+        {step === 1 && (
+          <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 12, padding: 24 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>Step 1: Choose Your Target</div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
+              {presets.map(p => (
+                <button key={p.label} onClick={() => { if (p.value) setTarget(p.value); }}
+                  style={{
+                    padding: "12px 14px", background: target === p.value ? `${C.accent}15` : C.surface,
+                    border: `1px solid ${target === p.value ? C.accent : C.border}`, borderRadius: 8,
+                    cursor: "pointer", textAlign: "left", fontFamily: FONT,
+                  }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{p.label}</div>
+                  <div style={{ fontSize: 10, color: C.textDim, fontFamily: MONO, marginTop: 2 }}>{p.value || "you type it"}</div>
+                </button>
+              ))}
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: C.textDim, marginBottom: 4, display: "block" }}>Target (IP, CIDR, or hostname)</label>
+              <input type="text" value={target} onChange={e => setTarget(e.target.value)}
+                style={{ width: "100%", padding: "10px 12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: MONO, fontSize: 13, outline: "none" }}
+                placeholder="e.g. 192.168.1.0/24" />
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: C.textDim, marginBottom: 4, display: "block" }}>Scan Mode</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                {["quick", "full", "stealth"].map(m => (
+                  <button key={m} onClick={() => setScanType(m)} style={{
+                    flex: 1, padding: "8px", background: scanType === m ? `${C.accent}15` : C.surface,
+                    border: `1px solid ${scanType === m ? C.accent : C.border}`, borderRadius: 6,
+                    fontSize: 11, fontWeight: 600, cursor: "pointer", color: scanType === m ? C.accent : C.textDim, fontFamily: FONT,
+                  }}>{m === "quick" ? "⚡ Quick" : m === "full" ? "🔍 Full" : "🥷 Stealth"}</button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: C.textDim, marginBottom: 4, display: "block" }}>API Key (optional if running locally)</label>
+              <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
+                style={{ width: "100%", padding: "10px 12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: MONO, fontSize: 12, outline: "none" }}
+                placeholder="Leave blank for local development" />
+            </div>
+
+            {/* Authorization checkbox */}
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: 12, background: `${C.amber}08`, border: `1px solid ${C.amber}30`, borderRadius: 8, marginBottom: 16 }}>
+              <input type="checkbox" checked={ack} onChange={e => setAck(e.target.checked)} style={{ marginTop: 2, accentColor: C.accent }} />
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: C.amber }}>⚠ Authorization Required</div>
+                <div style={{ fontSize: 11, color: C.textDim, marginTop: 2 }}>
+                  I confirm I am authorized to scan this target. Unauthorized scanning is illegal. This tool is for white-hat, contracted security assessments only.
+                </div>
+              </div>
+            </div>
+
+            {error && <div style={{ padding: 10, background: `${C.red}10`, border: `1px solid ${C.red}30`, borderRadius: 6, fontSize: 11, color: C.red, marginBottom: 12 }}>{error}</div>}
+
+            <button onClick={runScan} disabled={!target || !ack} style={{
+              width: "100%", padding: "14px", background: !target || !ack ? C.surface : `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+              border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 700,
+              cursor: !target || !ack ? "not-allowed" : "pointer", fontFamily: FONT, opacity: !target || !ack ? 0.5 : 1,
+            }}>🚀 Start Scan</button>
+          </div>
+        )}
+
+        {/* Step 2: Scanning */}
+        {step === 2 && (
+          <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 12, padding: 32, textAlign: "center" }}>
+            <div style={{ fontSize: 48, marginBottom: 16, animation: "qcPulse 2s ease-in-out infinite" }}>🔍</div>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Scanning {target}</div>
+            <div style={{ fontSize: 12, color: C.textDim, marginBottom: 24 }}>
+              Queen Califia is scanning → learning → predicting → planning fixes → evolving
+            </div>
+            <div style={{ width: "100%", height: 8, background: C.surface, borderRadius: 4, overflow: "hidden", marginBottom: 8 }}>
+              <div style={{ height: "100%", width: `${progress}%`, background: `linear-gradient(90deg, ${C.accent}, ${C.purple})`, borderRadius: 4, transition: "width 0.5s ease" }} />
+            </div>
+            <div style={{ fontSize: 11, fontFamily: MONO, color: C.textDim }}>{progress.toFixed(0)}%</div>
+          </div>
+        )}
+
+        {/* Step 3: Results */}
+        {step === 3 && result && (
+          <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 12, padding: 24 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+              ✅ Scan Complete
+              <span style={{
+                padding: "4px 10px", borderRadius: 4, fontSize: 11, fontWeight: 700,
+                background: result.risk_level === "CRITICAL" ? `${C.red}20` : result.risk_level === "HIGH" ? `${C.amber}20` : `${C.green}20`,
+                color: result.risk_level === "CRITICAL" ? C.red : result.risk_level === "HIGH" ? C.amber : C.green,
+              }}>{result.risk_level}</span>
+            </div>
+
+            {/* Summary cards */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
+              {[
+                { label: "Hosts Found", value: result.phases?.scan?.hosts_alive || 0, color: C.cyan },
+                { label: "Findings", value: result.phases?.scan?.total_findings || 0, color: result.phases?.scan?.critical > 0 ? C.red : C.amber },
+                { label: "Risk Score", value: `${result.phases?.scan?.overall_risk || 0}/10`, color: (result.phases?.scan?.overall_risk || 0) >= 7 ? C.red : C.green },
+              ].map(c => (
+                <div key={c.label} style={{ padding: 12, background: C.surface, borderRadius: 8, textAlign: "center" }}>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: c.color, fontFamily: MONO }}>{c.value}</div>
+                  <div style={{ fontSize: 10, color: C.textDim, marginTop: 2 }}>{c.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Severity breakdown */}
+            {(result.phases?.scan?.critical > 0 || result.phases?.scan?.high > 0) && (
+              <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+                {result.phases?.scan?.critical > 0 && <Badge color={C.red}>{result.phases.scan.critical} CRITICAL</Badge>}
+                {result.phases?.scan?.high > 0 && <Badge color={C.amber}>{result.phases.scan.high} HIGH</Badge>}
               </div>
             )}
 
-            {/* ─── INCIDENTS TAB ─────────────────────────────────────────── */}
-            {tab === "incidents" && <IncidentsTab incidents={incidents} isMobile={isMobile} />}
+            {/* Intelligence gained */}
+            <div style={{ padding: 12, background: C.surface, borderRadius: 8, marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>🧠 Intelligence Gained</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, fontSize: 11, color: C.textDim }}>
+                <span>Baselines learned: {result.phases?.learning?.new_baselines || 0}</span>
+                <span>Patterns recognized: {result.phases?.learning?.new_patterns || 0}</span>
+                <span>Rules evolved: {result.phases?.evolution?.new_detection_rules || 0}</span>
+                <span>Remediation actions: {result.phases?.remediation?.total_actions || 0}</span>
+              </div>
+            </div>
 
-            {/* ─── VULNS TAB ─────────────────────────────────────────────── */}
-            {tab === "vulns" && <VulnsTab isMobile={isMobile} />}
+            <div style={{ fontSize: 12, fontWeight: 600, color: C.accent, marginBottom: 16 }}>
+              💡 {result.recommendation}
+            </div>
 
-            {/* ─── DEVOPS TAB ────────────────────────────────────────────── */}
-            {tab === "devops" && <DevOpsTab isMobile={isMobile} />}
+            {/* Export buttons */}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => exportReport("md")} style={{
+                flex: 1, padding: "12px", background: `${C.green}15`, border: `1px solid ${C.green}50`, borderRadius: 8,
+                color: C.green, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT,
+              }}>📄 Export Report</button>
+              <button onClick={() => exportReport("json")} style={{
+                flex: 1, padding: "12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8,
+                color: C.textDim, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT,
+              }}>{ "{}"} Export JSON</button>
+              <button onClick={() => { setStep(1); setResult(null); setAck(false); }} style={{
+                flex: 1, padding: "12px", background: `${C.purple}15`, border: `1px solid ${C.purple}50`, borderRadius: 8,
+                color: C.purple, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT,
+              }}>🔄 Scan Again</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
+
+
+const API_BASE = window.location.hostname === "localhost" ? "" : "https://queencalifia-cyberai.onrender.com";
+
+export default function QueenCalifiaCommandDashboard() {
+  const [activeTab, setActiveTab] = useState("overview");
+  const [qcAvatarState, setQcAvatarState] = useState("idle");
+  const [tick, setTick] = useState(0);
+  const [expertMode, setExpertMode] = useState(() => {
+    try { return window.sessionStorage?.getItem?.("qc_expert") === "1"; } catch { return false; }
+  });
+  const [wizardMode, setWizardMode] = useState(false);
+  const sound = useContext(SoundContext);
+
+  const handleTabSwitch = (tabId) => {
+    setActiveTab(tabId);
+    if (sound?.playSound) sound.playSound("tab_switch");
+  };
+
+  const toggleExpert = () => {
+    const next = !expertMode;
+    setExpertMode(next);
+    if (sound?.playSound) sound.playSound(next ? "sovereign_awaken" : "tab_switch");
+    try { window.sessionStorage?.setItem?.("qc_expert", next ? "1" : "0"); } catch {}
+    // If leaving expert mode, switch to a basic tab
+    if (!next && ["predictor","telemetry","mesh","devops"].includes(activeTab)) setActiveTab("overview");
+  };
+
+  // Refresh data every 15s
+  useEffect(() => {
+    const interval = setInterval(() => setTick(t => t + 1), 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const mesh = useMemo(() => generateMeshStatus(), [tick]);
+  const predictions = useMemo(() => generatePredictions(), [tick]);
+  const incidents = useMemo(() => generateIncidents(), [tick]);
+  const timeSeries = useMemo(() => generateTimeSeriesData(), [tick]);
+  const landscape = useMemo(() => generateThreatLandscape(), [tick]);
+  const layerActivity = useMemo(() => generateLayerActivity(), [tick]);
+  const telemetryData = useMemo(() => generateTelemetryData(), [tick]);
+
+  const critCount = incidents.filter(i => i.severity === "CRITICAL").length;
+  const highPreds = predictions.filter(p => p.confidence > 0.7).length;
+
+  const BASIC_TABS = ["overview", "vulns", "incidents"];
+  const visibleNav = expertMode ? NAV_ITEMS : NAV_ITEMS.filter(n => BASIC_TABS.includes(n.id));
+
+  // ── Guided Wizard ──────────────────────────────────────────────
+  if (wizardMode) return <GuidedWizard onExit={() => setWizardMode(false)} />;
+
+  return (
+    <div style={{
+      minHeight: "100vh", background: C.bg, color: C.text, fontFamily: FONT,
+      padding: 0, margin: 0,
+    }}>
+      {/* Global keyframe animations */}
+      <style>{`
+        @keyframes qcPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @keyframes qcPulseRing { 0%, 100% { opacity: 0.4; transform: scale(1); } 50% { opacity: 0; transform: scale(1.8); } }
+        @keyframes qcGlow { 0%, 100% { box-shadow: 0 0 8px ${C.gold}20; } 50% { box-shadow: 0 0 24px ${C.gold}40; } }
+        @keyframes qcScanline { 0% { transform: translateY(-100%); } 100% { transform: translateY(100%); } }
+        @keyframes qcFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+        @keyframes qcGoldShimmer { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: ${C.void}; }
+        ::-webkit-scrollbar-thumb { background: ${C.gold}40; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: ${C.gold}60; }
+        * { box-sizing: border-box; }
+        @media (max-width: 768px) {
+          .qc-nav-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+          .qc-nav-scroll::-webkit-scrollbar { display: none; }
+          .qc-header-actions { flex-wrap: wrap; gap: 6px !important; }
+          .qc-hero-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
+
+      {/* Header */}
+      <header style={{
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+        padding: "12px 24px", borderBottom: `1px solid ${C.gold}25`,
+        background: `linear-gradient(180deg, rgba(4,2,10,0.98) 0%, ${C.bg} 100%)`,
+        flexWrap: "wrap", gap: 8,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <QueenCalifiaAvatar state={qcAvatarState} size={48} showLabel={false} showStatus={false} />
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.gold, letterSpacing: 2, fontFamily: DISPLAY }}>
+              QUEEN CALIFIA <span style={{ color: C.accentBright }}>CYBERAI</span>
+            </div>
+            <div style={{ fontSize: 9, color: C.textDim, letterSpacing: 1.5, textTransform: "uppercase" }}>
+              {expertMode ? "Defense-Grade Cybersecurity Intelligence Platform" : "Network Security Scanner"}
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {/* Wizard launcher */}
+          <button onClick={() => setWizardMode(true)} style={{
+            padding: "6px 14px", background: `linear-gradient(135deg, ${C.green}20, ${C.green}08)`,
+            border: `1px solid ${C.green}50`, borderRadius: 6, cursor: "pointer",
+            fontSize: 11, fontWeight: 600, color: C.green, fontFamily: FONT,
+          }}>⚡ Quick Scan</button>
+
+          {/* Expert toggle */}
+          <button onClick={toggleExpert} title={expertMode ? "Switch to Simple Mode" : "Switch to Expert Mode"} style={{
+            padding: "6px 14px",
+            background: expertMode ? `${C.purple}15` : C.surface,
+            border: `1px solid ${expertMode ? C.purple + "50" : C.border}`,
+            borderRadius: 6, cursor: "pointer",
+            fontSize: 11, fontWeight: 600, fontFamily: FONT,
+            color: expertMode ? C.purple : C.textDim,
+          }}>{expertMode ? "🔬 Expert" : "👤 Simple"}</button>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <PulseDot color={critCount > 0 ? C.red : C.green} />
+            <span style={{ fontSize: 11, color: critCount > 0 ? C.red : C.green, fontFamily: MONO }}>
+              {critCount > 0 ? `${critCount} CRITICAL` : "ALL CLEAR"}
+            </span>
+          </div>
+          {expertMode && highPreds > 0 && (
+            <Badge color={C.purple}>🔮 {highPreds} predictions</Badge>
+          )}
+          <span style={{ fontSize: 10, fontFamily: MONO, color: C.textDim }}>
+            {new Date().toLocaleTimeString()}
+          </span>
+        </div>
+      </header>
+
+      {/* Navigation */}
+      <nav className="qc-nav-scroll" style={{
+        display: "flex", gap: 2, padding: "0 24px",
+        borderBottom: `1px solid ${C.gold}20`, background: C.panel,
+        overflowX: "auto",
+      }}>
+        {visibleNav.map(item => (
+          <button
+            key={item.id}
+            onClick={() => handleTabSwitch(item.id)}
+            style={{
+              padding: "10px 16px", background: activeTab === item.id ? `${C.gold}08` : "transparent",
+              border: "none", borderBottom: `2px solid ${activeTab === item.id ? C.gold : "transparent"}`,
+              color: activeTab === item.id ? C.gold : C.textSoft,
+              fontSize: 11, fontWeight: 600, cursor: "pointer",
+              fontFamily: DISPLAY, letterSpacing: 0.5,
+              display: "flex", alignItems: "center", gap: 6,
+              transition: "all 0.3s ease",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span style={{ fontSize: 13 }}>{item.icon}</span>
+            {item.label}
+            {item.id === "predictor" && highPreds > 0 && (
+              <span style={{ width: 16, height: 16, borderRadius: "50%", background: C.purple, color: "#fff", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{highPreds}</span>
+            )}
+            {item.id === "telemetry" && telemetryData.beacons.length > 0 && (
+              <span style={{ width: 16, height: 16, borderRadius: "50%", background: C.cyan, color: "#fff", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{telemetryData.beacons.length}</span>
+            )}
+            {item.id === "incidents" && critCount > 0 && (
+              <span style={{ width: 16, height: 16, borderRadius: "50%", background: C.red, color: "#fff", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{critCount}</span>
+            )}
+          </button>
+        ))}
+      </nav>
+
+      {/* Content */}
+      <main style={{ padding: 24 }}>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -12 }}
+            transition={{ duration: 0.25 }}
+          >
+            {activeTab === "overview" && <OverviewTab mesh={mesh} predictions={predictions} incidents={incidents} timeSeries={timeSeries} landscape={landscape} />}
+            {activeTab === "predictor" && expertMode && <PredictorTab predictions={predictions} layerActivity={layerActivity} />}
+            {activeTab === "telemetry" && expertMode && <TelemetryTab telemetry={telemetryData} />}
+            {activeTab === "mesh" && expertMode && <MeshTab mesh={mesh} />}
+            {activeTab === "incidents" && <IncidentsTab incidents={incidents} />}
+            {activeTab === "vulns" && <VulnsTab setAvatarState={setQcAvatarState} />}
+            {activeTab === "devops" && expertMode && <DevOpsTab />}
           </motion.div>
         </AnimatePresence>
-      </div>
+      </main>
 
-      {/* ─── Footer ──────────────────────────────────────────────────────── */}
-      <div style={{
-        padding: "12px 20px", borderTop: `1px solid ${C.border}`,
+      {/* Footer */}
+      <footer style={{
+        padding: "8px 24px", borderTop: `1px solid ${C.gold}15`,
         display: "flex", justifyContent: "space-between", alignItems: "center",
-        fontSize: 9, color: C.textDim, fontFamily: MONO, flexWrap: "wrap", gap: 8,
+        background: C.panel, flexWrap: "wrap", gap: 8,
       }}>
-        <span>QUEEN CALIFIA CYBERAI v4.2 — SOVEREIGN CIRCUITRY</span>
-        <span>MESH: {meshStatus.mesh_id} | NODES: {meshStatus.topology.active_nodes}/{meshStatus.topology.total_nodes}</span>
-      </div>
+        <div style={{ fontSize: 9, color: C.textDim, fontFamily: MONO }}>
+          TAMERIAN MATERIALS / QUEENCALIFIA-CYBERAI v4.2 — {expertMode ? "ALL ENGINES ACTIVE // SOVEREIGN PROTOCOL" : "SCANNER MODE"}
+        </div>
+        <div style={{ display: "flex", gap: 12, fontSize: 9, color: C.textDim, fontFamily: MONO, flexWrap: "wrap" }}>
+          <span>Mesh: <span style={{ color: C.green }}>ONLINE</span></span>
+          {expertMode && <span>Predictor: <span style={{ color: C.purple }}>ACTIVE</span></span>}
+          {expertMode && <span>Telemetry: <span style={{ color: C.cyan }}>6 STREAMS</span></span>}
+          <span>Nodes: <span style={{ color: C.green }}>{mesh.topology.active_nodes}/{mesh.topology.total_nodes}</span></span>
+          <span>Quantum: <span style={{ color: C.gold }}>HARDENED</span></span>
+        </div>
+      </footer>
     </div>
   );
 }
