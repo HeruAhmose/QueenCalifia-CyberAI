@@ -1206,13 +1206,19 @@ function MeshTab({ mesh }) {
 function IncidentsTab({ incidents }) {
   const [selectedId, setSelectedId] = useState(null);
   const [panel, setPanel] = useState(null); // "investigate" | "approve" | "timeline"
+
+  // Stabilize incidents: when user is interacting (has selected an incident),
+  // freeze the data so it doesn't regenerate and lose the selection
+  const frozenRef = useRef(incidents);
+  if (!selectedId) frozenRef.current = incidents;
+  const stableIncidents = selectedId ? frozenRef.current : incidents;
   const [actionStatuses, setActionStatuses] = useState({}); // { "ACT-xxx": "approved"|"rejected" }
   const [analystNotes, setAnalystNotes] = useState({});
   const [statusOverrides, setStatusOverrides] = useState({});
   const [severityOverrides, setSeverityOverrides] = useState({});
   const [toasts, setToasts] = useState([]);
 
-  const selected = incidents.find(i => i.incident_id === selectedId);
+  const selected = stableIncidents.find(i => i.incident_id === selectedId);
 
   const addToast = (msg, color = C.green) => {
     const id = Date.now();
@@ -1278,11 +1284,11 @@ function IncidentsTab({ incidents }) {
 
       {/* ═══════ KPI BANNER ═══════ */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
-        <Panel accent={C.red}><Stat label="Critical" value={incidents.filter(i => getEffectiveSeverity(i) === "CRITICAL").length} color={C.red} /></Panel>
-        <Panel accent={C.amber}><Stat label="High" value={incidents.filter(i => getEffectiveSeverity(i) === "HIGH").length} color={C.amber} /></Panel>
-        <Panel accent={C.accent}><Stat label="Total Active" value={incidents.length} color={C.accent} /></Panel>
-        <Panel accent={C.purple}><Stat label="Pending Actions" value={incidents.reduce((a, i) => a + getPendingCount(i), 0)} color={C.purple} /></Panel>
-        <Panel accent={C.green}><Stat label="Avg Containment" value={`${Math.round(incidents.reduce((a, i) => a + (i.containment_time_min || 0), 0) / Math.max(1, incidents.length))}m`} color={C.green} /></Panel>
+        <Panel accent={C.red}><Stat label="Critical" value={stableIncidents.filter(i => getEffectiveSeverity(i) === "CRITICAL").length} color={C.red} /></Panel>
+        <Panel accent={C.amber}><Stat label="High" value={stableIncidents.filter(i => getEffectiveSeverity(i) === "HIGH").length} color={C.amber} /></Panel>
+        <Panel accent={C.accent}><Stat label="Total Active" value={stableIncidents.length} color={C.accent} /></Panel>
+        <Panel accent={C.purple}><Stat label="Pending Actions" value={stableIncidents.reduce((a, i) => a + getPendingCount(i), 0)} color={C.purple} /></Panel>
+        <Panel accent={C.green}><Stat label="Avg Containment" value={`${Math.round(stableIncidents.reduce((a, i) => a + (i.containment_time_min || 0), 0) / Math.max(1, stableIncidents.length))}m`} color={C.green} /></Panel>
       </div>
 
       {/* ═══════ INVESTIGATION DETAIL VIEW ═══════ */}
@@ -1523,7 +1529,7 @@ function IncidentsTab({ incidents }) {
         <>
           <Panel title="Active Incidents" icon="🚨" accent={C.red}>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {incidents.map(inc => (
+              {stableIncidents.map(inc => (
                 <div key={inc.incident_id} style={{
                   padding: 14, background: C.surface, borderRadius: 8,
                   border: `1px solid ${getEffectiveSeverity(inc) === "CRITICAL" ? C.red + "30" : C.border}`,
