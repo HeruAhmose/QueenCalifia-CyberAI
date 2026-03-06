@@ -5,7 +5,7 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
 import { playSound, setMasterVolume, startAmbient, stopAmbient } from "../lib/SoundEngine.js";
 
-const SoundContext = createContext({
+export const SoundContext = createContext({
   enabled: false,
   toggle: () => {},
   play: () => {},

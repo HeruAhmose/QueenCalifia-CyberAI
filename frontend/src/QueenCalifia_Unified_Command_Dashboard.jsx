@@ -2576,13 +2576,13 @@ export default function QueenCalifiaCommandDashboard() {
 
   const handleTabSwitch = (tabId) => {
     setActiveTab(tabId);
-    if (sound?.playSound) sound.playSound("tab_switch");
+    if (sound?.play) sound.play("tab_switch");
   };
 
   const toggleExpert = () => {
     const next = !expertMode;
     setExpertMode(next);
-    if (sound?.playSound) sound.playSound(next ? "sovereign_awaken" : "tab_switch");
+    if (sound?.play) sound.play(next ? "sovereign_awaken" : "tab_switch");
     try { window.sessionStorage?.setItem?.("qc_expert", next ? "1" : "0"); } catch {}
     // If leaving expert mode, switch to a basic tab
     if (!next && ["predictor","telemetry","mesh","devops"].includes(activeTab)) setActiveTab("overview");
