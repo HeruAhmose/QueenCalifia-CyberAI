@@ -2610,7 +2610,76 @@ export default function QueenCalifiaCommandDashboard() {
   const telemetryData = useMemo(() => generateTelemetryData(), [tick]);
 
   const critCount = incidents.filter(i => i.severity === "CRITICAL").length;
+  const highCount = incidents.filter(i => i.severity === "HIGH").length;
   const highPreds = predictions.filter(p => p.confidence > 0.7).length;
+
+  // ── Dynamic Avatar State Engine ────────────────────────────────────────
+  // Determines QC's avatar state based on threat posture, active tab, and context
+  const avatarOverrideRef = useRef(null); // manual override from VulnsTab scan
+  const avatarTimerRef = useRef(null);
+
+  // Wrap setQcAvatarState so VulnsTab can set temporary overrides
+  const setAvatarWithOverride = useCallback((state) => {
+    avatarOverrideRef.current = state;
+    setQcAvatarState(state);
+    // Clear override after 10s so threat-based logic takes back over
+    clearTimeout(avatarTimerRef.current);
+    if (state !== "idle") {
+      avatarTimerRef.current = setTimeout(() => {
+        avatarOverrideRef.current = null;
+      }, 10000);
+    } else {
+      avatarOverrideRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    // If VulnsTab has a manual override active, don't auto-change
+    if (avatarOverrideRef.current) return;
+
+    let newState = "idle";
+
+    // Priority 1: Critical threat level → ascended (full power)
+    if (critCount > 0) {
+      newState = "ascended";
+    }
+    // Priority 2: High threats → hex_shield (defense engaged)
+    else if (highCount > 0) {
+      newState = "hex_shield";
+    }
+    // Priority 3: Tab-contextual states
+    else if (activeTab === "predictor") {
+      newState = "energy_spiral"; // casting predictions
+    } else if (activeTab === "mesh") {
+      newState = "hex_shield"; // monitoring mesh
+    } else if (activeTab === "incidents") {
+      newState = "staff_raised"; // command & control
+    } else if (activeTab === "telemetry") {
+      newState = "active"; // processing telemetry
+    } else if (activeTab === "devops") {
+      newState = "active"; // operations mode
+    } else if (activeTab === "vulns") {
+      newState = "active"; // scanning mode
+    } else {
+      // Overview — base on overall threat posture
+      newState = highPreds > 2 ? "energy_spiral" : "idle";
+    }
+
+    setQcAvatarState(newState);
+  }, [activeTab, critCount, highCount, highPreds, tick]);
+
+  // Expert mode toggle → brief ascended flash
+  const prevExpertRef = useRef(expertMode);
+  useEffect(() => {
+    if (prevExpertRef.current !== expertMode) {
+      prevExpertRef.current = expertMode;
+      if (expertMode) {
+        avatarOverrideRef.current = "ascended";
+        setQcAvatarState("ascended");
+        setTimeout(() => { avatarOverrideRef.current = null; }, 2000);
+      }
+    }
+  }, [expertMode]);
 
   const BASIC_TABS = ["overview", "vulns", "incidents"];
   const visibleNav = expertMode ? NAV_ITEMS : NAV_ITEMS.filter(n => BASIC_TABS.includes(n.id));
@@ -2677,6 +2746,20 @@ export default function QueenCalifiaCommandDashboard() {
             </div>
             <div style={{ fontSize: 9, color: C.textDim, letterSpacing: 1.5, textTransform: "uppercase" }}>
               {expertMode ? "Defense-Grade Cybersecurity Intelligence Platform" : "Network Security Scanner"}
+            </div>
+            <div style={{
+              fontSize: 8, fontFamily: MONO, letterSpacing: 1.5, marginTop: 2,
+              color: qcAvatarState === "ascended" ? "#FFE178" : qcAvatarState === "hex_shield" ? C.cyan : qcAvatarState === "energy_spiral" ? C.gold : qcAvatarState === "staff_raised" ? "#FFE178" : qcAvatarState === "active" ? C.cyan : C.textDim,
+              display: "flex", alignItems: "center", gap: 4,
+              transition: "color 0.5s ease",
+            }}>
+              <span style={{
+                width: 5, height: 5, borderRadius: "50%",
+                background: qcAvatarState === "ascended" ? "#FFE178" : qcAvatarState === "hex_shield" ? C.cyan : qcAvatarState === "energy_spiral" ? C.gold : qcAvatarState === "staff_raised" ? "#FFE178" : qcAvatarState === "active" ? C.cyan : C.textDim,
+                boxShadow: `0 0 6px ${qcAvatarState === "idle" ? "transparent" : "currentColor"}`,
+                animation: qcAvatarState !== "idle" ? "qcPulse 1.5s ease-in-out infinite" : "none",
+              }} />
+              {qcAvatarState === "idle" ? "SENTINEL MODE" : qcAvatarState === "active" ? "DEFENSE ACTIVE" : qcAvatarState === "ascended" ? "⚡ ANCESTORS ONLINE" : qcAvatarState === "hex_shield" ? "🛡 HEX SHIELD ACTIVE" : qcAvatarState === "energy_spiral" ? "✦ ENERGY SPIRAL" : qcAvatarState === "staff_raised" ? "⚜ AUTHORITY MODE" : "READY"}
             </div>
           </div>
         </div>
@@ -2764,7 +2847,7 @@ export default function QueenCalifiaCommandDashboard() {
             {activeTab === "telemetry" && expertMode && <TelemetryTab telemetry={telemetryData} />}
             {activeTab === "mesh" && expertMode && <MeshTab mesh={mesh} />}
             {activeTab === "incidents" && <IncidentsTab incidents={incidents} />}
-            {activeTab === "vulns" && <VulnsTab setAvatarState={setQcAvatarState} />}
+            {activeTab === "vulns" && <VulnsTab setAvatarState={setAvatarWithOverride} />}
             {activeTab === "devops" && expertMode && <DevOpsTab />}
           </motion.div>
         </AnimatePresence>
