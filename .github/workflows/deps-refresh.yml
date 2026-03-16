@@ -19,7 +19,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ./scripts/lock.sh --upgrade
+          bash scripts/lock.sh --upgrade
 
       - name: Create PR with updated lockfiles
         uses: peter-evans/create-pull-request@v6
