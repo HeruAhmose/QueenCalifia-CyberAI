@@ -13,7 +13,7 @@ jobs:
       - name: Check lockfiles are up to date
         run: |
           docker version
-          ./scripts/lock.sh --check
+          bash scripts/lock.sh --check
 
   k8s-validate:
     needs: lockfiles
@@ -117,7 +117,6 @@ jobs:
           npm install
           npm test
 
-
   kind-smoke:
     needs: [k8s-validate, test]
     runs-on: ubuntu-latest
@@ -143,7 +142,7 @@ jobs:
           QC_API_IMAGE: qc-api:ci
           QC_FRONTEND_IMAGE: qc-frontend:ci
         run: |
-          ./scripts/ci/kind_smoke.sh
+          bash scripts/ci/kind_smoke.sh
 
       - name: Ingress E2E (port-forward ingress-nginx)
         env:
@@ -153,7 +152,8 @@ jobs:
           QC_INGRESS_LOCAL_HTTP_PORT: "18080"
           QC_INGRESS_LOCAL_HTTPS_PORT: "18443"
         run: |
-          ./scripts/ci/kind_ingress_e2e.sh
+          bash scripts/ci/kind_ingress_e2e.sh
+
   argocd-health:
     if: github.event_name == 'pull_request' && github.base_ref == 'production'
     needs: [kind-smoke]
@@ -166,21 +166,23 @@ jobs:
           chmod +x argocd
           sudo mv argocd /usr/local/bin/argocd
           argocd version --client
+
       - name: Gate merge if production is degraded
-      env:
-        ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
-        ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
-        ARGOCD_OPTS: ${{ secrets.ARGOCD_OPTS }}
-        APP_PRODUCTION: ${{ vars.ARGOCD_APP_PRODUCTION || 'queen-califia-production' }}
-      run: |
-        set -euo pipefail
-        test -n "$ARGOCD_SERVER"
-        test -n "$ARGOCD_AUTH_TOKEN"
-        OPTS="${ARGOCD_OPTS:-}"
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+          ARGOCD_OPTS: ${{ secrets.ARGOCD_OPTS }}
+          APP_PRODUCTION: ${{ vars.ARGOCD_APP_PRODUCTION || 'queen-califia-production' }}
+        run: |
+          set -euo pipefail
+          test -n "$ARGOCD_SERVER"
+          test -n "$ARGOCD_AUTH_TOKEN"
+          OPTS="${ARGOCD_OPTS:-}"
 
-        sudo apt-get update -y >/dev/null
-        sudo apt-get install -y jq >/dev/null
+          sudo apt-get update -y >/dev/null
+          sudo apt-get install -y jq >/dev/null
 
-        status="$(argocd app get "$APP_PRODUCTION" --server "$ARGOCD_SERVER" --auth-token "$ARGOCD_AUTH_TOKEN" $OPTS -o json                 | jq -r '.status.health.status + "/" + .status.sync.status')"
-        echo "$APP_PRODUCTION => $status"
-        test "$status" = "Healthy/Synced"
+          status="$(argocd app get "$APP_PRODUCTION" --server "$ARGOCD_SERVER" --auth-token "$ARGOCD_AUTH_TOKEN" $OPTS -o json \
+            | jq -r '.status.health.status + "/" + .status.sync.status')"
+          echo "$APP_PRODUCTION => $status"
+          test "$status" = "Healthy/Synced"
