@@ -154,20 +154,19 @@ jobs:
           QC_INGRESS_LOCAL_HTTPS_PORT: "18443"
         run: |
           ./scripts/ci/kind_ingress_e2e.sh
-argocd-health:
-  if: github.event_name == 'pull_request' && github.base_ref == 'production'
-  needs: [kind-smoke]
-  runs-on: ubuntu-latest
-  timeout-minutes: 10
-  steps:
-    - name: Install argocd CLI
-      run: |
-        curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-        chmod +x argocd
-        sudo mv argocd /usr/local/bin/argocd
-        argocd version --client
-
-    - name: Gate merge if production is degraded
+  argocd-health:
+    if: github.event_name == 'pull_request' && github.base_ref == 'production'
+    needs: [kind-smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Install argocd CLI
+        run: |
+          curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          chmod +x argocd
+          sudo mv argocd /usr/local/bin/argocd
+          argocd version --client
+      - name: Gate merge if production is degraded
       env:
         ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
         ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
