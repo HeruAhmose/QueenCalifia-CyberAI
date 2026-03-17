@@ -6,7 +6,7 @@
 
 # Web framework (hardened)
 flask>=3.0.0,<4.0
-flask-cors>=4.0.0,<6.0
+flask-cors>=4.0.0,<7.0
 werkzeug>=3.0.1,<4.0
 gunicorn>=21.2.0,<23.0
 
