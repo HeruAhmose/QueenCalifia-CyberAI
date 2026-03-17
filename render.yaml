@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: queen-califia-cyberai
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: QC_NAME
+        value: Queen Califia
+      - key: QC_DB_PATH
+        value: data/queen.db
+      - key: QC_CORS_ORIGINS
+        value: https://queencalifia-cyberai.web.app,https://queencalifia-cyberai.firebaseapp.com
+      - key: QC_API_KEY
+        sync: false
+      - key: QC_ADMIN_KEY
+        sync: false
+      - key: FRED_API_KEY
+        sync: false
+      - key: NASDAQ_API_KEY
+        sync: false

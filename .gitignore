@@ -1,50 +1,11 @@
-# ── Python ──
+.venv/
 __pycache__/
 *.pyc
-*.pyo
-.pytest_cache/
-.venv/
-venv/
-htmlcov/
-.coverage
-.tox/
-
-# ── Secrets & Environment ──
 .env
-.env.local
-.env.*.local
-keys.json
-*.pem
-*.key
-secrets/tls/
-
-# ── Runtime Data (NEVER commit databases or logs) ──
-*.db
-*.sqlite3
-*.jsonl
-*.log
 data/
-
-# ── Node ──
-node_modules/
 frontend/node_modules/
 frontend/dist/
-
-# ── Firebase ──
 .firebase/
 firebase-debug.log
-
-# ── IDE & OS ──
 .DS_Store
 Thumbs.db
-*.swp
-*.swo
-.vscode/
-.idea/
-
-# ── Docker ──
-docker-compose.override.yml
-
-# ── Build ──
-dist/
-build/
