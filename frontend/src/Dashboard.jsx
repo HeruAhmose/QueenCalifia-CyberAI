@@ -1849,24 +1849,6 @@ function VulnsTab() {
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      {/* ── ONE-CLICK REMEDIATE BANNER ─────────────────────────── */}
-      <div style={{ padding: "16px 20px", background: "linear-gradient(135deg, rgba(37,99,235,0.15) 0%, rgba(16,185,129,0.10) 100%)", border: "1px solid rgba(37,99,235,0.35)", borderRadius: 10, marginBottom: 4 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#d4dff0", letterSpacing: 0.3 }}>⚡ One-Click Remediate</div>
-            <div style={{ fontSize: 11, color: "#8a9dbd", marginTop: 3 }}>Scans 127.0.0.1 and auto-applies all fixes — no prompts</div>
-          </div>
-          <button
-            onClick={oneClickRemediate}
-            disabled={oneClickRunning}
-            style={{ padding: "12px 28px", background: oneClickRunning ? "#1a2d50" : "linear-gradient(135deg, #2563eb, #10b981)", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: oneClickRunning ? "wait" : "pointer", letterSpacing: 0.5, boxShadow: oneClickRunning ? "none" : "0 0 20px rgba(37,99,235,0.4)", transition: "all 0.2s", whiteSpace: "nowrap" }}
-          >
-            {oneClickRunning ? (oneClickPhase === "scanning" ? "🔍 Scanning..." : oneClickPhase === "remediating" ? "🛠️ Remediating..." : "⏳ Working...") : "⚡ REMEDIATE ALL"}
-          </button>
-        </div>
-        {oneClickLog.length > 0 && (
-          <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(6,10,20,0.7)", borderRadius: 6, fontFamily: "JetBrains
-    <div style={{ display: "grid", gap: 16 }}>
       {/* ── ONE-CLICK REMEDIATE BANNER */}
       <div style={{ padding: "16px 20px", background: "linear-gradient(135deg, rgba(37,99,235,0.15) 0%, rgba(16,185,129,0.10) 100%)", border: "1px solid rgba(37,99,235,0.35)", borderRadius: 10, marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
