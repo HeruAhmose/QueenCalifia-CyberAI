@@ -192,6 +192,8 @@ Render requirements before redeploy:
 - Set `QC_MEMORY_EXPORT_TOKEN`
 - Set `FRED_API_KEY` if you want live FRED macro coverage to show as configured
 - Set `NASDAQ_API_KEY` if you want Nasdaq Data Link coverage to show as configured
+- Keep the Render web service at a single Gunicorn worker while async vuln scan jobs are stored in process memory. The checked-in `render.yaml` now does this for you.
+- If you later want multiple web workers, move async scan submission/status to shared Redis/Celery state first.
 
 ## Post-Deploy Smoke Check
 

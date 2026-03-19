@@ -23,6 +23,8 @@ This directory is the Render-facing backend service entrypoint.
 
 - Render uses `render.yaml` from the repo root.
 - Persistent runtime data should live on the mounted disk at `/var/data`.
+- The current Render profile intentionally runs a single Gunicorn worker because async vulnerability scan jobs are stored in process memory. This avoids cross-worker `scan not found` polling failures.
+- If you later enable shared queue/state via Redis + Celery, you can scale web workers back out safely.
 - The main QC app state and evolution memory are configured through:
   - `QC_DB_PATH`
   - `QC_EVOLUTION_DB`

@@ -8,7 +8,10 @@ services:
       mountPath: /var/data
       sizeGB: 10
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
+    # Run a single web worker while vuln scan jobs are stored in process memory.
+    # If you later move async scan state to Redis/Celery, you can scale workers
+    # back out safely without "scan not found" cross-worker polling drift.
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120
     healthCheckPath: /healthz
     envVars:
       - key: PYTHON_VERSION
