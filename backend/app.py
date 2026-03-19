@@ -59,6 +59,12 @@ CORS(app, resources={r"/api/*": {"origins": parse_origins(settings.cors_origins)
 # (The root security app mainly provides vuln routes; the dashboard UI also
 # expects market/forecast/identity endpoints.)
 try:
+    # Ensure `backend/` is on sys.path so imports like `modules.market.routes`
+    # resolve correctly (gunicorn sets rootDir=backend, but local imports may not).
+    backend_dir = os.path.dirname(__file__)
+    if backend_dir not in sys.path:
+        sys.path.insert(0, backend_dir)
+
     from modules.conversation.routes import conversation_bp
     from modules.market.routes import market_bp
     from modules.forecast.routes import forecast_bp
