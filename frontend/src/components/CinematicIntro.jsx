@@ -27,9 +27,16 @@ export default function CinematicIntro({ onComplete }) {
   const [textVisible, setTextVisible] = useState(false);
   const [subtitleVisible, setSubtitleVisible] = useState(false);
   const [buttonVisible, setButtonVisible] = useState(false);
+  const [telemetryIndex, setTelemetryIndex] = useState(0);
   const particlesRef = useRef([]);
   const animFrameRef = useRef(0);
   const { toggle, enabled } = useSound();
+  const telemetryLines = [
+    "Hex mesh aligning",
+    "Ancestral signal online",
+    "Threat lattice calibrating",
+    "Sovereign circuit stabilized",
+  ];
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -92,6 +99,13 @@ export default function CinematicIntro({ onComplete }) {
     }
   }, [phase]);
 
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTelemetryIndex((prev) => (prev + 1) % telemetryLines.length);
+    }, 2200);
+    return () => clearInterval(timer);
+  }, [telemetryLines.length]);
+
   const handleEnter = useCallback(() => {
     if (!enabled) {
       toggle();
@@ -129,7 +143,41 @@ export default function CinematicIntro({ onComplete }) {
         background: "radial-gradient(ellipse at center, #0a0f1e 0%, #020409 70%)",
       }}
     >
+      <style>{`
+        @keyframes qc-pulse {
+          0%, 100% { opacity: 0.6; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.04); }
+        }
+        @keyframes qc-rotate {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes qc-scanline {
+          0% { top: -2px; opacity: 0; }
+          10% { opacity: 1; }
+          90% { opacity: 1; }
+          100% { top: 100%; opacity: 0; }
+        }
+        @keyframes qc-drift {
+          0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.22; }
+          50% { transform: translate3d(0, -18px, 0) scale(1.06); opacity: 0.36; }
+        }
+        @keyframes qc-fade-shift {
+          0%, 100% { opacity: 0.45; transform: translateY(0); }
+          50% { opacity: 1; transform: translateY(-2px); }
+        }
+      `}</style>
       <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, zIndex: 0 }} />
+
+      <div style={{
+        position: "absolute",
+        inset: "-12%",
+        zIndex: 1,
+        pointerEvents: "none",
+        background: "radial-gradient(circle at 50% 40%, rgba(212,175,55,0.18) 0%, rgba(6,182,212,0.08) 28%, transparent 62%)",
+        filter: "blur(18px)",
+        animation: "qc-drift 8s ease-in-out infinite",
+      }} />
 
       <div style={{
         position: "absolute", inset: 0, zIndex: 1, opacity: 0.03,
@@ -141,6 +189,73 @@ export default function CinematicIntro({ onComplete }) {
         position: "absolute", inset: 0, zIndex: 10,
         background: "radial-gradient(ellipse at center, transparent 40%, #020409 100%)",
       }} />
+
+      <div style={{
+        position: "absolute",
+        top: 22,
+        left: 22,
+        zIndex: 22,
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        pointerEvents: "none",
+      }}>
+        <div style={{
+          color: "#D4AF37",
+          fontSize: 10,
+          letterSpacing: "0.28em",
+          textTransform: "uppercase",
+          fontFamily: "'JetBrains Mono', monospace",
+          opacity: 0.9,
+        }}>
+          Sovereign Awakening Sequence
+        </div>
+        <div style={{
+          color: "#7dd3fc",
+          fontSize: 11,
+          letterSpacing: "0.16em",
+          textTransform: "uppercase",
+          fontFamily: "'JetBrains Mono', monospace",
+          animation: "qc-fade-shift 2.2s ease-in-out infinite",
+        }}>
+          {telemetryLines[telemetryIndex]}
+        </div>
+      </div>
+
+      <div style={{
+        position: "absolute",
+        bottom: 24,
+        left: 24,
+        right: 24,
+        zIndex: 22,
+        display: "flex",
+        justifyContent: "space-between",
+        gap: 16,
+        flexWrap: "wrap",
+        pointerEvents: "none",
+      }}>
+        {[
+          ["Aura", phase === "waiting" ? "Dormant" : phase === "awakening" ? "Igniting" : "Online"],
+          ["Mesh", phase === "waiting" ? "Idle" : "Synced"],
+          ["Voice", enabled ? "Audible" : "Muted"],
+        ].map(([label, value]) => (
+          <div
+            key={label}
+            style={{
+              minWidth: 140,
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid rgba(212,175,55,0.18)",
+              background: "linear-gradient(135deg, rgba(10,15,30,0.72), rgba(2,4,9,0.42))",
+              boxShadow: "0 0 30px rgba(212,175,55,0.06)",
+              backdropFilter: "blur(12px)",
+            }}
+          >
+            <div style={{ color: "#4a6080", fontSize: 9, letterSpacing: "0.24em", textTransform: "uppercase", fontFamily: "'JetBrains Mono', monospace" }}>{label}</div>
+            <div style={{ color: "#d4dff0", fontSize: 13, marginTop: 4, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'Orbitron', sans-serif" }}>{value}</div>
+          </div>
+        ))}
+      </div>
 
       <AnimatePresence>
         {phase === "waiting" && (

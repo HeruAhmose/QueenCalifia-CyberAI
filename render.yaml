@@ -8,10 +8,9 @@ services:
       mountPath: /var/data
       sizeGB: 10
     buildCommand: pip install -r requirements.txt
-    # Run a single web worker while vuln scan jobs are stored in process memory.
-    # If you later move async scan state to Redis/Celery, you can scale workers
-    # back out safely without "scan not found" cross-worker polling drift.
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120
+    # Async scan state is externalized to Redis/Celery, so the web tier can
+    # safely run multiple workers without cross-process scan polling drift.
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
     healthCheckPath: /healthz
     envVars:
       - key: PYTHON_VERSION
@@ -32,6 +31,15 @@ services:
         value: /var/data/audit.log.jsonl
       - key: QC_CORS_ORIGINS
         value: https://queencalifia-cyberai.web.app,https://queencalifia-cyberai.firebaseapp.com
+      - key: QC_REDIS_URL
+        fromService:
+          type: keyvalue
+          name: queen-califia-cyberai-redis
+          property: connectionString
+      - key: QC_USE_CELERY
+        value: "1"
+      - key: QC_REQUIRE_REDIS
+        value: "1"
       - key: QC_API_KEY
         sync: false
       - key: QC_API_KEY_PEPPER
@@ -54,3 +62,34 @@ services:
       # When omitted, the related APIs remain mounted but surface as
       # configured=false in /api/market/sources and the live smoke check can
       # enforce them with --require-fred / --require-nasdaq.
+  - type: worker
+    name: queen-califia-cyberai-worker
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A celery_app.celery_app worker -l INFO --concurrency 4 -Q scans
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: QC_PRODUCTION
+        value: "1"
+      - key: QC_REDIS_URL
+        fromService:
+          type: keyvalue
+          name: queen-califia-cyberai-redis
+          property: connectionString
+      - key: QC_USE_CELERY
+        value: "1"
+      - key: QC_DENY_PUBLIC_TARGETS
+        value: "1"
+      - key: QC_SCAN_ALLOWLIST
+        value: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8
+      - key: QC_API_KEY_PEPPER
+        sync: false
+      - key: QC_AUDIT_HMAC_KEY
+        sync: false
+  - type: keyvalue
+    name: queen-califia-cyberai-redis
+    ipAllowList: []
+    plan: starter
+    maxmemoryPolicy: noeviction

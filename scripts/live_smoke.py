@@ -155,6 +155,14 @@ def main() -> int:
         f"status={status} body={health}",
     )
 
+    status, ready = fetch_json(f"{api_url}/readyz", timeout=args.timeout)
+    add(
+        results,
+        "api_ready",
+        status == 200 and ready.get("ready") is True,
+        f"status={status} body={ready}",
+    )
+
     status, debug_mount = fetch_json(f"{api_url}/api/debug/mount", timeout=args.timeout)
     add(
         results,

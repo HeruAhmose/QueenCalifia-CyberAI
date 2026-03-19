@@ -2024,11 +2024,14 @@ function VulnsTab({ onAvatarStateChange }) {
     // Skip polling when we are in UI simulation mode.
     if (String(scanId).startsWith("sim-")) return;
     let cancelled = false;
+    let notFoundStreak = 0;
     const tick = async () => {
       try {
         const r = await apiFetch(`/api/vulns/scan/${encodeURIComponent(scanId)}`, { method: "GET" });
         const s = normalizeStatus(r?.data || null);
         if (cancelled) return;
+        notFoundStreak = 0;
+        setError("");
         setScanStatus(s);
         if (s.ready) {
           setScanResult(s.result || null);
@@ -2038,12 +2041,20 @@ function VulnsTab({ onAvatarStateChange }) {
           return;
         }
       } catch (e) {
-        if (!cancelled) {
-          setError(String(e?.message || e));
+        const msg = String(e?.message || e || "");
+        const transientMissing = /scan not found/i.test(msg);
+        if (!cancelled && transientMissing) {
+          notFoundStreak += 1;
+          setScanStatus((prev) => prev || { state: "queued", ready: false, result: null });
+          if (notFoundStreak >= 4) {
+            setError("Scan status is synchronizing across the backend. Holding the scan session and retrying...");
+          }
+        } else if (!cancelled) {
+          setError(msg);
           onAvatarStateChange?.("idle");
         }
       }
-      if (!cancelled) setTimeout(tick, 2000);
+      if (!cancelled) setTimeout(tick, notFoundStreak > 0 ? 1500 : 2000);
     };
     tick();
     return () => { cancelled = true; };

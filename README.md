@@ -186,14 +186,16 @@ firebase deploy --only hosting
 Render requirements before redeploy:
 
 - Attach a disk at `/var/data`
+- Provision the Render Key Value instance from `render.yaml` and let both the web service and worker attach to it via `QC_REDIS_URL`
+- Run the Render background worker from `render.yaml` so async vulnerability scans execute through Celery instead of in-process memory
 - Set `QC_PRODUCTION=1`
 - Set `QC_API_KEY_PEPPER`
 - Set `QC_AUDIT_HMAC_KEY`
 - Set `QC_MEMORY_EXPORT_TOKEN`
 - Set `FRED_API_KEY` if you want live FRED macro coverage to show as configured
 - Set `NASDAQ_API_KEY` if you want Nasdaq Data Link coverage to show as configured
-- Keep the Render web service at a single Gunicorn worker while async vuln scan jobs are stored in process memory. The checked-in `render.yaml` now does this for you.
-- If you later want multiple web workers, move async scan submission/status to shared Redis/Celery state first.
+- `render.yaml` now enables the shared Redis/Celery async scan path and marks Redis as required in `/readyz`
+- If a Blueprint update does not auto-create the worker or Key Value instance in your workspace, create them once in Render with the same names and env wiring shown in `render.yaml`
 
 ## Post-Deploy Smoke Check
 
