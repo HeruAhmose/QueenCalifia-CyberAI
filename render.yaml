@@ -47,3 +47,7 @@ services:
         sync: false
       - key: NASDAQ_API_KEY
         sync: false
+      # Set both provider keys in Render for full market-source coverage.
+      # When omitted, the related APIs remain mounted but surface as
+      # configured=false in /api/market/sources and the live smoke check can
+      # enforce them with --require-fred / --require-nasdaq.

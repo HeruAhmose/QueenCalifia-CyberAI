@@ -190,6 +190,29 @@ Render requirements before redeploy:
 - Set `QC_API_KEY_PEPPER`
 - Set `QC_AUDIT_HMAC_KEY`
 - Set `QC_MEMORY_EXPORT_TOKEN`
+- Set `FRED_API_KEY` if you want live FRED macro coverage to show as configured
+- Set `NASDAQ_API_KEY` if you want Nasdaq Data Link coverage to show as configured
+
+## Post-Deploy Smoke Check
+
+Use the repeatable smoke script to validate that the live dashboard shell, route mounting, identity core, market providers, and vuln guardrails are all aligned with production:
+
+```bash
+python scripts/live_smoke.py
+python scripts/live_smoke.py --require-fred --require-nasdaq
+python scripts/live_smoke.py --browser
+```
+
+Notes:
+
+- `--require-fred` and `--require-nasdaq` turn missing production provider keys into hard failures.
+- `--browser` performs a Playwright click-through of the live intro flow: `CLICK TO AWAKEN` -> `ENTER COMMAND` -> dashboard render.
+- If Playwright is not installed locally, use:
+
+```bash
+python -m pip install playwright
+python -m playwright install chromium
+```
 
 ## Key API Endpoints
 
