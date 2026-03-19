@@ -41,7 +41,7 @@ from typing import Any, Dict, List, Optional, Callable
 from collections import defaultdict, deque
 import ipaddress
 
-from flask import Flask, request, jsonify, g
+from flask import Flask, request, jsonify, g, send_file
 
 # Optional: Zero-Day predictor + operational telemetry
 try:
@@ -2063,6 +2063,15 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
     except Exception:
         evolution_engine = None
 
+    def _memory_admin_authorized() -> bool:
+        principal = getattr(g, "principal", None) or {}
+        if "admin" in principal.get("permissions", []):
+            return True
+
+        token = (os.environ.get("QC_MEMORY_EXPORT_TOKEN", "") or "").strip()
+        provided = (request.headers.get("X-QC-Memory-Token", "") or "").strip()
+        return bool(token and provided and hmac.compare_digest(provided, token))
+
     @app.route("/api/v1/evolution/status", methods=["GET"])
     def api_evolution_status():
         """Get evolution engine status — health, learning, evolution metrics"""
@@ -2113,6 +2122,55 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         if not evolution_engine:
             return jsonify({"error": "Evolution engine not available"}), 503
         return jsonify({"baselines": evolution_engine.get_learned_baselines()})
+
+    @app.route("/api/v1/evolution/storage", methods=["GET"])
+    def api_evolution_storage():
+        """Get storage/backup status for persistent memory."""
+        if not evolution_engine:
+            return jsonify({"error": "Evolution engine not available"}), 503
+        if not _memory_admin_authorized():
+            return jsonify({"error": "memory_admin_required"}), 403
+        return jsonify({"success": True, "data": evolution_engine.get_storage_status()})
+
+    @app.route("/api/v1/evolution/backups", methods=["GET"])
+    def api_evolution_backups():
+        """List available memory snapshots."""
+        if not evolution_engine:
+            return jsonify({"error": "Evolution engine not available"}), 503
+        if not _memory_admin_authorized():
+            return jsonify({"error": "memory_admin_required"}), 403
+        limit = min(int(request.args.get("limit", 20)), 100)
+        return jsonify({"success": True, "data": evolution_engine.list_backups(limit=limit)})
+
+    @app.route("/api/v1/evolution/backup", methods=["POST"])
+    def api_evolution_backup():
+        """Create a point-in-time evolution memory snapshot."""
+        if not evolution_engine:
+            return jsonify({"error": "Evolution engine not available"}), 503
+        if not _memory_admin_authorized():
+            return jsonify({"error": "memory_admin_required"}), 403
+        body = request.get_json(force=True, silent=True) or {}
+        body = InputSanitizer.sanitize_json_body(body)
+        result = evolution_engine.create_backup(label=body.get("label"))
+        return jsonify(result), 201
+
+    @app.route("/api/v1/evolution/backups/<backup_name>", methods=["GET"])
+    def api_evolution_download_backup(backup_name: str):
+        """Download an existing memory snapshot."""
+        if not evolution_engine:
+            return jsonify({"error": "Evolution engine not available"}), 503
+        if not _memory_admin_authorized():
+            return jsonify({"error": "memory_admin_required"}), 403
+
+        safe_name = os.path.basename(InputSanitizer.sanitize_string(backup_name, max_length=128))
+        backup_path = os.path.abspath(os.path.join(evolution_engine.backup_dir, safe_name))
+        backup_root = os.path.abspath(evolution_engine.backup_dir)
+        if not backup_path.startswith(backup_root + os.sep):
+            return jsonify({"error": "invalid backup path"}), 400
+        if not os.path.exists(backup_path):
+            return jsonify({"error": "backup not found"}), 404
+
+        return send_file(backup_path, as_attachment=True, download_name=safe_name)
 
     @app.route("/api/v1/evolution/evolutions", methods=["GET"])
     def api_evolution_list():

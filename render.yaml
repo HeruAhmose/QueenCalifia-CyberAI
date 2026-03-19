@@ -3,6 +3,10 @@ services:
     name: queen-califia-cyberai
     env: python
     rootDir: backend
+    disk:
+      name: qc-data
+      mountPath: /var/data
+      sizeGB: 10
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
     healthCheckPath: /healthz
@@ -12,7 +16,15 @@ services:
       - key: QC_NAME
         value: Queen Califia
       - key: QC_DB_PATH
-        value: data/queen.db
+        value: /var/data/queen.db
+      - key: QC_EVOLUTION_DB
+        value: /var/data/qc_evolution.db
+      - key: QC_MEMORY_BACKUP_DIR
+        value: /var/data/memory-backups
+      - key: QC_API_KEYS_FILE
+        value: /var/data/keys.json
+      - key: QC_AUDIT_LOG_FILE
+        value: /var/data/audit.log.jsonl
       - key: QC_CORS_ORIGINS
         value: https://queencalifia-cyberai.web.app,https://queencalifia-cyberai.firebaseapp.com
       - key: QC_API_KEY
@@ -22,6 +34,8 @@ services:
       - key: QC_NO_AUTH
         value: "1"
       - key: QC_ADMIN_KEY
+        sync: false
+      - key: QC_MEMORY_EXPORT_TOKEN
         sync: false
       - key: FRED_API_KEY
         sync: false

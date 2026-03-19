@@ -46,6 +46,8 @@ import logging
 import sqlite3
 import threading
 import statistics
+import re
+from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Optional, Tuple, Set
 from dataclasses import dataclass, field, asdict
@@ -159,7 +161,11 @@ class EvolutionEngine:
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
-        self.db_path = self.config.get("db_path", EVOLUTION_DB)
+        self.db_path = os.path.abspath(self.config.get("db_path", EVOLUTION_DB))
+        default_backup_dir = os.path.join(os.path.dirname(self.db_path) or ".", "memory-backups")
+        self.backup_dir = os.path.abspath(
+            self.config.get("backup_dir", os.environ.get("QC_MEMORY_BACKUP_DIR", default_backup_dir))
+        )
         self._lock = threading.Lock()
 
         # Component registry
@@ -194,6 +200,7 @@ class EvolutionEngine:
 
     def _init_db(self):
         """Create evolution tracking tables."""
+        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         with sqlite3.connect(self.db_path) as conn:
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS health_log (
@@ -254,6 +261,37 @@ class EvolutionEngine:
                 CREATE INDEX IF NOT EXISTS idx_scan_intel_host ON scan_intelligence(host_ip);
                 CREATE INDEX IF NOT EXISTS idx_evolutions_type ON evolutions(evolution_type);
             """)
+        self._secure_file_permissions(self.db_path)
+
+    def _secure_file_permissions(self, path: str):
+        """Best-effort privacy hardening for local files."""
+        try:
+            if os.path.exists(path):
+                os.chmod(path, 0o600)
+        except Exception:
+            # Windows and some hosted environments may not honor POSIX perms.
+            pass
+
+    def _sha256_file(self, path: str) -> str:
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                h.update(chunk)
+        return h.hexdigest()
+
+    def _is_persistent_path(self, path: str) -> bool:
+        normalized = os.path.abspath(path).replace("\\", "/")
+        return normalized.startswith("/var/data/") or normalized.startswith("/data/")
+
+    def _backup_metadata(self, path: str) -> Dict[str, Any]:
+        st = os.stat(path)
+        return {
+            "name": os.path.basename(path),
+            "path": path,
+            "size_bytes": st.st_size,
+            "sha256": self._sha256_file(path),
+            "created_at": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat(),
+        }
 
     # ═════════════════════════════════════════════════════════════════════
     #  SELF-HEALING
@@ -1121,3 +1159,51 @@ class EvolutionEngine:
         if evolution_type:
             evos = [e for e in evos if e.evolution_type.value == evolution_type]
         return [e.to_dict() for e in sorted(evos, key=lambda e: e.created_at, reverse=True)]
+
+    def get_storage_status(self) -> Dict[str, Any]:
+        """Return safe storage metadata for persistence/backup monitoring."""
+        db_exists = os.path.exists(self.db_path)
+        backup_dir_exists = os.path.isdir(self.backup_dir)
+        backup_count = 0
+        if backup_dir_exists:
+            backup_count = len([p for p in os.listdir(self.backup_dir) if p.endswith(".sqlite3")])
+
+        return {
+            "db_path": self.db_path,
+            "db_exists": db_exists,
+            "db_size_bytes": os.path.getsize(self.db_path) if db_exists else 0,
+            "backup_dir": self.backup_dir,
+            "backup_dir_exists": backup_dir_exists,
+            "backup_count": backup_count,
+            "persistent_db": self._is_persistent_path(self.db_path),
+            "persistent_backups": self._is_persistent_path(self.backup_dir),
+        }
+
+    def list_backups(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """List backup snapshots, newest first."""
+        Path(self.backup_dir).mkdir(parents=True, exist_ok=True)
+        backups = []
+        for entry in Path(self.backup_dir).glob("*.sqlite3"):
+            if entry.is_file():
+                backups.append((entry.stat().st_mtime, str(entry)))
+        backups.sort(reverse=True)
+        return [self._backup_metadata(path) for _, path in backups[: max(1, min(int(limit), 100))]]
+
+    def create_backup(self, label: Optional[str] = None) -> Dict[str, Any]:
+        """Create a point-in-time SQLite backup for memory persistence."""
+        Path(self.backup_dir).mkdir(parents=True, exist_ok=True)
+        safe_label = re.sub(r"[^a-zA-Z0-9_.-]+", "-", str(label or "")).strip("-")[:48]
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        name = f"qc_evolution_{ts}"
+        if safe_label:
+            name += f"_{safe_label}"
+        backup_path = os.path.join(self.backup_dir, f"{name}.sqlite3")
+
+        with sqlite3.connect(self.db_path) as src, sqlite3.connect(backup_path) as dest:
+            src.backup(dest)
+
+        self._secure_file_permissions(backup_path)
+        return {
+            "success": True,
+            "backup": self._backup_metadata(backup_path),
+        }

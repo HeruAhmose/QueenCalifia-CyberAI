@@ -2,7 +2,16 @@
 __pycache__/
 *.pyc
 .env
+.env.local
+frontend/.env.local
 data/
+qc_evolution.db
+keys.json
+audit.log.jsonl
+memory-backups/
+*.db-wal
+*.db-shm
+*.sqlite3
 frontend/node_modules/
 frontend/dist/
 .firebase/
