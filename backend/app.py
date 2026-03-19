@@ -58,6 +58,7 @@ CORS(app, resources={r"/api/*": {"origins": parse_origins(settings.cors_origins)
 # Mount the dashboard-friendly blueprints onto the security-gateway app.
 # (The root security app mainly provides vuln routes; the dashboard UI also
 # expects market/forecast/identity endpoints.)
+qc_mount_debug = {"errors": []}
 try:
     # Ensure `backend/` is on sys.path so imports like `modules.market.routes`
     # resolve correctly (gunicorn sets rootDir=backend, but local imports may not).
@@ -75,10 +76,24 @@ try:
     app.register_blueprint(forecast_bp, url_prefix="/api/forecast")
     app.register_blueprint(identity_bp, url_prefix="/api/identity")
 except Exception:
-    # If blueprint mounting fails (e.g., import path mismatch), don't hard-crash
-    # the whole service. Vuln routes should still work.
     import traceback
-    traceback.print_exc()
+    qc_mount_debug["errors"].append(traceback.format_exc())
+
+app.config["qc_mount_debug"] = qc_mount_debug
+
+# Lightweight introspection endpoint (safe; no secrets).
+@app.get("/api/debug/mount")
+def qc_debug_mount():
+    rules = [(r.rule, tuple(sorted(r.methods or []))) for r in app.url_map.iter_rules()]
+    has_market_sources = any(r[0] == "/api/market/sources" for r in rules)
+    has_identity_state = any(r[0] == "/api/identity/state" for r in rules)
+    has_vuln_scan = any(r[0] == "/api/vulns/scan" for r in rules)
+    return {
+        "has_market_sources": has_market_sources,
+        "has_identity_state": has_identity_state,
+        "has_vuln_scan": has_vuln_scan,
+        "errors": app.config.get("qc_mount_debug", {}).get("errors", []),
+    }, 200
 
 
 __all__ = ["app"]
