@@ -8,116 +8,68 @@ from __future__ import annotations
 
 import json
 
-from core.database import get_db, utc_now, audit, json_dumps
+from core.database import audit, utc_now
+from . import store
 
 
 def create_mission(db_path, name: str, objective: str) -> dict:
-    with get_db(db_path) as c:
-        cur = c.execute(
-            "INSERT INTO identity_missions (name,objective,status,created_at) VALUES (?,?,'open',?)",
-            (name, objective, utc_now()),
-        )
-        mid = cur.lastrowid
-    audit(db_path, "mission_create", "admin", str(mid), {"name": name})
-    return {"id": mid, "name": name, "objective": objective, "status": "open"}
+    mission = store.create_mission(db_path, name, objective)
+    audit(db_path, "mission_create", "admin", str(mission["id"]), {"name": name})
+    return {"id": mission["id"], "name": mission["name"], "objective": mission["objective"], "status": mission["status"]}
 
 
 def list_missions(db_path) -> list[dict]:
-    with get_db(db_path) as c:
-        missions = c.execute(
-            "SELECT * FROM identity_missions ORDER BY id DESC"
-        ).fetchall()
-        result = []
-        for m in missions:
-            d = dict(m)
-            d["findings_count"] = c.execute(
-                "SELECT COUNT(*) as cnt FROM identity_findings WHERE mission_id=?", (m["id"],)
-            ).fetchone()["cnt"]
-            d["has_remediation"] = c.execute(
-                "SELECT COUNT(*) as cnt FROM identity_remediation WHERE mission_id=?", (m["id"],)
-            ).fetchone()["cnt"] > 0
-            result.append(d)
-    return result
+    return store.list_missions(db_path)
 
 
 def get_mission(db_path, mission_id: int) -> dict | None:
-    with get_db(db_path) as c:
-        m = c.execute("SELECT * FROM identity_missions WHERE id=?", (mission_id,)).fetchone()
-        if not m:
-            return None
-        d = dict(m)
-        d["findings"] = [dict(f) for f in c.execute(
-            "SELECT * FROM identity_findings WHERE mission_id=? ORDER BY id", (mission_id,)
-        ).fetchall()]
-        d["remediation_packages"] = [dict(r) for r in c.execute(
-            "SELECT * FROM identity_remediation WHERE mission_id=? ORDER BY id DESC", (mission_id,)
-        ).fetchall()]
-    return d
+    return store.get_mission(db_path, mission_id)
 
 
 def add_finding(db_path, mission_id: int, severity: str, summary: str,
                 details: dict | None = None) -> dict:
-    valid_sev = ("info", "low", "medium", "high", "critical")
-    if severity not in valid_sev:
-        raise ValueError(f"severity must be one of {valid_sev}")
-
-    with get_db(db_path) as c:
-        # Verify mission exists
-        m = c.execute("SELECT id FROM identity_missions WHERE id=?", (mission_id,)).fetchone()
-        if not m:
-            raise ValueError(f"mission {mission_id} not found")
-        cur = c.execute(
-            "INSERT INTO identity_findings (mission_id,severity,summary,details_json,created_at) "
-            "VALUES (?,?,?,?,?)",
-            (mission_id, severity, summary, json_dumps(details or {}), utc_now()),
-        )
-    audit(db_path, "finding_add", "admin", str(cur.lastrowid),
+    finding = store.create_finding(db_path, mission_id, severity, summary, details)
+    audit(db_path, "finding_add", "admin", str(finding["id"]),
           {"mission_id": mission_id, "severity": severity})
-    return {"id": cur.lastrowid, "mission_id": mission_id, "severity": severity, "summary": summary}
+    return {"id": finding["id"], "mission_id": mission_id, "severity": severity, "summary": summary}
 
 
 def generate_remediation(db_path, mission_id: int) -> dict:
     """Generate a remediation package from all findings in a mission."""
-    with get_db(db_path) as c:
-        findings = c.execute(
-            "SELECT * FROM identity_findings WHERE mission_id=? ORDER BY "
-            "CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 "
-            "WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END",
-            (mission_id,),
-        ).fetchall()
+    findings = store.list_findings_for_mission(db_path, mission_id)
+    findings = sorted(
+        findings,
+        key=lambda f: {"critical": 1, "high": 2, "medium": 3, "low": 4, "info": 5}.get(f["severity"], 5),
+    )
 
-        if not findings:
-            return {"error": "no findings to remediate", "mission_id": mission_id}
+    if not findings:
+        return {"error": "no findings to remediate", "mission_id": mission_id}
 
-        # Build remediation steps from findings
-        steps = []
-        for f in findings:
-            fd = dict(f)
-            details = json.loads(fd.get("details_json", "{}"))
-            step = {
-                "finding_id": fd["id"],
-                "severity": fd["severity"],
-                "summary": fd["summary"],
-                "details": details,
-                "action": _suggest_action(fd["severity"], fd["summary"]),
-                "priority": {"critical": 1, "high": 2, "medium": 3, "low": 4, "info": 5}.get(fd["severity"], 5),
-            }
-            steps.append(step)
-
-        package = {
-            "mission_id": mission_id,
-            "generated_at": utc_now(),
-            "findings_count": len(findings),
-            "steps": steps,
-            "execution_mode": "paper",
-            "requires_admin_apply": True,
+    # Build remediation steps from findings
+    steps = []
+    for fd in findings:
+        details = json.loads(fd.get("details_json", "{}"))
+        step = {
+            "finding_id": fd["id"],
+            "severity": fd["severity"],
+            "summary": fd["summary"],
+            "details": details,
+            "action": _suggest_action(fd["severity"], fd["summary"]),
+            "priority": {"critical": 1, "high": 2, "medium": 3, "low": 4, "info": 5}.get(fd["severity"], 5),
         }
+        steps.append(step)
 
-        cur = c.execute(
-            "INSERT INTO identity_remediation (mission_id,package_json,applied,created_at) VALUES (?,?,0,?)",
-            (mission_id, json_dumps(package), utc_now()),
-        )
-        package["package_id"] = cur.lastrowid
+    package = {
+        "mission_id": mission_id,
+        "generated_at": utc_now(),
+        "findings_count": len(findings),
+        "steps": steps,
+        "execution_mode": "paper",
+        "requires_admin_apply": True,
+    }
+
+    created = store.create_remediation_package(db_path, mission_id, package)
+    package["package_id"] = created["id"]
 
     audit(db_path, "remediation_generate", "system", str(mission_id),
           {"findings": len(findings), "package_id": package["package_id"]})
@@ -126,34 +78,19 @@ def generate_remediation(db_path, mission_id: int) -> dict:
 
 def apply_remediation(db_path, mission_id: int) -> dict:
     """Non-destructive apply: marks package as applied, logs audit trail."""
-    with get_db(db_path) as c:
-        pkg = c.execute(
-            "SELECT * FROM identity_remediation WHERE mission_id=? AND applied=0 ORDER BY id DESC LIMIT 1",
-            (mission_id,),
-        ).fetchone()
+    pkg = store.get_latest_unapplied_remediation(db_path, mission_id)
+    if not pkg:
+        return {"error": "no unapplied remediation package found", "mission_id": mission_id}
 
-        if not pkg:
-            return {"error": "no unapplied remediation package found", "mission_id": mission_id}
-
-        now = utc_now()
-        c.execute(
-            "UPDATE identity_remediation SET applied=1, applied_at=? WHERE id=?",
-            (now, pkg["id"]),
-        )
-
-        # Update mission status
-        c.execute(
-            "UPDATE identity_missions SET status='in_progress' WHERE id=? AND status='open'",
-            (mission_id,),
-        )
-
-    package_data = json.loads(pkg["package_json"])
+    updated = store.mark_remediation_applied(db_path, pkg["id"])
+    now = updated["applied_at"]
+    package_data = json.loads(updated["package_json"])
     audit(db_path, "remediation_apply", "admin", str(mission_id),
-          {"package_id": pkg["id"], "steps": len(package_data.get("steps", []))})
+          {"package_id": updated["id"], "steps": len(package_data.get("steps", []))})
 
     return {
         "applied": True,
-        "package_id": pkg["id"],
+        "package_id": updated["id"],
         "mission_id": mission_id,
         "applied_at": now,
         "steps_applied": len(package_data.get("steps", [])),

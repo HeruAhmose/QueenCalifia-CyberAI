@@ -15,8 +15,9 @@ Admin approval creates durable identity changes.
 from __future__ import annotations
 
 from core.database import get_db, utc_now, audit, log_event
+from . import store
 
-VALID_LANES = ("personal", "cyber", "market", "persona")
+VALID_LANES = store.VALID_LANES
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -25,60 +26,25 @@ VALID_LANES = ("personal", "cyber", "market", "persona")
 
 def create_proposal(db_path, lane: str, kind: str, content: str,
                     score: float = 0.5, source: str | None = None) -> dict:
-    if lane not in VALID_LANES:
-        raise ValueError(f"lane must be one of {VALID_LANES}")
-    with get_db(db_path) as c:
-        cur = c.execute(
-            "INSERT INTO identity_proposals (lane,kind,content,score,source,status,created_at) "
-            "VALUES (?,?,?,?,?,'pending',?)",
-            (lane, kind, content, score, source, utc_now()),
-        )
-        pid = cur.lastrowid
-    audit(db_path, "identity_proposal_create", "system", str(pid),
+    proposal = store.create_proposal(db_path, lane, kind, content, score=score, source=source)
+    audit(db_path, "identity_proposal_create", "system", str(proposal["id"]),
           {"lane": lane, "kind": kind, "score": score})
-    return {"id": pid, "lane": lane, "kind": kind, "status": "pending"}
+    return {"id": proposal["id"], "lane": proposal["lane"], "kind": proposal["kind"], "status": proposal["status"]}
 
 
 def list_pending(db_path, lane: str | None = None) -> list[dict]:
-    with get_db(db_path) as c:
-        if lane:
-            rows = c.execute(
-                "SELECT * FROM identity_proposals WHERE status='pending' AND lane=? ORDER BY score DESC, id DESC",
-                (lane,),
-            ).fetchall()
-        else:
-            rows = c.execute(
-                "SELECT * FROM identity_proposals WHERE status='pending' ORDER BY score DESC, id DESC"
-            ).fetchall()
-    return [dict(r) for r in rows]
+    return store.list_proposals(db_path, status="pending", lane=lane)
 
 
 def approve_proposal(db_path, proposal_id: int) -> dict:
-    with get_db(db_path) as c:
-        row = c.execute("SELECT * FROM identity_proposals WHERE id=? AND status='pending'",
-                        (proposal_id,)).fetchone()
-        if not row:
-            raise ValueError(f"proposal {proposal_id} not found or not pending")
-        c.execute("UPDATE identity_proposals SET status='approved' WHERE id=?", (proposal_id,))
-
-        # Promote to durable memory
-        c.execute(
-            "INSERT OR IGNORE INTO memories (user_id,key,value,confidence,source,created_at) "
-            "VALUES ('qc_identity',?,?,?,?,?)",
-            (row["kind"], row["content"], row["score"], f"proposal:{proposal_id}", utc_now()),
-        )
+    row = store.promote_proposal_to_memory(db_path, proposal_id)
     audit(db_path, "identity_proposal_approve", "admin", str(proposal_id),
           {"lane": row["lane"], "kind": row["kind"]})
     return {"id": proposal_id, "status": "approved", "lane": row["lane"]}
 
 
 def reject_proposal(db_path, proposal_id: int) -> dict:
-    with get_db(db_path) as c:
-        row = c.execute("SELECT * FROM identity_proposals WHERE id=? AND status='pending'",
-                        (proposal_id,)).fetchone()
-        if not row:
-            raise ValueError(f"proposal {proposal_id} not found or not pending")
-        c.execute("UPDATE identity_proposals SET status='rejected' WHERE id=?", (proposal_id,))
+    row = store.set_proposal_status(db_path, proposal_id, "rejected")
     audit(db_path, "identity_proposal_reject", "admin", str(proposal_id),
           {"lane": row["lane"], "kind": row["kind"]})
     return {"id": proposal_id, "status": "rejected", "lane": row["lane"]}
@@ -89,38 +55,23 @@ def reject_proposal(db_path, proposal_id: int) -> dict:
 # ═══════════════════════════════════════════════════════════════
 
 def create_reflection(db_path, content: str, source: str | None = None) -> dict:
-    with get_db(db_path) as c:
-        cur = c.execute(
-            "INSERT INTO identity_reflections (content,source,status,created_at) VALUES (?,?,'pending',?)",
-            (content, source, utc_now()),
-        )
-    audit(db_path, "reflection_create", "system", str(cur.lastrowid), {"source": source})
-    return {"id": cur.lastrowid, "status": "pending"}
+    reflection = store.create_reflection(db_path, content, source=source)
+    audit(db_path, "reflection_create", "system", str(reflection["id"]), {"source": source})
+    return {"id": reflection["id"], "status": reflection["status"]}
 
 
 def list_pending_reflections(db_path) -> list[dict]:
-    with get_db(db_path) as c:
-        return [dict(r) for r in c.execute(
-            "SELECT * FROM identity_reflections WHERE status='pending' ORDER BY id DESC"
-        ).fetchall()]
+    return store.list_reflections(db_path, status="pending")
 
 
 def approve_reflection(db_path, rid: int) -> dict:
-    with get_db(db_path) as c:
-        row = c.execute("SELECT * FROM identity_reflections WHERE id=? AND status='pending'", (rid,)).fetchone()
-        if not row:
-            raise ValueError(f"reflection {rid} not found or not pending")
-        c.execute("UPDATE identity_reflections SET status='approved' WHERE id=?", (rid,))
+    store.set_reflection_status(db_path, rid, "approved")
     audit(db_path, "reflection_approve", "admin", str(rid), {})
     return {"id": rid, "status": "approved"}
 
 
 def reject_reflection(db_path, rid: int) -> dict:
-    with get_db(db_path) as c:
-        row = c.execute("SELECT * FROM identity_reflections WHERE id=? AND status='pending'", (rid,)).fetchone()
-        if not row:
-            raise ValueError(f"reflection {rid} not found or not pending")
-        c.execute("UPDATE identity_reflections SET status='rejected' WHERE id=?", (rid,))
+    store.set_reflection_status(db_path, rid, "rejected")
     return {"id": rid, "status": "rejected"}
 
 
@@ -129,45 +80,27 @@ def reject_reflection(db_path, rid: int) -> dict:
 # ═══════════════════════════════════════════════════════════════
 
 def create_persona_rule(db_path, rule_text: str) -> dict:
-    with get_db(db_path) as c:
-        cur = c.execute(
-            "INSERT INTO identity_persona_rules (rule_text,status,created_at) VALUES (?,'pending',?)",
-            (rule_text, utc_now()),
-        )
-    audit(db_path, "persona_rule_create", "system", str(cur.lastrowid), {})
-    return {"id": cur.lastrowid, "status": "pending"}
+    rule = store.create_persona_rule(db_path, rule_text)
+    audit(db_path, "persona_rule_create", "system", str(rule["id"]), {})
+    return {"id": rule["id"], "status": rule["status"]}
 
 
 def list_pending_rules(db_path) -> list[dict]:
-    with get_db(db_path) as c:
-        return [dict(r) for r in c.execute(
-            "SELECT * FROM identity_persona_rules WHERE status='pending' ORDER BY id DESC"
-        ).fetchall()]
+    return store.list_persona_rules(db_path, status="pending")
 
 
 def list_approved_rules(db_path) -> list[dict]:
-    with get_db(db_path) as c:
-        return [dict(r) for r in c.execute(
-            "SELECT * FROM identity_persona_rules WHERE status='approved' ORDER BY id"
-        ).fetchall()]
+    return store.list_persona_rules(db_path, status="approved")
 
 
 def approve_rule(db_path, rid: int) -> dict:
-    with get_db(db_path) as c:
-        row = c.execute("SELECT * FROM identity_persona_rules WHERE id=? AND status='pending'", (rid,)).fetchone()
-        if not row:
-            raise ValueError(f"rule {rid} not found or not pending")
-        c.execute("UPDATE identity_persona_rules SET status='approved' WHERE id=?", (rid,))
+    row = store.set_persona_rule_status(db_path, rid, "approved")
     audit(db_path, "persona_rule_approve", "admin", str(rid), {"rule": row["rule_text"]})
     return {"id": rid, "status": "approved"}
 
 
 def reject_rule(db_path, rid: int) -> dict:
-    with get_db(db_path) as c:
-        row = c.execute("SELECT * FROM identity_persona_rules WHERE id=? AND status='pending'", (rid,)).fetchone()
-        if not row:
-            raise ValueError(f"rule {rid} not found or not pending")
-        c.execute("UPDATE identity_persona_rules SET status='rejected' WHERE id=?", (rid,))
+    store.set_persona_rule_status(db_path, rid, "rejected")
     return {"id": rid, "status": "rejected"}
 
 
@@ -176,33 +109,21 @@ def reject_rule(db_path, rid: int) -> dict:
 # ═══════════════════════════════════════════════════════════════
 
 def create_self_note(db_path, note_text: str, period: str | None = None) -> dict:
-    with get_db(db_path) as c:
-        cur = c.execute(
-            "INSERT INTO identity_self_notes (note_text,status,period,created_at) VALUES (?,'pending',?,?)",
-            (note_text, period, utc_now()),
-        )
-    return {"id": cur.lastrowid, "status": "pending"}
+    note = store.create_self_note(db_path, note_text, period=period)
+    return {"id": note["id"], "status": note["status"]}
 
 
 def list_pending_notes(db_path) -> list[dict]:
-    with get_db(db_path) as c:
-        return [dict(r) for r in c.execute(
-            "SELECT * FROM identity_self_notes WHERE status='pending' ORDER BY id DESC"
-        ).fetchall()]
+    return store.list_self_notes(db_path, status="pending")
 
 
 def approve_note(db_path, nid: int) -> dict:
-    with get_db(db_path) as c:
-        row = c.execute("SELECT * FROM identity_self_notes WHERE id=? AND status='pending'", (nid,)).fetchone()
-        if not row:
-            raise ValueError(f"note {nid} not found or not pending")
-        c.execute("UPDATE identity_self_notes SET status='approved' WHERE id=?", (nid,))
+    store.set_self_note_status(db_path, nid, "approved")
     return {"id": nid, "status": "approved"}
 
 
 def reject_note(db_path, nid: int) -> dict:
-    with get_db(db_path) as c:
-        c.execute("UPDATE identity_self_notes SET status='rejected' WHERE id=?", (nid,))
+    store.set_self_note_status(db_path, nid, "rejected")
     return {"id": nid, "status": "rejected"}
 
 
@@ -212,35 +133,17 @@ def reject_note(db_path, nid: int) -> dict:
 
 def get_persona_state(db_path) -> dict:
     with get_db(db_path) as c:
-        approved_rules = [dict(r) for r in c.execute(
-            "SELECT id, rule_text, created_at FROM identity_persona_rules WHERE status='approved' ORDER BY id"
-        ).fetchall()]
-
-        approved_notes = c.execute(
-            "SELECT COUNT(*) as cnt FROM identity_self_notes WHERE status='approved'"
-        ).fetchone()["cnt"]
-
-        lane_counts = {}
-        for lane in VALID_LANES:
-            cnt = c.execute(
-                "SELECT COUNT(*) as cnt FROM identity_proposals WHERE lane=? AND status='approved'",
-                (lane,),
-            ).fetchone()["cnt"]
-            lane_counts[lane] = cnt
-
-        pending_total = c.execute(
-            "SELECT COUNT(*) as cnt FROM identity_proposals WHERE status='pending'"
-        ).fetchone()["cnt"]
-        pending_total += c.execute(
-            "SELECT COUNT(*) as cnt FROM identity_reflections WHERE status='pending'"
-        ).fetchone()["cnt"]
-        pending_total += c.execute(
-            "SELECT COUNT(*) as cnt FROM identity_persona_rules WHERE status='pending'"
-        ).fetchone()["cnt"]
-        pending_total += c.execute(
-            "SELECT COUNT(*) as cnt FROM identity_self_notes WHERE status='pending'"
-        ).fetchone()["cnt"]
-
+        approved_rules = [
+            {"id": r["id"], "rule_text": r["rule_text"], "created_at": r["created_at"]}
+            for r in store.list_persona_rules(db_path, status="approved")
+        ]
+        approved_notes = len(store.list_self_notes(db_path, status="approved"))
+        lane_memories = store.get_memory_lanes(db_path)
+        lane_counts = {lane: len(items) for lane, items in lane_memories.items()}
+        pending_total = len(store.list_proposals(db_path, status="pending"))
+        pending_total += len(store.list_reflections(db_path, status="pending"))
+        pending_total += len(store.list_persona_rules(db_path, status="pending"))
+        pending_total += len(store.list_self_notes(db_path, status="pending"))
         latest_note = c.execute(
             "SELECT note_text, created_at FROM identity_self_notes WHERE status='approved' ORDER BY id DESC LIMIT 1"
         ).fetchone()
@@ -251,10 +154,12 @@ def get_persona_state(db_path) -> dict:
         "approved_rules_count": len(approved_rules),
         "approved_notes_count": approved_notes,
         "memory_lanes": lane_counts,
+        "memory_lane_items": lane_memories,
         "pending_items": pending_total,
         "latest_approved_note": dict(latest_note) if latest_note else None,
         "mode": "stable",
         "learning_enabled": True,
+        "storage_contract": store.storage_contract(),
     }
 
 

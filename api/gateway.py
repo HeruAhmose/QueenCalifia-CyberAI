@@ -1165,7 +1165,13 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify({"error": "not found"}), 404
 
     @app.errorhandler(405)
-    def _method_not_allowed(_):
+    def _method_not_allowed(err):
+        valid_methods = sorted(set(getattr(err, "valid_methods", []) or []))
+        # The explicit OPTIONS catch-all on `/api/<path:path>` can turn
+        # genuinely missing GET/POST API paths into 405s. Normalize those
+        # cases back to 404 so clients don't see phantom endpoints.
+        if request.path.startswith("/api/") and valid_methods == ["OPTIONS"]:
+            return jsonify({"error": "not found"}), 404
         return jsonify({"error": "method not allowed"}), 405
 
     @app.errorhandler(500)

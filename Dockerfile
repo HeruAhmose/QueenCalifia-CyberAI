@@ -11,10 +11,10 @@ WORKDIR /app
 ARG QC_USE_LOCK=0
 
 # Install dependencies
-COPY requirements.txt requirements.lock ./
+COPY backend/requirements.txt ./requirements.txt
 RUN if [ "$QC_USE_LOCK" = "1" ]; then \
-      if grep -q "GENERATED FILE" requirements.lock; then echo "requirements.lock is a placeholder. Run: make lock"; exit 2; fi; \
-      pip install --no-cache-dir --require-hashes -r requirements.lock; \
+      echo "requirements.lock is not maintained for the root image; disable QC_USE_LOCK or add a locked backend requirements artifact."; \
+      exit 2; \
     else \
       pip install --no-cache-dir -r requirements.txt; \
     fi

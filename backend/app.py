@@ -19,9 +19,6 @@ import sys
 from dotenv import load_dotenv
 from flask_cors import CORS
 
-from core.database import init_db
-from core.settings import get_settings, parse_origins
-
 
 def _load_root_app():
     # Dashboard UX assumes the API is reachable without you needing to paste an
@@ -29,9 +26,11 @@ def _load_root_app():
     os.environ.setdefault("QC_NO_AUTH", "1")
 
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    if repo_root not in sys.path:
-        # Keep repo root at the front so `import core.*` resolves to repo-root core.
-        sys.path.insert(0, repo_root)
+    if repo_root in sys.path:
+        sys.path.remove(repo_root)
+    # Keep repo root at the front so `import core.*` resolves to repo-root core
+    # even when callers have already prepended `backend/` to `sys.path`.
+    sys.path.insert(0, repo_root)
 
     root_app_path = os.path.join(repo_root, "app.py")
     spec = importlib.util.spec_from_file_location("qc_root_app", root_app_path)
@@ -44,10 +43,13 @@ def _load_root_app():
 
 
 load_dotenv()
+app = _load_root_app()
+
+from core.database import init_db
+from core.settings import get_settings, parse_origins
+
 settings = get_settings()
 init_db(settings.db_path)
-
-app = _load_root_app()
 
 # Make settings available to the dashboard route modules.
 app.config["settings"] = settings

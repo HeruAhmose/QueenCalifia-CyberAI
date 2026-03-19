@@ -1,5 +1,9 @@
 # Security Policy
 
+This repository is proprietary and confidential. Security reporting does not
+grant any right to redistribute source, publish non-public implementation
+details, or disclose proof-of-concept material beyond coordinated channels.
+
 ## Supported Versions
 This repository is provided as-is. Security patches are released on a best-effort basis.
 
@@ -7,6 +11,8 @@ This repository is provided as-is. Security patches are released on a best-effor
 Please report vulnerabilities responsibly.
 
 - **Do not** open a public GitHub issue for exploitable findings.
+- Treat non-public code, screenshots, stack traces, and operational details as
+  confidential unless disclosure is expressly approved in writing.
 - Email the maintainers with:
   - a clear description of the issue
   - affected component(s) and version/commit

@@ -909,7 +909,7 @@ class AdvancedTelemetry:
         CV > 1.0 typically.
         """
         with self._lock:
-            timestamps = list(self.event_timestamps[pair_key])
+            timestamps = sorted(self.event_timestamps[pair_key])
 
         if len(timestamps) < 10:
             return None
@@ -925,6 +925,16 @@ class AdvancedTelemetry:
 
         if len(intervals) < 8:
             return None
+
+        # Ignore a single extreme trailing interval when the rest of the
+        # cadence is highly regular. This makes beacon detection resilient to
+        # delayed sample arrival, test harness injections, or one-off pauses.
+        if len(intervals) >= 9:
+            baseline = intervals[:-1]
+            if len(baseline) >= 8:
+                baseline_median = statistics.median(baseline)
+                if baseline_median > 0 and intervals[-1] > baseline_median * 3:
+                    intervals = baseline
 
         mean_interval = statistics.mean(intervals)
         if mean_interval < 2.0:

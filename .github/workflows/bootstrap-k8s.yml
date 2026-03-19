@@ -1,0 +1,105 @@
+name: Bootstrap K8s
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_org:
+        description: "GitHub org/user that owns the repo"
+        required: true
+      git_repo:
+        description: "Repo name"
+        required: true
+        default: "QueenCalifia-CyberAI"
+      api_image:
+        description: "API image repo (e.g. ghcr.io/ORG/queencalifia-api)"
+        required: true
+      frontend_image:
+        description: "Frontend image repo (e.g. ghcr.io/ORG/queencalifia-frontend)"
+        required: true
+      staging_host:
+        description: "Staging hostname (DNS -> ingress)"
+        required: true
+      prod_host:
+        description: "Production hostname (DNS -> ingress)"
+        required: true
+      email:
+        description: "Email for Let's Encrypt"
+        required: true
+      apply_apps:
+            description: "Apply Argo CD Applications + ImageUpdater (staging)"
+            type: boolean
+            required: true
+            default: true
+          install_cluster_issuers:
+        description: "Create ClusterIssuers (Let's Encrypt staging+prod)"
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read pinned tool versions
+        id: versions
+        run: |
+          set -euo pipefail
+          KUBECTL_VERSION="$(grep '^KUBECTL_VERSION=' scripts/bootstrap/versions.env | cut -d= -f2)"
+          HELM_VERSION="$(grep '^HELM_VERSION=' scripts/bootstrap/versions.env | cut -d= -f2)"
+          echo "kubectl=$KUBECTL_VERSION" >> $GITHUB_OUTPUT
+          echo "helm=$HELM_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: ${{ steps.versions.outputs.kubectl }}
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4.3.0
+        with:
+          version: ${{ steps.versions.outputs.helm }}
+
+      - name: Install Python deps
+            run: |
+              python -m pip install --upgrade pip
+              python -m pip install pyyaml
+
+          - name: Configure kubeconfig
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+        run: |
+          test -n "$KUBECONFIG_B64"
+          mkdir -p ~/.kube
+          echo "$KUBECONFIG_B64" | base64 -d > ~/.kube/config
+          kubectl get nodes
+
+      - name: Bootstrap cluster
+        env:
+          QC_GIT_ORG: ${{ inputs.git_org }}
+          QC_GIT_REPO: ${{ inputs.git_repo }}
+          QC_API_IMAGE: ${{ inputs.api_image }}
+          QC_FRONTEND_IMAGE: ${{ inputs.frontend_image }}
+          QC_STAGING_HOST: ${{ inputs.staging_host }}
+          QC_PROD_HOST: ${{ inputs.prod_host }}
+          QC_EMAIL: ${{ inputs.email }}
+          QC_INSTALL_CLUSTER_ISSUERS: ${{ inputs.install_cluster_issuers && '1' || '0' }}
+        run: |
+          chmod +x scripts/bootstrap/bootstrap_cluster.sh
+          scripts/bootstrap/bootstrap_cluster.sh
+- name: Render + apply Argo CD manifests
+  if: ${{ inputs.apply_apps }}
+  env:
+    QC_GIT_ORG: ${{ inputs.git_org }}
+    QC_GIT_REPO: ${{ inputs.git_repo }}
+    QC_API_IMAGE: ${{ inputs.api_image }}
+    QC_FRONTEND_IMAGE: ${{ inputs.frontend_image }}
+    QC_STAGING_HOST: ${{ inputs.staging_host }}
+    QC_PROD_HOST: ${{ inputs.prod_host }}
+  run: |
+    python scripts/bootstrap/render_and_apply_argocd.py
+

@@ -6,6 +6,33 @@
 
 ## Pre-Deployment Checklist
 
+### 0. Choose Your Auth Mode Explicitly
+
+There are two supported deployment postures:
+
+1. **Dashboard convenience mode**
+   - `QC_NO_AUTH=1`
+   - Best for the current public Firebase dashboard UX
+   - Keep `QC_MEMORY_EXPORT_TOKEN` set so memory backup/export remains protected
+
+2. **Strict API mode**
+   - `QC_NO_AUTH=0`
+   - Set API/admin keys and update the frontend to send them
+   - Recommended when the API is not intentionally public-facing
+
+Current checked-in `render.yaml` uses **dashboard convenience mode**. Do not assume API-key enforcement is active unless you explicitly switch it on.
+
+### 0.5 Production Secret Baseline
+
+```bash
+export QC_PRODUCTION=1
+export QC_API_KEY_PEPPER=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+export QC_AUDIT_HMAC_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+export QC_MEMORY_EXPORT_TOKEN=$(python3 -c "import secrets; print(secrets.token_urlsafe(48))")
+```
+
+If `QC_PRODUCTION=1`, the gateway expects strong pepper/HMAC secrets to be configured.
+
 ### 1. Authorization Guardrail (`QC_REQUIRE_AUTHZ_ACK`)
 Every scan endpoint requires explicit `acknowledge_authorized: true`. This is **enabled by default**.
 
@@ -32,6 +59,8 @@ export QC_API_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(48))
 export QC_API_KEY_PEPPER=$(python3 -c "import secrets; print(secrets.token_hex(32))")
 ```
 
+If you intentionally run `QC_NO_AUTH=1`, API keys are bypassed for normal dashboard routes. Keep memory backup/export protected with `QC_MEMORY_EXPORT_TOKEN`.
+
 ### 3. Target Allowlisting
 ```bash
 # ONLY allow scanning specific ranges
@@ -53,6 +82,15 @@ export QC_SCAN_THREADS=20        # Threads per scan
 export QC_AUDIT_LOG_FILE=/var/log/qc/audit.jsonl
 export QC_AUDIT_HMAC_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
 ```
+
+### 6. Persistent Memory Storage
+```bash
+export QC_DB_PATH=/var/data/queen.db
+export QC_EVOLUTION_DB=/var/data/qc_evolution.db
+export QC_MEMORY_BACKUP_DIR=/var/data/memory-backups
+```
+
+For Render, attach a persistent disk at `/var/data` before using production memory or backup workflows.
 
 ---
 
@@ -122,7 +160,8 @@ python cli.py evolution intel
 ### Authentication
 - API keys are pepper-hashed (SHA-256 + per-deployment pepper)
 - HMAC-signed audit logs (tamper-evident)
-- Ed25519 crypto approvals for high-risk operations (sovereignty module)
+- Memory export/backup endpoints can be separately protected with `QC_MEMORY_EXPORT_TOKEN`
+- Ed25519 crypto approvals for high-risk operations apply only if the optional sovereignty module is present
 - Dual-approval for destructive actions in production
 
 ### Network Safety
@@ -172,6 +211,10 @@ for i in $(seq 1 200); do
   curl -s -o /dev/null -w "%{http_code}\n" http://localhost:5000/api/health
 done
 # Expected: 429 after limit exceeded
+
+# 5. Memory backup protection
+curl http://localhost:5000/api/v1/evolution/storage
+# Expected: 403 unless X-QC-Memory-Token or admin auth is provided
 ```
 
 ---

@@ -1,0 +1,26 @@
+name: image-updater-pr
+
+on:
+  push:
+    branches:
+      - "image-updater-staging-*"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  open-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Open PR if missing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE_BRANCH: staging
+        run: |
+          chmod +x scripts/ci/open_image_updater_pr.sh
+          scripts/ci/open_image_updater_pr.sh

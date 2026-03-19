@@ -2,8 +2,13 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 
 def test_grafana_entrypoint_does_not_write_bearer_token(tmp_path: Path) -> None:
+    if os.name == "nt":
+        pytest.skip("grafana entrypoint shell test requires a POSIX shell")
+
     repo_root = Path(__file__).resolve().parents[1]
     entrypoint = repo_root / "grafana" / "entrypoint.sh"
     assert entrypoint.exists()

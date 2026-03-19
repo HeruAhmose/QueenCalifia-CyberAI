@@ -1,0 +1,77 @@
+name: weekly-platform-upgrades
+
+on:
+  schedule:
+    - cron: "0 4 * * 1" # Mondays 04:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump-versions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4.3.0
+        with:
+          version: v3.14.4
+
+      - name: Install jq
+        run: |
+          sudo apt-get update -y >/dev/null
+          sudo apt-get install -y jq >/dev/null
+
+      - name: Bump pinned chart versions
+        id: bump
+        run: |
+          set -euo pipefail
+          chmod +x scripts/bootstrap/bump_versions.sh
+          out="$(scripts/bootstrap/bump_versions.sh scripts/bootstrap/versions.env)"
+          echo "result=$out" >> $GITHUB_OUTPUT
+          git status --porcelain
+
+      - name: Stop if no changes
+        if: steps.bump.outputs.result == 'NOCHANGES'
+        run: echo "No chart version updates available."
+
+      - name: Create kind cluster
+        if: steps.bump.outputs.result == 'UPDATED'
+        uses: helm/kind-action@v1.13.0
+        with:
+          cluster_name: qc-upgrades
+          kubectl_version: v1.30.0
+
+      - name: Kind bootstrap smoke (core install)
+        if: steps.bump.outputs.result == 'UPDATED'
+        env:
+          QC_GIT_ORG: dummy
+          QC_GIT_REPO: QueenCalifia-CyberAI
+          QC_API_IMAGE: ghcr.io/dummy/queencalifia-api
+          QC_FRONTEND_IMAGE: ghcr.io/dummy/queencalifia-frontend
+          QC_STAGING_HOST: staging.local
+          QC_PROD_HOST: prod.local
+          QC_EMAIL: devnull@example.com
+          QC_INSTALL_CLUSTER_ISSUERS: "0"
+        run: |
+          chmod +x scripts/bootstrap/bootstrap_cluster.sh
+          scripts/bootstrap/bootstrap_cluster.sh
+
+      - name: Open PR with bumps
+        if: steps.bump.outputs.result == 'UPDATED'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore(platform): bump pinned Helm chart versions"
+          title: "chore(platform): bump pinned Helm chart versions"
+          body: |
+            Automated weekly bump of pinned Helm chart versions in scripts/bootstrap/versions.env.
+
+            Includes a kind bootstrap smoke test of core components.
+          branch: "chore/bump-platform-versions"
+          delete-branch: true

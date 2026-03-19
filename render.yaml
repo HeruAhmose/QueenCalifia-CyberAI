@@ -13,6 +13,8 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.12"
+      - key: QC_PRODUCTION
+        value: "1"
       - key: QC_NAME
         value: Queen Califia
       - key: QC_DB_PATH
@@ -28,6 +30,10 @@ services:
       - key: QC_CORS_ORIGINS
         value: https://queencalifia-cyberai.web.app,https://queencalifia-cyberai.firebaseapp.com
       - key: QC_API_KEY
+        sync: false
+      - key: QC_API_KEY_PEPPER
+        sync: false
+      - key: QC_AUDIT_HMAC_KEY
         sync: false
       # Convenience for the dashboard: allow scan/remediation without requiring
       # a manually provided X-QC-API-Key in the UI.

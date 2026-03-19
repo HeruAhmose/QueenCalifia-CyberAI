@@ -10,7 +10,8 @@ import os
 
 import requests as http
 
-from core.database import get_db, utc_now, audit
+from core.database import audit
+from . import store
 
 OLLAMA_BASE = os.getenv("QC_OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 OLLAMA_TIMEOUT = int(os.getenv("QC_OLLAMA_TIMEOUT_SECONDS", "10"))
@@ -21,25 +22,15 @@ ALLOWED_PROVIDERS = ("local_symbolic_core", "ollama", "vllm_local", "auto")
 
 
 def get_provider(db_path) -> dict:
-    with get_db(db_path) as c:
-        row = c.execute("SELECT provider, model, updated_at FROM identity_provider WHERE id=1").fetchone()
-    if not row:
-        return {"provider": "local_symbolic_core", "model": None, "updated_at": None}
-    return dict(row)
+    return store.get_provider_config(db_path)
 
 
 def set_provider(db_path, provider: str, model: str | None = None) -> dict:
     if provider not in ALLOWED_PROVIDERS:
         raise ValueError(f"provider must be one of {ALLOWED_PROVIDERS}")
-    now = utc_now()
-    with get_db(db_path) as c:
-        c.execute(
-            "INSERT INTO identity_provider (id,provider,model,updated_at) VALUES (1,?,?,?) "
-            "ON CONFLICT(id) DO UPDATE SET provider=excluded.provider, model=excluded.model, updated_at=excluded.updated_at",
-            (provider, model, now),
-        )
+    config = store.set_provider_config(db_path, provider, model=model)
     audit(db_path, "provider_switch", "admin", provider, {"model": model})
-    return {"provider": provider, "model": model, "updated_at": now}
+    return config
 
 
 def get_provider_status(db_path) -> dict:

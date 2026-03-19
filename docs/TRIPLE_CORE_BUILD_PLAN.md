@@ -83,6 +83,10 @@ qc_remediation_packages — mission_id, package_json, applied flag
 qc_memory_lanes        — lane (personal/cyber/market/persona), key, value, source
 ```
 
+Implementation note:
+- The live runtime now centralizes Identity Core persistence in `backend/modules/identity/store.py`.
+- The store maps this original `qc_*` logical contract onto the stabilized production schema (`identity_*` tables plus shared durable `memories`) so the current web app and APIs stay backward-compatible while the v4.3 plan is fully represented in code.
+
 #### `backend/modules/identity/engine.py`
 Functions:
 - `create_proposal(lane, kind, content, score, source)` → pending proposal
