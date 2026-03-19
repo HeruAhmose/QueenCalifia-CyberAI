@@ -18,6 +18,13 @@ import sys
 
 
 def _load_root_app():
+    # On some deployments the Render env doesn't set `QC_NO_AUTH`, but also
+    # doesn't provide `QC_API_KEY`. In that case the security gateway would
+    # reject the whole dashboard with 401s. For a better out-of-the-box UX,
+    # default to allowing requests when no API key is configured.
+    if not os.environ.get("QC_NO_AUTH") and not os.environ.get("QC_API_KEY"):
+        os.environ["QC_NO_AUTH"] = "1"
+
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     if repo_root not in sys.path:
         sys.path.insert(0, repo_root)
