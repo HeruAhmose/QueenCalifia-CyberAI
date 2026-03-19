@@ -86,6 +86,7 @@ app.config["qc_mount_debug"] = qc_mount_debug
 # Public dashboard bootstrap config.
 @app.get("/api/config")
 def qc_public_config():
+    no_auth = os.getenv("QC_NO_AUTH", "0") == "1"
     return {
         "name": settings.name,
         "persona": settings.persona,
@@ -101,7 +102,7 @@ def qc_public_config():
             f"{settings.name} online. Cyber, research, quant, and identity systems are ready. "
             "Choose a mode and give me a concrete objective."
         ),
-        "no_auth": settings.no_auth,
+        "no_auth": no_auth,
     }, 200
 
 # Lightweight introspection endpoint (safe; no secrets).
