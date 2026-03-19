@@ -166,6 +166,12 @@ def _detect_intent(message, mode):
         return "memory_query"
     if "help me" in low:
         return "help"
+    if "learning cycle" in low or "biomimetic cycle" in low or "run cycle" in low:
+        if "scan" in low or "vulnerab" in low or "remediat" in low:
+            return "scan_and_learning"
+        return "learning_cycle"
+    if "scan" in low or "vulnerab" in low or "remediat" in low or "deep scan" in low:
+        return "scan_request"
 
     persona = PERSONAS.get(mode, PERSONAS["cyber"])
     tokens = set(_tokenize(message))
@@ -217,6 +223,25 @@ def _local_reply(message, mode, memories, recent_turns):
         if snippet:
             r += f" Grounding in your context: {snippet}."
         return r + " Tell me: strategy, implementation, or testing?"
+
+    if intent == "scan_request":
+        return (
+            "To run a real vulnerability workflow, I need an authorized target. "
+            "For localhost use `127.0.0.1`; for web scanning use a full `https://...` URL you control. "
+            "The live system can queue the scan and return real findings, but I will not fabricate results or imply authorization."
+        )
+
+    if intent == "learning_cycle":
+        return (
+            "The biomimetic learning cycle is live. It senses recent conversation, market history, forecasts, and audit activity, "
+            "then generates proposals, reflections, and self-notes for review. Run it from Identity Core -> Learning -> Run Cycle."
+        )
+
+    if intent == "scan_and_learning":
+        return (
+            "That is a valid two-step workflow: run an authorized deep scan first, then trigger the biomimetic learning cycle so QC can turn the latest activity into proposals, reflections, and self-notes. "
+            "Use localhost `127.0.0.1` if you want a safe local target."
+        )
 
     if intent.endswith("_deep"):
         if mode == "cyber":

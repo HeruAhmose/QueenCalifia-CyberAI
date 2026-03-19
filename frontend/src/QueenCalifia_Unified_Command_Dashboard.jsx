@@ -1861,12 +1861,10 @@ function VulnsTab({ onAvatarStateChange }) {
         setError(msg);
         return;
       }
-      setError("Backend unavailable — showing simulated remediation plan.");
-      // UI fallback
-      const baseScan = scanResult || { summary: { critical: 1, high: 2, medium: 2, low: 1 } };
-      setRemediation(simulateRemediationPlan(baseScan, target));
+      setError(msg || "Unable to load remediation plan.");
+      setRemediation(null);
     }
-  }, [apiFetch, simulateRemediationPlan, scanResult, target]);
+  }, [apiFetch]);
 
   const computedAvatarState = useMemo(() => {
     const phase = String(oneClickPhase || "").toLowerCase();
@@ -1887,9 +1885,6 @@ function VulnsTab({ onAvatarStateChange }) {
 
   useEffect(() => {
     if (onAvatarStateChange) onAvatarStateChange(computedAvatarState);
-    return () => {
-      if (onAvatarStateChange) onAvatarStateChange("idle");
-    };
   }, [computedAvatarState, onAvatarStateChange]);
 
   const oneClickRemediate = async () => {
@@ -1899,107 +1894,71 @@ function VulnsTab({ onAvatarStateChange }) {
     setOneClickResult(null);
     setError("");
     ocLog("⚡ Starting one-click remediation of 127.0.0.1...", "#60a5fa");
+    onAvatarStateChange?.("hex_shield");
     try {
-      // Step 1: Launch scan
       ocLog("🔍 Launching full scan of localhost...");
-      const scanResp = await fetch(`${QC_API}/api/vulns/scan`, {
+      const workflowResp = await fetch(`${QC_API}/api/v1/one-click/scan-and-fix`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) },
-        body: JSON.stringify({ target: "127.0.0.1", scan_type: "full", mode: "async", acknowledge_authorized: true }),
+        body: JSON.stringify({
+          target: "127.0.0.1",
+          scan_type: "full",
+          auto_approve: true,
+          acknowledge_authorized: true,
+        }),
       });
-      const scanText = await scanResp.text();
-      let scanJson = null;
-      try { scanJson = scanText ? JSON.parse(scanText) : null; } catch {
-        throw new Error(`Non-JSON scan response (${scanResp.status}). Snippet: ${String(scanText).slice(0, 220)}`);
+      const workflowText = await workflowResp.text();
+      let workflowJson = null;
+      try { workflowJson = workflowText ? JSON.parse(workflowText) : null; } catch {
+        throw new Error(`Non-JSON one-click response (${workflowResp.status}). Snippet: ${String(workflowText).slice(0, 220)}`);
       }
-      if (!scanResp.ok) throw new Error(scanJson?.error || scanJson?.message || `HTTP ${scanResp.status}`);
-      const sid = scanJson?.data?.scan_id || scanJson?.data?.scanId;
-      if (!sid) throw new Error("No scan_id returned. Is QC backend running?");
-      ocLog("✓ Scan queued — ID: " + sid, "#10b981");
-      // Step 2: Poll for completion
-      let tries = 0;
-      let scanDone = false;
-      while (tries < 60 && !scanDone) {
-        await new Promise(r => setTimeout(r, 3000));
-        const pollResp = await fetch(`${QC_API}/api/vulns/scan/` + encodeURIComponent(sid), {
-          headers: { "Content-Type": "application/json", ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) }
-        });
-        const pollText = await pollResp.text();
-        let pollJson = null;
-        try { pollJson = pollText ? JSON.parse(pollText) : null; } catch {
-          throw new Error(`Non-JSON poll response (${pollResp.status}). Snippet: ${String(pollText).slice(0, 220)}`);
-        }
-        if (!pollResp.ok) throw new Error(pollJson?.error || pollJson?.message || `HTTP ${pollResp.status}`);
-        const state = pollJson?.data?.state || pollJson?.data?.status || "pending";
-        ocLog("  ↳ Scan status: " + state);
-        if (state === "completed" || state === "SUCCESS" || pollJson?.data?.ready) {
-          setScanResult(pollJson?.data?.result || null);
-          scanDone = true;
-          ocLog("✓ Scan complete!", "#10b981");
-        }
-        tries++;
+      if (!workflowResp.ok) throw new Error(workflowJson?.error || workflowJson?.message || `HTTP ${workflowResp.status}`);
+      const result = workflowJson?.data || workflowJson;
+      const scan = result?.phases?.scan || {};
+      const normalizedScan = {
+        scan_id: scan.scan_id || result?.operation_id || null,
+        target: result?.target || "127.0.0.1",
+        scan_type: "full",
+        critical_count: scan.critical || 0,
+        high_count: scan.high || 0,
+        medium_count: scan.medium || 0,
+        low_count: scan.low || 0,
+        assets_discovered: scan.hosts_alive || 0,
+        vulnerabilities_found: scan.total_findings || 0,
+        risk_score: scan.overall_risk || 0,
+        quantum_risk: scan.quantum_risk || null,
+        summary: {
+          critical: scan.critical || 0,
+          high: scan.high || 0,
+          medium: scan.medium || 0,
+          low: scan.low || 0,
+        },
+      };
+      if (normalizedScan.scan_id) {
+        setScanId(normalizedScan.scan_id);
+        ocLog("✓ Scan queued — ID: " + normalizedScan.scan_id, "#10b981");
       }
-      if (!scanDone) throw new Error("Scan timed out after 3 minutes.");
-      // Step 3: Execute remediation
+      setScanStatus({ state: "completed", ready: true, result: normalizedScan });
+      setScanResult(normalizedScan);
+      ocLog("  ↳ Scan status: completed");
+      ocLog("✓ Scan complete!", "#10b981");
+
       setOneClickPhase("remediating");
+      onAvatarStateChange?.("staff_raised");
       ocLog("🛠️ Executing auto-remediation...", "#f59e0b");
-      const remResp = await fetch(`${QC_API}/api/vulns/remediation/execute`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) },
-        body: JSON.stringify({ confirm: "EXECUTE", target: "127.0.0.1", auto_approve: true }),
-      });
-      const remText = await remResp.text();
-      let remJson = null;
-      try { remJson = remText ? JSON.parse(remText) : null; } catch {
-        throw new Error(`Non-JSON remediation response (${remResp.status}). Snippet: ${String(remText).slice(0, 220)}`);
-      }
-      if (!remResp.ok) throw new Error(remJson?.error || remJson?.message || `HTTP ${remResp.status}`);
-      setOneClickResult(remJson?.data || remJson);
-      // Step 4: Load remediation plan
-      const planResp = await fetch(`${QC_API}/api/vulns/remediation`, {
-        headers: { ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) }
-      });
-      const planText = await planResp.text();
-      let planJson = null;
-      try { planJson = planText ? JSON.parse(planText) : null; } catch {
-        throw new Error(`Non-JSON plan response (${planResp.status}). Snippet: ${String(planText).slice(0, 220)}`);
-      }
-      if (!planResp.ok) throw new Error(planJson?.error || planJson?.message || `HTTP ${planResp.status}`);
-      setRemediation(planJson?.data || null);
+      setOneClickResult(result);
+      try {
+        await fetchRemediation();
+      } catch {}
       setOneClickPhase("done");
-      ocLog("✅ All done — vulnerabilities remediated.", "#10b981");
+      ocLog("✅ All done — one-click workflow completed.", "#10b981");
+      onAvatarStateChange?.((scan.critical || 0) > 0 ? "ascended" : "active");
     } catch (e) {
       const msg = String(e?.message || e || "");
-      if (isLikelyAuthFailure(msg)) {
-        setOneClickPhase("error");
-        setError(msg);
-        ocLog("❌ " + msg, "#ef4444");
-        return;
-      }
-      // UI fallback: backend routes missing/unavailable on production.
-      const simScan = simulateScan({ target: "127.0.0.1", scanType: "full" });
-      const simPlan = simulateRemediationPlan(simScan, "127.0.0.1");
-      const simExec = simulateOneClickResult(simPlan);
-
-      setOneClickPhase("scanning");
-      ocLog("⚠️ Backend unavailable — simulation mode engaged.", "#f59e0b");
-      ocLog("🔍 Simulated full scan queued — ID: " + simScan?.scan_id, "#10b981");
-
-      // Simulate scan completion time.
-      await new Promise((r) => setTimeout(r, 900));
-      setScanId(simScan?.scan_id || null);
-      setScanStatus({ state: "SUCCESS", ready: true, result: simScan });
-      setScanResult(simScan);
-      ocLog("✓ Simulated scan complete!", "#10b981");
-
-      // Simulate remediation time.
-      setOneClickPhase("remediating");
-      await new Promise((r) => setTimeout(r, 900));
-      setOneClickResult(simExec);
-      setRemediation(simPlan);
-      setOneClickPhase("done");
-      ocLog("✅ Simulated auto-remediation complete.", "#10b981");
-      setError("");
+      setOneClickPhase("error");
+      setError(msg);
+      ocLog("❌ " + msg, "#ef4444");
+      onAvatarStateChange?.("idle");
     } finally {
       setOneClickRunning(false);
     }
@@ -2017,6 +1976,7 @@ function VulnsTab({ onAvatarStateChange }) {
     }
 
     setSubmitting(true);
+    onAvatarStateChange?.("hex_shield");
     try {
       if (scanType === "web_app") {
         const r = await apiFetch("/api/vulns/webapp", {
@@ -2044,25 +2004,16 @@ function VulnsTab({ onAvatarStateChange }) {
       setScanStatus({ state: r?.data?.status || "queued", ready: false });
     } catch (e) {
       const msg = String(e?.message || e || "");
-      if (isLikelyAuthFailure(msg)) {
-        setError(msg);
-        setScanId(null);
-        setScanStatus(null);
-        setScanResult(null);
-        setRemediation(null);
-        return;
-      }
-      // UI fallback: if backend routes are unavailable, still render the full scan experience.
-      const sim = simulateScan({ target, scanType, webUrl });
-      setScanId(sim?.scan_id || null);
-      setScanStatus({ state: "SUCCESS", ready: true, result: sim });
-      setScanResult(sim);
-      setRemediation(simulateRemediationPlan(sim, target));
-      setError("Backend unavailable — showing simulated scan results for UI continuity.");
+      setError(msg);
+      setScanId(null);
+      setScanStatus(null);
+      setScanResult(null);
+      setRemediation(null);
+      onAvatarStateChange?.("idle");
     } finally {
       setSubmitting(false);
     }
-  }, [ack, apiFetch, fetchRemediation, scanType, target, webUrl]);
+  }, [ack, apiFetch, fetchRemediation, onAvatarStateChange, scanType, target, webUrl]);
 
   useEffect(() => {
     localStorage.setItem("qc_api_key", apiKey || "");
@@ -2081,17 +2032,22 @@ function VulnsTab({ onAvatarStateChange }) {
         setScanStatus(s);
         if (s.ready) {
           setScanResult(s.result || null);
+          const critical = (s.result?.critical_count ?? s.result?.summary?.critical ?? 0) || 0;
+          onAvatarStateChange?.(critical > 0 ? "ascended" : "active");
           await fetchRemediation();
           return;
         }
       } catch (e) {
-        if (!cancelled) setError(String(e?.message || e));
+        if (!cancelled) {
+          setError(String(e?.message || e));
+          onAvatarStateChange?.("idle");
+        }
       }
       if (!cancelled) setTimeout(tick, 2000);
     };
     tick();
     return () => { cancelled = true; };
-  }, [apiFetch, fetchRemediation, normalizeStatus, scanId]);
+  }, [apiFetch, fetchRemediation, normalizeStatus, onAvatarStateChange, scanId]);
 
   const [scriptFmt, setScriptFmt] = useState("bash"); // bash|powershell|ansible
 
@@ -2120,7 +2076,15 @@ function VulnsTab({ onAvatarStateChange }) {
               </div>
             ))}
             {oneClickPhase === "done" && oneClickResult && (
-              <div style={{ marginTop: 8, color: "#10b981", fontWeight: 600 }}>✅ Actions applied: {JSON.stringify(oneClickResult?.actions_executed || oneClickResult?.total || "see plan below")}</div>
+              <div style={{ marginTop: 8, color: "#10b981", fontWeight: 600 }}>
+                ✅ Actions applied: {JSON.stringify(
+                  oneClickResult?.actions_executed
+                  || oneClickResult?.phases?.execution?.actions?.map((a) => a.title || a.action_id)
+                  || oneClickResult?.phases?.execution?.total_actions
+                  || oneClickResult?.total
+                  || "see plan below"
+                )}
+              </div>
             )}
           </div>
         )}
@@ -2567,6 +2531,7 @@ function ResearchLabTab() {
   const [err,setErr] = useState("");
   const [busy,setBusy] = useState(false);
   const [adminKey,setAdminKey] = useState("");
+  const DEFAULT_MARKET_SYMBOLS = { crypto: "BTC-USD", forex: "USD/EUR", stock: "AAPL", macro: "FEDFUNDS" };
 
   // Market
   const [assetType,setAssetType] = useState("crypto");
@@ -2587,6 +2552,7 @@ function ResearchLabTab() {
   const [quantResult,setQuantResult] = useState(null);
 
   useEffect(()=>{(async()=>{try{const d=await qcGet("/api/market/sources");setSources(d.sources||[]);}catch{}})();},[]);
+  useEffect(()=>{setSymbol(DEFAULT_MARKET_SYMBOLS[assetType] || "BTC-USD");},[assetType]);
 
   const loadSnap = async()=>{
     setErr("");setSnapshot(null);setBusy(true);
@@ -2612,7 +2578,6 @@ function ResearchLabTab() {
   };
 
   const runQuant = async()=>{
-    if(!adminKey){setErr("Admin key required for Quant Lab");return;}
     setErr("");setQuantResult(null);setBusy(true);
     try{setQuantResult(await qcPost("/api/forecast/quant/run",JSON.parse(quantText),adminKey));}
     catch(e){setErr(e.message);}finally{setBusy(false);}
@@ -2639,7 +2604,7 @@ function ResearchLabTab() {
           ))}
           {sub==="quant"&&<div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
             <span style={{fontSize:10,color:C.textSoft}}>Admin</span>
-            <input type="password" value={adminKey} onChange={e=>setAdminKey(e.target.value)} placeholder="X-QC-Admin-Key" style={{...inp,width:200}}/>
+            <input type="password" value={adminKey} onChange={e=>setAdminKey(e.target.value)} placeholder="X-QC-Admin-Key (optional if QC_NO_AUTH=1)" style={{...inp,width:240}}/>
           </div>}
         </div>
         {err&&<div style={{padding:"6px 10px",borderRadius:6,background:C.redDim,border:`1px solid ${C.red}30`,color:C.red,fontSize:11,fontFamily:MONO}}>{err}</div>}
@@ -2738,7 +2703,7 @@ function ResearchLabTab() {
           </div>
           <textarea value={quantText} onChange={e=>setQuantText(e.target.value)} rows={8}
             style={{...inp,fontFamily:MONO,fontSize:10,resize:"vertical",lineHeight:1.5,marginBottom:8}}/>
-          <button onClick={runQuant} disabled={busy||!adminKey} style={abtn(C.magenta,busy||!adminKey)}>Run Optimizer</button>
+          <button onClick={runQuant} disabled={busy} style={abtn(C.magenta,busy)}>Run Optimizer</button>
           {quantResult&&(
             <div style={{marginTop:12}}>
               <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:12}}>
@@ -2818,22 +2783,21 @@ function IdentityTab() {
   useEffect(()=>{loadQ();},[loadQ]);
 
   const actQ = async(action,id)=>{
-    if(!adminKey){setErr("Admin key required");return;}
     setBusy(true);setErr("");
     try{
       const pfx=qt==="proposals"?"/api/identity/memory":qt==="reflections"?"/api/identity/reflections":qt==="rules"?"/api/identity/rules":"/api/identity/self-notes";
       await qcPost(`${pfx}/${id}/${action}`,{},adminKey);await loadQ();await loadPs();
     }catch(e){setErr(e.message);}finally{setBusy(false);}
   };
-  const switchProv = async(p)=>{if(!adminKey)return;setBusy(true);try{await qcPost("/api/identity/provider-status",{provider:p},adminKey);await loadProv();}catch(e){setErr(e.message);}finally{setBusy(false);}};
+  const switchProv = async(p)=>{setBusy(true);try{await qcPost("/api/identity/provider-status",{provider:p},adminKey);await loadProv();}catch(e){setErr(e.message);}finally{setBusy(false);}};
   const checkOllama = async()=>{try{const[h,m]=await Promise.all([qcGet("/api/identity/ollama/health"),qcGet("/api/identity/ollama/models")]);setOHealth(h);setOModels(m.models||[]);}catch(e){setErr(e.message);}};
-  const doPull = async()=>{if(!adminKey||!pullN.trim())return;setBusy(true);setPullM("Pulling…");try{const d=await qcPost("/api/identity/ollama/pull",{model:pullN.trim()},adminKey);setPullM(d.ok?`✓ ${d.model}`:`✗ ${d.error}`);if(d.ok){setPullN("");checkOllama();}}catch(e){setPullM("");setErr(e.message);}finally{setBusy(false);}};
-  const doLearn = async()=>{if(!adminKey)return;setBusy(true);setLr(null);try{setLr(await qcPost("/api/identity/learning/cycle/run",{},adminKey));}catch(e){setErr(e.message);}finally{setBusy(false);}};
-  const createM = async()=>{if(!adminKey||!mName.trim()||!mObj.trim()){setErr("Name & objective required");return;}setBusy(true);try{const d=await qcPost("/api/identity/missions",{name:mName.trim(),objective:mObj.trim()},adminKey);setMName("");setMObj("");await loadMissions();try{setSelM(await qcGet(`/api/identity/missions/${d.id}`));}catch{}}catch(e){setErr(e.message);}finally{setBusy(false);}};
+  const doPull = async()=>{if(!pullN.trim())return;setBusy(true);setPullM("Pulling…");try{const d=await qcPost("/api/identity/ollama/pull",{model:pullN.trim()},adminKey);setPullM(d.ok?`✓ ${d.model}`:`✗ ${d.error}`);if(d.ok){setPullN("");checkOllama();}}catch(e){setPullM("");setErr(e.message);}finally{setBusy(false);}};
+  const doLearn = async()=>{setBusy(true);setLr(null);try{setLr(await qcPost("/api/identity/learning/cycle/run",{},adminKey)); await loadPs(); await loadQ();}catch(e){setErr(e.message);}finally{setBusy(false);}};
+  const createM = async()=>{if(!mName.trim()||!mObj.trim()){setErr("Name & objective required");return;}setBusy(true);try{const d=await qcPost("/api/identity/missions",{name:mName.trim(),objective:mObj.trim()},adminKey);setMName("");setMObj("");await loadMissions();try{setSelM(await qcGet(`/api/identity/missions/${d.id}`));}catch{}}catch(e){setErr(e.message);}finally{setBusy(false);}};
   const loadMD = async(id)=>{try{setSelM(await qcGet(`/api/identity/missions/${id}`));}catch(e){setErr(e.message);}};
-  const addFind = async()=>{if(!adminKey||!selM||!fSum.trim())return;setBusy(true);try{await qcPost(`/api/identity/missions/${selM.id}/findings`,{severity:fSev,summary:fSum.trim()},adminKey);setFSum("");await loadMD(selM.id);await loadMissions();}catch(e){setErr(e.message);}finally{setBusy(false);}};
-  const genRem = async()=>{if(!adminKey||!selM)return;setBusy(true);try{await qcPost(`/api/identity/missions/${selM.id}/remediation/generate`,{},adminKey);await loadMD(selM.id);}catch(e){setErr(e.message);}finally{setBusy(false);}};
-  const appRem = async()=>{if(!adminKey||!selM)return;setBusy(true);try{await qcPost(`/api/identity/missions/${selM.id}/remediation/apply`,{},adminKey);await loadMD(selM.id);await loadMissions();}catch(e){setErr(e.message);}finally{setBusy(false);}};
+  const addFind = async()=>{if(!selM||!fSum.trim())return;setBusy(true);try{await qcPost(`/api/identity/missions/${selM.id}/findings`,{severity:fSev,summary:fSum.trim()},adminKey);setFSum("");await loadMD(selM.id);await loadMissions();}catch(e){setErr(e.message);}finally{setBusy(false);}};
+  const genRem = async()=>{if(!selM)return;setBusy(true);try{await qcPost(`/api/identity/missions/${selM.id}/remediation/generate`,{},adminKey);await loadMD(selM.id);}catch(e){setErr(e.message);}finally{setBusy(false);}};
+  const appRem = async()=>{if(!selM)return;setBusy(true);try{await qcPost(`/api/identity/missions/${selM.id}/remediation/apply`,{},adminKey);await loadMD(selM.id);await loadMissions();}catch(e){setErr(e.message);}finally{setBusy(false);}};
 
   const inp = {width:"100%",padding:"8px 10px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,color:C.text,fontFamily:MONO,fontSize:11,outline:"none",boxSizing:"border-box"};
   const sbtn = (on,clr=C.accent)=>({padding:"5px 12px",borderRadius:5,border:`1px solid ${on?clr+"50":C.border}`,background:on?`${clr}12`:"transparent",color:on?clr:C.textSoft,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:FONT});
@@ -2847,8 +2811,8 @@ function IdentityTab() {
       <Panel title="Identity Core — QC OS v4.2.1" icon="♛" accent={C.purple} glow>
         <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12}}>
           <span style={{fontSize:10,color:C.textSoft,whiteSpace:"nowrap"}}>Admin Key</span>
-          <input type="password" value={adminKey} onChange={e=>setAdminKey(e.target.value)} placeholder="X-QC-Admin-Key" style={{...inp,flex:1,maxWidth:280}} />
-          <PulseDot color={adminKey?C.green:C.textDim} size={6}/>
+          <input type="password" value={adminKey} onChange={e=>setAdminKey(e.target.value)} placeholder="X-QC-Admin-Key (optional if QC_NO_AUTH=1)" style={{...inp,flex:1,maxWidth:320}} />
+          <PulseDot color={adminKey?C.green:C.cyan} size={6}/>
         </div>
         <div style={{display:"flex",gap:2,flexWrap:"wrap"}}>
           {SUBS.map(s=>(
@@ -2899,8 +2863,8 @@ function IdentityTab() {
                 </div>
                 <div style={{fontSize:11,color:C.text,lineHeight:1.5,marginBottom:6}}>{it.content||it.rule_text||it.note_text||""}</div>
                 <div style={{display:"flex",gap:6}}>
-                  <button disabled={busy||!adminKey} onClick={()=>actQ("approve",it.id)} style={abtn(C.green,busy||!adminKey)}>Approve</button>
-                  <button disabled={busy||!adminKey} onClick={()=>actQ("reject",it.id)} style={abtn(C.red,busy||!adminKey)}>Reject</button>
+                  <button disabled={busy} onClick={()=>actQ("approve",it.id)} style={abtn(C.green,busy)}>Approve</button>
+                  <button disabled={busy} onClick={()=>actQ("reject",it.id)} style={abtn(C.red,busy)}>Reject</button>
                 </div>
               </div>
             ))}
@@ -2915,7 +2879,7 @@ function IdentityTab() {
             <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:8}}>
               <input value={mName} onChange={e=>setMName(e.target.value)} placeholder="Mission name" style={inp}/>
               <input value={mObj} onChange={e=>setMObj(e.target.value)} placeholder="Objective" style={inp}/>
-              <button disabled={busy||!adminKey} onClick={createM} style={abtn(C.accent,busy||!adminKey)}>+ Create</button>
+              <button disabled={busy} onClick={createM} style={abtn(C.accent,busy)}>+ Create</button>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:2,maxHeight:260,overflowY:"auto"}}>
               {missions.length===0&&<span style={{fontSize:11,color:C.textDim}}>No missions.</span>}
@@ -2951,14 +2915,14 @@ function IdentityTab() {
                       {ID_SEVS.map(s=><option key={s} value={s}>{s}</option>)}
                     </select>
                     <input value={fSum} onChange={e=>setFSum(e.target.value)} placeholder="Finding summary" style={{...inp,flex:1}}/>
-                    <button disabled={busy||!adminKey} onClick={addFind} style={abtn(C.accent,busy||!adminKey)}>+ Add</button>
+                    <button disabled={busy} onClick={addFind} style={abtn(C.accent,busy)}>+ Add</button>
                   </div>
                 </div>
                 <div style={{borderTop:`1px solid ${C.border}`,paddingTop:8}}>
                   <div style={{fontSize:10,color:C.textSoft,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6}}>Remediation</div>
                   <div style={{display:"flex",gap:6}}>
-                    <button disabled={busy||!adminKey||!(selM.findings?.length)} onClick={genRem} style={abtn(C.accent,busy||!adminKey||!(selM.findings?.length))}>Generate Package</button>
-                    <button disabled={busy||!adminKey} onClick={appRem} style={abtn(C.green,busy||!adminKey)}>Apply Latest</button>
+                    <button disabled={busy||!(selM.findings?.length)} onClick={genRem} style={abtn(C.accent,busy||!(selM.findings?.length))}>Generate Package</button>
+                    <button disabled={busy} onClick={appRem} style={abtn(C.green,busy)}>Apply Latest</button>
                   </div>
                   {(selM.remediation_packages||[]).map(pkg=>{
                     let parsed;try{parsed=JSON.parse(pkg.package_json);}catch{parsed=null;}
@@ -2990,7 +2954,7 @@ function IdentityTab() {
               <div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:C.textSoft}}>vLLM</span><PulseDot color={prov.vllm_reachable?C.green:C.textDim} size={6}/></div>
             </div>}
             <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-              {ID_PROVIDERS.map(p=><button key={p} disabled={busy||!adminKey||prov?.current?.provider===p} onClick={()=>switchProv(p)} style={sbtn(prov?.current?.provider===p,C.cyan)}>{p.replace(/_/g," ")}</button>)}
+              {ID_PROVIDERS.map(p=><button key={p} disabled={busy||prov?.current?.provider===p} onClick={()=>switchProv(p)} style={sbtn(prov?.current?.provider===p,C.cyan)}>{p.replace(/_/g," ")}</button>)}
             </div>
           </Panel>
           <Panel title="Ollama" icon="🧠" accent={C.cyan}>
@@ -3004,7 +2968,7 @@ function IdentityTab() {
             </div>)}
             <div style={{display:"flex",gap:6,marginTop:8}}>
               <input value={pullN} onChange={e=>setPullN(e.target.value)} placeholder="e.g. mistral:7b" style={{...inp,flex:1}}/>
-              <button disabled={busy||!adminKey||!pullN.trim()} onClick={doPull} style={abtn(C.cyan,busy||!adminKey||!pullN.trim())}>Pull</button>
+              <button disabled={busy||!pullN.trim()} onClick={doPull} style={abtn(C.cyan,busy||!pullN.trim())}>Pull</button>
             </div>
             {pullM&&<span style={{fontSize:10,fontFamily:MONO,color:C.purple,marginTop:4,display:"block"}}>{pullM}</span>}
           </Panel>
@@ -3015,7 +2979,7 @@ function IdentityTab() {
       {sub==="learning"&&(
         <Panel title="Learning Dock — Biomimetic Cycle" icon="🧬" accent={C.magenta} glow>
           <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12}}>
-            <button disabled={busy||!adminKey} onClick={doLearn} style={abtn(C.magenta,busy||!adminKey)}>{busy?"Running…":"Run Cycle"}</button>
+            <button disabled={busy} onClick={doLearn} style={abtn(C.magenta,busy)}>{busy?"Running…":"Run Cycle"}</button>
             <span style={{fontSize:10,color:C.textDim}}>Sense → Interpret → Propose</span>
           </div>
           {lr&&(
@@ -3211,56 +3175,8 @@ function GuidedWizard({ onExit, onAvatarStateChange }) {
     } catch (e) {
       clearInterval(progressInterval);
       const msg = String(e?.message || e || "");
-      const lower = msg.toLowerCase();
-      // If the backend is reachable but rejecting us (missing/invalid API key),
-      // show the real error instead of simulating scan results.
-      if (lower.includes("unauthorized") || lower.includes("forbidden") || lower.includes("401") || lower.includes("403")) {
-        setError(msg);
-        setStep(1);
-        return;
-      }
-      // UI fallback: keep the wizard flow working even if the vuln backend isn't reachable.
-      const seed = String(`${target}|${scanType}`).split("").reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) % 100000, 0);
-      const critical = seed % 2 === 0 ? 1 : 0;
-      const high = (seed % 3) + 1;
-      const medium = (seed % 5) + 1;
-      const low = seed % 4;
-
-      const total_findings = critical + high + medium + low;
-      const overall_risk = Math.round(((critical * 9 + high * 6 + medium * 3 + low) / Math.max(1, total_findings)) * 10) / 10;
-
-      const sim = {
-        operation_id: `sim-op-${Date.now()}-${seed.toString(16).slice(0, 4)}`,
-        target,
-        scan_type: scanType,
-        completed_at: new Date().toISOString(),
-        risk_level: overall_risk,
-        recommendation: critical > 0 ? "Treat as critical—prioritize patching and compensating controls." : "Proceed with prioritized hardening and verification.",
-        phases: {
-          scan: {
-            hosts_alive: 1,
-            total_findings,
-            critical,
-            high,
-            overall_risk,
-            quantum_risk: critical > 0 ? "HIGH" : "LOW",
-          },
-          learning: {
-            new_baselines: (seed % 3) + 1,
-            new_patterns: (seed % 5) + 2,
-          },
-          remediation: {
-            total_actions: Math.max(1, total_findings),
-          },
-          evolution: {
-            new_detection_rules: (seed % 4) + 1,
-          },
-        },
-      };
-
-      setResult(sim);
-      setError("Backend unavailable — showing simulated scan results for UI continuity.");
-      setStep(3);
+      setError(msg);
+      setStep(1);
     } finally {
       setScanning(false);
     }

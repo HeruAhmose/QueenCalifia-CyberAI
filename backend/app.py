@@ -83,6 +83,27 @@ except Exception:
 
 app.config["qc_mount_debug"] = qc_mount_debug
 
+# Public dashboard bootstrap config.
+@app.get("/api/config")
+def qc_public_config():
+    return {
+        "name": settings.name,
+        "persona": settings.persona,
+        "capabilities": [
+            "cyber_guardian",
+            "research_companion",
+            "forecast_lab",
+            "identity_core",
+            "vulnerability_scanning",
+            "evolution_memory",
+        ],
+        "welcome_message": (
+            f"{settings.name} online. Cyber, research, quant, and identity systems are ready. "
+            "Choose a mode and give me a concrete objective."
+        ),
+        "no_auth": settings.no_auth,
+    }, 200
+
 # Lightweight introspection endpoint (safe; no secrets).
 @app.get("/api/debug/mount")
 def qc_debug_mount():

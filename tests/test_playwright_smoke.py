@@ -23,6 +23,7 @@ NOTE: These tests require the dashboard to be running at http://localhost:3000
 
 import os
 import json
+import urllib.request
 import pytest
 
 # Skip entire module if playwright not installed
@@ -32,11 +33,27 @@ try:
 except ImportError:
     HAS_PLAYWRIGHT = False
 
-pytestmark = pytest.mark.skipif(not HAS_PLAYWRIGHT, reason="Playwright not installed")
-
 # Dashboard URL — configurable via env
 DASHBOARD_URL = os.environ.get("QC_DASHBOARD_URL", "http://localhost:3000")
 API_URL = os.environ.get("QC_API_URL", "http://localhost:5000")
+
+
+def _url_available(url: str) -> bool:
+    try:
+        with urllib.request.urlopen(url, timeout=3) as resp:
+            return resp.status < 500
+    except Exception:
+        return False
+
+
+LOCAL_SMOKE_TARGETS_AVAILABLE = _url_available(DASHBOARD_URL) and (
+    _url_available(f"{API_URL}/healthz") or _url_available(f"{API_URL}/api/health")
+)
+
+pytestmark = pytest.mark.skipif(
+    (not HAS_PLAYWRIGHT) or (not LOCAL_SMOKE_TARGETS_AVAILABLE),
+    reason="Playwright not installed or local dashboard/API not running",
+)
 
 
 @pytest.fixture(scope="module")

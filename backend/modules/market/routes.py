@@ -16,7 +16,10 @@ def snapshot():
     sym = request.args.get("symbol", "").strip().upper()
     if not at or not sym:
         return jsonify({"error": "asset_type and symbol required"}), 400
-    return jsonify(get_market_snapshot(current_app.config["settings"], at, sym))
+    try:
+        return jsonify(get_market_snapshot(current_app.config["settings"], at, sym))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
 
 
 @market_bp.get("/fred/<series_id>")
