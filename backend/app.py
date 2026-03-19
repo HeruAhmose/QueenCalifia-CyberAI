@@ -1,47 +1,38 @@
-"""Queen Califia CyberAI — QC OS v4.2 (merged definitive)"""
+"""
+QC OS backend entrypoint for Render.
+
+Your onrender service runs `gunicorn app:app` with `rootDir: backend`.
+This repository includes a *root* `app.py` (from a previous working release)
+that wires `api/gateway.py` + `engines/vulnerability_engine.py`, exposing the
+real vulnerability scan/remediation endpoints under `/api/vulns/*`.
+
+This file intentionally re-exports that root WSGI app so the Render command
+remains unchanged while vulnerability routes work end-to-end.
+"""
+
 from __future__ import annotations
+
+import importlib.util
 import os
-from dotenv import load_dotenv
-from flask import Flask, jsonify
-from flask_cors import CORS
-from core.settings import get_settings, parse_origins
-from core.database import init_db
+import sys
 
-load_dotenv()
 
-def create_app() -> Flask:
-    settings = get_settings()
-    init_db(settings.db_path)
-    app = Flask(__name__)
-    app.config["settings"] = settings
-    CORS(app, resources={r"/api/*": {"origins": parse_origins(settings.cors_origins)}}, supports_credentials=False)
+def _load_root_app():
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
 
-    @app.get("/healthz")
-    def healthz():
-        return jsonify({"ok": True, "service": settings.name, "version": "4.2.0"})
+    root_app_path = os.path.join(repo_root, "app.py")
+    spec = importlib.util.spec_from_file_location("qc_root_app", root_app_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Failed to load root app module from: {root_app_path}")
 
-    @app.get("/api/config")
-    def api_config():
-        return jsonify({
-            "name": settings.name, "persona": settings.persona,
-            "modes": ["cyber", "research", "lab"],
-            "capabilities": ["conversation", "memory", "telemetry", "market_snapshot",
-                             "portfolio_analysis", "forecast", "admin_quant_mode"],
-            "welcome_message": f"I am {settings.name}. Tell me who you are, what you want to build, "
-                               "or which market, system, or portfolio you want to understand.",
-        })
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.app
 
-    from modules.conversation.routes import conversation_bp
-    from modules.market.routes import market_bp
-    from modules.forecast.routes import forecast_bp
-    from modules.identity.routes import identity_bp
-    app.register_blueprint(conversation_bp, url_prefix="/api/chat")
-    app.register_blueprint(market_bp, url_prefix="/api/market")
-    app.register_blueprint(forecast_bp, url_prefix="/api/forecast")
-    app.register_blueprint(identity_bp, url_prefix="/api/identity")
-    return app
 
-app = create_app()
+app = _load_root_app()
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=False)
+
+__all__ = ["app"]

@@ -17,6 +17,10 @@ services:
         value: https://queencalifia-cyberai.web.app,https://queencalifia-cyberai.firebaseapp.com
       - key: QC_API_KEY
         sync: false
+      # Convenience for the dashboard: allow scan/remediation without requiring
+      # a manually provided X-QC-API-Key in the UI.
+      - key: QC_NO_AUTH
+        value: "1"
       - key: QC_ADMIN_KEY
         sync: false
       - key: FRED_API_KEY
