@@ -5,8 +5,8 @@ import AppLegacy from "./AppLegacy.jsx";
 import { SoundProvider } from "./contexts/SoundContext.jsx";
 
 /**
- * Queen Califia CyberAI v4.1 ΓÇö God-Tier Entry Point
- * Cinematic intro ΓåÆ Sovereign Command Dashboard
+ * Queen Califia CyberAI v4.1 — God-Tier Entry Point
+ * Cinematic intro → Sovereign Command Dashboard
  * Set VITE_QC_USE_LEGACY_DASHBOARD=1 to render the legacy App UI instead.
  */
 export default function App() {

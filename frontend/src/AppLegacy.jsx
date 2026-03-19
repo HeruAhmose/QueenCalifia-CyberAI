@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createOptimisticEvidence, replaceOptimisticEvidence, rollbackOptimisticEvidence } from "../lib/evidenceOptimistic.js";
 
 /**
- * QueenCalifia v2 ΓÇö Premium SOC Dashboard (single-file component)
+ * QueenCalifia v2 — Premium SOC Dashboard (single-file component)
  *
  * Security: persists only non-sensitive preferences (API base, polling interval, density).
  * API key remains in-memory only.
@@ -168,7 +168,7 @@ function TechniqueChip({ technique, why, density }) {
       }}
     >
       <span style={{ color: T.textSoft }}>{id || "MITRE"}</span>
-      <span style={{ color: T.textDim }}>{tactic ? `┬╖ ${tactic}` : ""}</span>
+      <span style={{ color: T.textDim }}>{tactic ? `· ${tactic}` : ""}</span>
     </span>
   );
 
@@ -322,7 +322,7 @@ const evidenceDialog = (
         <textarea
           value={evidenceDraft.notes}
           onChange={(e) => setEvidenceDraft((p) => ({ ...p, notes: e.target.value }))}
-          placeholder="Chain-of-custody notes, acquisition method, contextΓÇª"
+          placeholder="Chain-of-custody notes, acquisition method, context…"
           rows={4}
           style={{
             border: `1px solid ${T.border}`,
@@ -531,7 +531,7 @@ function formatIncidentSummary(inc) {
   return lines.join("\n");
 }
 
-// ΓöÇΓöÇ Command Tab: Infrastructure & SPKI Pin Runbook Monitor ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ── Command Tab: Infrastructure & SPKI Pin Runbook Monitor ──────────────
 
 function SpkiAttemptRow({ ev }) {
   const ok = ev.rc === 0;
@@ -550,13 +550,13 @@ function SpkiAttemptRow({ ev }) {
         alignItems: "center",
       }}
     >
-      <span style={{ color: T.textDim }}>{ev.timestamp?.split("T")[1]?.replace("Z", "") || "ΓÇö"}</span>
+      <span style={{ color: T.textDim }}>{ev.timestamp?.split("T")[1]?.replace("Z", "") || "—"}</span>
       <span style={{ color }}>rc={ev.rc}</span>
       <span>#{ev.attempt}</span>
-      <span>{ev.scheduled_sleep_ms != null ? `${ev.scheduled_sleep_ms}ms` : "ΓÇö"}</span>
-      <span>{ev.elapsed_ms != null ? `${ev.elapsed_ms}ms` : "ΓÇö"}</span>
+      <span>{ev.scheduled_sleep_ms != null ? `${ev.scheduled_sleep_ms}ms` : "—"}</span>
+      <span>{ev.elapsed_ms != null ? `${ev.elapsed_ms}ms` : "—"}</span>
       <span style={{ color: T.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {ev.target || "ΓÇö"}
+        {ev.target || "—"}
       </span>
     </div>
   );
@@ -584,7 +584,7 @@ function SpkiSummaryCard({ ev }) {
           TARGET
         </div>
         <div style={{ color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {ev.target || "ΓÇö"}
+          {ev.target || "—"}
         </div>
       </div>
       <div>
@@ -600,15 +600,15 @@ function SpkiSummaryCard({ ev }) {
         <div style={{ color: T.textDim, fontSize: 10, fontFamily: FONT_UI, fontWeight: 700, marginBottom: 2 }}>
           ATTEMPTS / ELAPSED
         </div>
-        <span style={{ color: T.text }}>{ev.attempts ?? "ΓÇö"}</span>
+        <span style={{ color: T.text }}>{ev.attempts ?? "—"}</span>
         <span style={{ color: T.textDim }}> / </span>
-        <span style={{ color: T.textSoft }}>{ev.elapsed_ms != null ? `${ev.elapsed_ms}ms` : "ΓÇö"}</span>
+        <span style={{ color: T.textSoft }}>{ev.elapsed_ms != null ? `${ev.elapsed_ms}ms` : "—"}</span>
       </div>
       <div>
         <div style={{ color: T.textDim, fontSize: 10, fontFamily: FONT_UI, fontWeight: 700, marginBottom: 2 }}>
           TIMESTAMP
         </div>
-        <span style={{ color: T.textSoft }}>{ev.timestamp?.replace("T", " ").replace("Z", "") || "ΓÇö"}</span>
+        <span style={{ color: T.textSoft }}>{ev.timestamp?.replace("T", " ").replace("Z", "") || "—"}</span>
       </div>
     </div>
   );
@@ -627,7 +627,7 @@ function CommandTab({ spkiLog, loadingSpki, onRefresh, ui }) {
         <div style={{ borderRadius: 18, border: `1px solid ${T.border}`, background: T.panel, padding: ui.pad, display: "flex", flexDirection: "column", gap: 6, minHeight: 78 }}>
           <div style={{ fontFamily: FONT_UI, fontSize: ui.textLabel, color: T.textSoft, fontWeight: 750 }}>SPKI Pin Status</div>
           <div style={{ fontFamily: FONT_MONO, fontSize: 18, fontWeight: 800, color: lastSummary ? (lastOk ? T.low : T.critical) : T.textDim }}>
-            {lastSummary ? (lastOk ? "VERIFIED" : "FAILED") : "ΓÇö"}
+            {lastSummary ? (lastOk ? "VERIFIED" : "FAILED") : "—"}
           </div>
           <div style={{ fontFamily: FONT_UI, fontSize: 12, color: T.textDim }}>Last runbook result</div>
         </div>
@@ -639,7 +639,7 @@ function CommandTab({ spkiLog, loadingSpki, onRefresh, ui }) {
         <div style={{ borderRadius: 18, border: `1px solid ${T.border}`, background: T.panel, padding: ui.pad, display: "flex", flexDirection: "column", gap: 6, minHeight: 78 }}>
           <div style={{ fontFamily: FONT_UI, fontSize: ui.textLabel, color: T.textSoft, fontWeight: 750 }}>Last Target</div>
           <div style={{ fontFamily: FONT_MONO, fontSize: 14, color: T.text, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {lastSummary?.target || "ΓÇö"}
+            {lastSummary?.target || "—"}
           </div>
           <div style={{ fontFamily: FONT_UI, fontSize: 12, color: T.textDim }}>SIEM correlation target</div>
         </div>
@@ -653,7 +653,7 @@ function CommandTab({ spkiLog, loadingSpki, onRefresh, ui }) {
       {/* Runbook Summaries */}
       <div style={{ borderRadius: 18, border: `1px solid ${T.border}`, background: T.panel, overflow: "hidden" }}>
         <div style={{ padding: "12px 14px", borderBottom: `1px solid ${T.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontFamily: FONT_UI, fontSize: 14, fontWeight: 800, color: T.text }}>SPKI Pin Runbook ΓÇö Summaries</div>
+          <div style={{ fontFamily: FONT_UI, fontSize: 14, fontWeight: 800, color: T.text }}>SPKI Pin Runbook — Summaries</div>
           <button
             onClick={onRefresh}
             style={{
@@ -668,7 +668,7 @@ function CommandTab({ spkiLog, loadingSpki, onRefresh, ui }) {
               cursor: "pointer",
             }}
           >
-            {loadingSpki ? "LoadingΓÇª" : "Refresh"}
+            {loadingSpki ? "Loading…" : "Refresh"}
           </button>
         </div>
         <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 8, maxHeight: 260, overflow: "auto" }}>
@@ -678,7 +678,7 @@ function CommandTab({ spkiLog, loadingSpki, onRefresh, ui }) {
             <div style={{ fontFamily: FONT_UI, fontSize: 13, color: T.textDim, padding: "12px 0", lineHeight: 1.5 }}>
               No runbook summaries yet. Run{" "}
               <code style={{ fontFamily: FONT_MONO, background: "rgba(255,255,255,0.06)", padding: "2px 5px", borderRadius: 4, fontSize: 12 }}>
-                make spki-pin-runbook URL=rediss://ΓÇª --json --out data/spki.jsonl
+                make spki-pin-runbook URL=rediss://… --json --out data/spki.jsonl
               </code>{" "}
               with{" "}
               <code style={{ fontFamily: FONT_MONO, background: "rgba(255,255,255,0.06)", padding: "2px 5px", borderRadius: 4, fontSize: 12 }}>
@@ -723,7 +723,7 @@ function CommandTab({ spkiLog, loadingSpki, onRefresh, ui }) {
             <code style={{ fontFamily: FONT_MONO, background: "rgba(255,255,255,0.06)", padding: "2px 5px", borderRadius: 4, fontSize: 12 }}>
               QC_SPKI_ATTEMPT_JSON=1
             </code>{" "}
-            to emit one JSONL record per retry ΓÇö each includes target, attempt number, return code,
+            to emit one JSONL record per retry — each includes target, attempt number, return code,
             scheduled sleep, and wall-clock elapsed time for SIEM ingestion.
           </div>
         )}
@@ -910,7 +910,7 @@ const loadSpkiLog = useCallback(async () => {
     const res = await request("/api/infra/spki-log?limit=200");
     if (res?.data) setSpkiLog(res.data);
   } catch {
-    // endpoint may not exist yet ΓÇö graceful degradation
+    // endpoint may not exist yet — graceful degradation
   } finally {
     setLoadingSpki(false);
   }
@@ -1227,7 +1227,7 @@ const submitEvidence = useCallback(async () => {
             Queen Califia SOC
           </div>
           <div style={{ fontFamily: FONT_MONO, color: T.textDim, fontSize: 12 }}>
-            Request-ID correlation ┬╖ Tail-sampled traces ┬╖ Defense-grade audit
+            Request-ID correlation · Tail-sampled traces · Defense-grade audit
           </div>
         </div>
 
@@ -1283,7 +1283,7 @@ const submitEvidence = useCallback(async () => {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="IOC ΓÇó IP ΓÇó hostname ΓÇó incident ID"
+            placeholder="IOC • IP • hostname • incident ID"
             style={{
               width: "100%",
               height: ui.rowH,
@@ -1486,7 +1486,7 @@ const submitEvidence = useCallback(async () => {
           <Skeleton h={18} w="55%" />
         ) : (
           <div style={{ fontFamily: FONT_MONO, fontSize: 18, color: T.text, fontWeight: 800 }}>
-            {value ?? "ΓÇö"}
+            {value ?? "—"}
           </div>
         )}
         {hint ? (
@@ -1518,13 +1518,13 @@ const submitEvidence = useCallback(async () => {
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           <div style={{ fontFamily: FONT_UI, fontSize: 15, color: T.text, fontWeight: 800 }}>Incidents</div>
           <div style={{ fontFamily: FONT_UI, fontSize: 12, color: T.textDim }}>
-            {filteredIncidents.length} shown ┬╖ {incidents.length} total
+            {filteredIncidents.length} shown · {incidents.length} total
           </div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ fontFamily: FONT_UI, fontSize: 12, color: T.textSoft }}>
-            {loadingIncidents ? "UpdatingΓÇª" : "Live"}
+            {loadingIncidents ? "Updating…" : "Live"}
           </div>
           <div
             style={{
@@ -1618,7 +1618,7 @@ const submitEvidence = useCallback(async () => {
                     {st}
                   </span>
                   <span style={{ color: T.textDim, fontSize: 12, fontFamily: FONT_MONO }}>
-                    {created ? String(created).slice(0, 10) : "ΓÇö"}
+                    {created ? String(created).slice(0, 10) : "—"}
                   </span>
                 </div>
               </button>
@@ -1648,7 +1648,7 @@ const submitEvidence = useCallback(async () => {
             Incident Detail
           </div>
           <div style={{ fontFamily: FONT_UI, fontSize: 12, color: T.textDim }}>
-            NIST lifecycle ┬╖ audit-friendly actions ┬╖ MITRE mapping
+            NIST lifecycle · audit-friendly actions · MITRE mapping
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1814,7 +1814,7 @@ const submitEvidence = useCallback(async () => {
                         {a?.name || a?.action || "Action"}
                       </div>
                       <div style={{ fontFamily: FONT_MONO, fontSize: 12, color: T.textDim }}>
-                        {a?.id} {a?.rollback_action ? `┬╖ rollback: ${a.rollback_action}` : ""}
+                        {a?.id} {a?.rollback_action ? `· rollback: ${a.rollback_action}` : ""}
                       </div>
                     </div>
 
@@ -1918,13 +1918,13 @@ const submitEvidence = useCallback(async () => {
                 <div style={{ fontFamily: FONT_MONO, fontSize: 12, color: T.textDim, marginTop: 6 }}>
                   {uniq([...(detail?.assets || []), ...(detail?.hosts || []), ...(detail?.affected_assets || [])]).join(
                     ", "
-                  ) || "ΓÇö"}
+                  ) || "—"}
                 </div>
               </div>
               <div style={{ border: `1px solid ${T.border}`, borderRadius: 14, padding: 10, background: T.panel }}>
                 <div style={{ fontFamily: FONT_UI, fontSize: 12, color: T.textSoft, fontWeight: 750 }}>IOCs</div>
                 <div style={{ fontFamily: FONT_MONO, fontSize: 12, color: T.textDim, marginTop: 6 }}>
-                  {uniq([...(detail?.iocs || []), ...(detail?.indicators || [])]).join(", ") || "ΓÇö"}
+                  {uniq([...(detail?.iocs || []), ...(detail?.indicators || [])]).join(", ") || "—"}
                 </div>
               </div>
             </div>
@@ -1935,7 +1935,7 @@ const submitEvidence = useCallback(async () => {
       Evidence artifacts
     </div>
     <div style={{ fontFamily: FONT_MONO, fontSize: 12, color: T.textDim }}>
-      {loadingEvidence ? "loadingΓÇª" : `${(evidenceItems || []).length}`}
+      {loadingEvidence ? "loading…" : `${(evidenceItems || []).length}`}
     </div>
   </div>
 
@@ -1984,15 +1984,15 @@ const submitEvidence = useCallback(async () => {
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
             <div style={{ fontFamily: FONT_UI, fontSize: 11, color: T.textDim }}>
-              Source: <span style={{ color: T.textSoft }}>{e?.source || "ΓÇö"}</span>
+              Source: <span style={{ color: T.textSoft }}>{e?.source || "—"}</span>
             </div>
             <div style={{ fontFamily: FONT_UI, fontSize: 11, color: T.textDim, overflow: "hidden", textOverflow: "ellipsis" }}>
-              Hash: <span style={{ color: T.textSoft, fontFamily: FONT_MONO }}>{(e?.hash_sha256 || "ΓÇö").slice(0, 18)}</span>
+              Hash: <span style={{ color: T.textSoft, fontFamily: FONT_MONO }}>{(e?.hash_sha256 || "—").slice(0, 18)}</span>
             </div>
             <div style={{ fontFamily: FONT_UI, fontSize: 11, color: T.textDim, gridColumn: "1 / -1" }}>
               Location:{" "}
               <span style={{ color: T.textSoft, fontFamily: FONT_MONO }}>
-                {(e?.storage_location || "ΓÇö").slice(0, 96)}
+                {(e?.storage_location || "—").slice(0, 96)}
               </span>
             </div>
           </div>
@@ -2122,7 +2122,7 @@ const submitEvidence = useCallback(async () => {
                 </div>
               </div>
               <div style={{ fontFamily: FONT_MONO, fontSize: 12, color: T.textDim, marginTop: 4 }}>
-                {p.incidentId} ┬╖ {p.incidentTitle}
+                {p.incidentId} · {p.incidentTitle}
               </div>
             </button>
           ))}
@@ -2139,7 +2139,7 @@ const submitEvidence = useCallback(async () => {
             lineHeight: 1.35,
           }}
         >
-          No approvals pending. YouΓÇÖre clear to hunt.
+          No approvals pending. You’re clear to hunt.
         </div>
       )}
 
@@ -2279,7 +2279,7 @@ const submitEvidence = useCallback(async () => {
             }}
           />
           <div style={{ fontFamily: FONT_UI, fontSize: 12, color: T.textDim, lineHeight: 1.3 }}>
-            1sΓÇô60s range.
+            1s–60s range.
           </div>
         </div>
 
@@ -2372,7 +2372,7 @@ const submitEvidence = useCallback(async () => {
         <textarea
           value={reasonText}
           onChange={(e) => setReasonText(e.target.value)}
-          placeholder="Reason (optional)ΓÇª"
+          placeholder="Reason (optional)…"
           rows={4}
           style={{
             width: "100%",
@@ -2389,7 +2389,7 @@ const submitEvidence = useCallback(async () => {
         />
         {reasonModal.action ? (
           <div style={{ fontFamily: FONT_MONO, fontSize: 12, color: T.textDim }}>
-            {reasonModal.action.id} ┬╖ {reasonModal.action.name || reasonModal.action.action || "Action"}
+            {reasonModal.action.id} · {reasonModal.action.name || reasonModal.action.action || "Action"}
           </div>
         ) : null}
       </div>
