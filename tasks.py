@@ -123,7 +123,11 @@ def run_vuln_scan(self, target: str, scan_type: str = "full", request_id: str | 
                     "notes": ["QC_SCAN_DRY_RUN enabled"],
                 }
                 return result
-            scan = _engine().scan_target(target=target, scan_type=scan_type)
+            scan = _engine().scan_target(
+                target=target,
+                scan_type=scan_type,
+                scan_id=getattr(self.request, "id", None),
+            )
             result = scan.to_dict()
 
             logger.info(
