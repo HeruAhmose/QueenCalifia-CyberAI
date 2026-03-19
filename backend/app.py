@@ -16,15 +16,21 @@ import importlib.util
 import os
 import sys
 
+from dotenv import load_dotenv
+from flask_cors import CORS
+
+from core.database import init_db
+from core.settings import get_settings, parse_origins
+
 
 def _load_root_app():
-    # The React dashboard generally assumes the API is reachable without an
-    # admin/API key prompt. To avoid the entire UI going 401 after restoring
-    # the security gateway, default to `QC_NO_AUTH=1` unless explicitly set.
+    # Dashboard UX assumes the API is reachable without you needing to paste an
+    # API key. Default to allowing requests unless explicitly configured.
     os.environ.setdefault("QC_NO_AUTH", "1")
 
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     if repo_root not in sys.path:
+        # Keep repo root at the front so `import core.*` resolves to repo-root core.
         sys.path.insert(0, repo_root)
 
     root_app_path = os.path.join(repo_root, "app.py")
@@ -37,7 +43,36 @@ def _load_root_app():
     return module.app
 
 
+load_dotenv()
+settings = get_settings()
+init_db(settings.db_path)
+
 app = _load_root_app()
+
+# Make settings available to the dashboard route modules.
+app.config["settings"] = settings
+
+# Enable CORS for all dashboard API requests.
+CORS(app, resources={r"/api/*": {"origins": parse_origins(settings.cors_origins)}}, supports_credentials=False)
+
+# Mount the dashboard-friendly blueprints onto the security-gateway app.
+# (The root security app mainly provides vuln routes; the dashboard UI also
+# expects market/forecast/identity endpoints.)
+try:
+    from modules.conversation.routes import conversation_bp
+    from modules.market.routes import market_bp
+    from modules.forecast.routes import forecast_bp
+    from modules.identity.routes import identity_bp
+
+    app.register_blueprint(conversation_bp, url_prefix="/api/chat")
+    app.register_blueprint(market_bp, url_prefix="/api/market")
+    app.register_blueprint(forecast_bp, url_prefix="/api/forecast")
+    app.register_blueprint(identity_bp, url_prefix="/api/identity")
+except Exception:
+    # If blueprint mounting fails (e.g., import path mismatch), don't hard-crash
+    # the whole service. Vuln routes should still work.
+    import traceback
+    traceback.print_exc()
 
 
 __all__ = ["app"]
