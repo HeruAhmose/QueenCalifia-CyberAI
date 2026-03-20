@@ -785,6 +785,33 @@ class ThreatIntelEngine:
                     context={"feed": feed.name},
                 )
             )
+
+    def probe_health(self) -> Dict[str, Any]:
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) AS count FROM threat_feeds").fetchone()
+        return {
+            "healthy": True,
+            "metrics": {
+                "db_path": self.db_path,
+                "feeds_registered": int(row["count"]) if row else 0,
+                "scheduler_running": bool(self._scheduler_thread and self._scheduler_thread.is_alive()),
+            },
+        }
+
+    def recover_runtime_state(self) -> Dict[str, Any]:
+        with self._lock:
+            self._feeds = {}
+            self._indicators = {}
+            self._cves = {}
+            self._actors = {}
+            self._sync_log = []
+            self._init_db()
+            self._load_persisted_state()
+            return {
+                "healed": True,
+                "strategy": "reload_threat_intel_state",
+                "feeds": len(self._feeds),
+            }
         return {"indicators": self.bulk_ingest(indicators), "cves": 0, "actors": 0}
 
     def _parse_cisa_kev(self, feed: ThreatFeed, payload: dict[str, Any]) -> Dict[str, int]:

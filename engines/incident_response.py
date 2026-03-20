@@ -20,16 +20,33 @@ Capabilities:
 import uuid
 import time
 import json
+import os
 import hashlib
 import threading
 import logging
-from datetime import datetime, timedelta
+import sqlite3
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional, Set
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from collections import defaultdict, deque
+from pathlib import Path
 
 logger = logging.getLogger("queencalifia.incident")
+
+
+def _dt_or_none(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    return datetime.fromisoformat(value)
+
+
+def _utcnow_dt() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _utcnow_iso() -> str:
+    return _utcnow_dt().isoformat()
 
 
 class IncidentSeverity(IntEnum):
@@ -120,6 +137,7 @@ class ResponseAction:
             "action_id": self.action_id,
             "action_type": self.action_type.value,
             "target": self.target,
+            "parameters": self.parameters,
             "status": self.status.value,
             "priority": self.priority,
             "requires_approval": self.requires_approval,
@@ -144,7 +162,7 @@ class ForensicEvidence:
     evidence_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
     evidence_type: str = ""  # memory_dump, disk_image, log_capture, network_pcap
     source: str = ""
-    collected_at: datetime = field(default_factory=datetime.utcnow)
+    collected_at: datetime = field(default_factory=_utcnow_dt)
     collector: str = "queencalifia_auto"
     hash_sha256: str = ""
     size_bytes: int = 0
@@ -195,8 +213,8 @@ class Incident:
     evidence: List[ForensicEvidence] = field(default_factory=list)
     timeline: List[Dict[str, str]] = field(default_factory=list)
     assigned_to: Optional[str] = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=_utcnow_dt)
+    updated_at: datetime = field(default_factory=_utcnow_dt)
     resolved_at: Optional[datetime] = None
     containment_time_min: Optional[float] = None
     root_cause: Optional[str] = None
@@ -204,12 +222,12 @@ class Incident:
 
     def add_timeline_entry(self, action: str, details: str = "", actor: str = "system"):
         self.timeline.append({
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": _utcnow_iso(),
             "action": action,
             "details": details,
             "actor": actor,
         })
-        self.updated_at = datetime.utcnow()
+        self.updated_at = _utcnow_dt()
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -246,6 +264,12 @@ class IncidentResponseOrchestrator:
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
+        self.db_path = Path(
+            self.config.get("db_path")
+            or self.config.get("state_db_path")
+            or os.environ.get("QC_DB_PATH")
+            or "data/queen.db"
+        ).expanduser().resolve()
 
         # Concurrency guard
         self._lock = threading.RLock()
@@ -279,9 +303,246 @@ class IncidentResponseOrchestrator:
             "evidence_collected": 0,
         }
 
+        self._init_state_store()
+        self._load_persisted_state()
+
         logger.info(
             f"🛡️  Incident Response Orchestrator online | "
             f"{len(self.playbooks)} playbooks loaded"
+        )
+
+    def _connect_state_store(self) -> sqlite3.Connection:
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(self.db_path))
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _init_state_store(self) -> None:
+        try:
+            with self._connect_state_store() as conn:
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS qc_ir_incidents (
+                        incident_id TEXT PRIMARY KEY,
+                        incident_json TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    )
+                    """
+                )
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS qc_ir_runtime_state (
+                        state_key TEXT PRIMARY KEY,
+                        state_json TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    )
+                    """
+                )
+        except Exception:
+            logger.exception("Failed to initialize incident response state store")
+
+    def _load_persisted_state(self) -> None:
+        try:
+            with self._connect_state_store() as conn:
+                for row in conn.execute("SELECT incident_json FROM qc_ir_incidents"):
+                    payload = json.loads(row["incident_json"])
+                    incident = self._incident_from_dict(payload)
+                    self.incidents[incident.incident_id] = incident
+                    if incident.attack_chain_id:
+                        self.incident_index_by_chain[incident.attack_chain_id] = incident.incident_id
+
+                runtime_rows = {
+                    row["state_key"]: json.loads(row["state_json"])
+                    for row in conn.execute("SELECT state_key, state_json FROM qc_ir_runtime_state")
+                }
+        except Exception:
+            logger.exception("Failed to load persisted incident response state")
+            return
+
+        self.blocked_ips = runtime_rows.get("blocked_ips", {})
+        self.isolated_hosts = set(runtime_rows.get("isolated_hosts", []))
+        self.disabled_accounts = set(runtime_rows.get("disabled_accounts", []))
+        self.quarantined_files = runtime_rows.get("quarantined_files", [])
+        self.metrics.update(runtime_rows.get("metrics", {}))
+        self.executed_actions = [
+            self._action_from_dict(item)
+            for item in runtime_rows.get("executed_actions", [])
+        ]
+        self.metrics["active_incidents"] = sum(
+            1 for i in self.incidents.values()
+            if i.status not in {IncidentStatus.CLOSED, IncidentStatus.FALSE_POSITIVE}
+        )
+
+    def reload_persisted_state(self) -> Dict[str, Any]:
+        with self._lock:
+            self.incidents = {}
+            self.incident_index_by_chain = {}
+            self.executed_actions = []
+            self.blocked_ips = {}
+            self.isolated_hosts = set()
+            self.disabled_accounts = set()
+            self.quarantined_files = []
+            self._init_state_store()
+            self._load_persisted_state()
+            return {
+                "healed": True,
+                "strategy": "reload_incident_state",
+                "incidents": len(self.incidents),
+            }
+
+    def probe_health(self) -> Dict[str, Any]:
+        with self._lock:
+            with self._connect_state_store() as conn:
+                incident_rows = conn.execute("SELECT COUNT(*) AS count FROM qc_ir_incidents").fetchone()
+            return {
+                "healthy": True,
+                "metrics": {
+                    "db_path": str(self.db_path),
+                    "persisted_incidents": int(incident_rows["count"]) if incident_rows else 0,
+                    "active_incidents": self.metrics.get("active_incidents", 0),
+                },
+            }
+
+    def _persist_runtime_state(self) -> None:
+        now = _utcnow_iso()
+        payloads = {
+            "blocked_ips": self.blocked_ips,
+            "isolated_hosts": sorted(self.isolated_hosts),
+            "disabled_accounts": sorted(self.disabled_accounts),
+            "quarantined_files": self.quarantined_files,
+            "metrics": self.metrics,
+            "executed_actions": [self._action_to_dict(action) for action in self.executed_actions[-500:]],
+        }
+        try:
+            with self._connect_state_store() as conn:
+                for key, value in payloads.items():
+                    conn.execute(
+                        """
+                        INSERT INTO qc_ir_runtime_state (state_key, state_json, updated_at)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT(state_key) DO UPDATE SET
+                            state_json=excluded.state_json,
+                            updated_at=excluded.updated_at
+                        """,
+                        (key, json.dumps(value, default=str), now),
+                    )
+        except Exception:
+            logger.exception("Failed to persist incident response runtime state")
+
+    def _persist_incident(self, incident: Incident) -> None:
+        try:
+            with self._connect_state_store() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO qc_ir_incidents (incident_id, incident_json, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(incident_id) DO UPDATE SET
+                        incident_json=excluded.incident_json,
+                        updated_at=excluded.updated_at
+                    """,
+                    (
+                        incident.incident_id,
+                        json.dumps(self._incident_to_dict(incident), default=str),
+                        _utcnow_iso(),
+                    ),
+                )
+        except Exception:
+            logger.exception("Failed to persist incident", extra={"incident_id": incident.incident_id})
+
+    def _action_to_dict(self, action: ResponseAction) -> Dict[str, Any]:
+        return action.to_dict()
+
+    def _action_from_dict(self, payload: Dict[str, Any]) -> ResponseAction:
+        return ResponseAction(
+            action_id=payload.get("action_id", str(uuid.uuid4())[:8]),
+            action_type=ActionType(payload.get("action_type", ActionType.NOTIFY_TEAM.value)),
+            target=payload.get("target", ""),
+            parameters=payload.get("parameters", {}) or {},
+            status=ActionStatus(payload.get("status", ActionStatus.PENDING.value)),
+            priority=int(payload.get("priority", 5)),
+            requires_approval=bool(payload.get("requires_approval", False)),
+            approved_by=payload.get("approved_by"),
+            denied_by=payload.get("denied_by"),
+            denied_at=_dt_or_none(payload.get("denied_at")),
+            denied_reason=payload.get("denied_reason"),
+            rolled_back_by=payload.get("rolled_back_by"),
+            rolled_back_at=_dt_or_none(payload.get("rolled_back_at")),
+            rolled_back_reason=payload.get("rolled_back_reason"),
+            executed_at=_dt_or_none(payload.get("executed_at")),
+            completed_at=_dt_or_none(payload.get("completed_at")),
+            result=payload.get("result"),
+            error=payload.get("error"),
+            rollback_action=payload.get("rollback_action"),
+        )
+
+    def _evidence_from_dict(self, payload: Dict[str, Any]) -> ForensicEvidence:
+        return ForensicEvidence(
+            evidence_id=payload.get("evidence_id", str(uuid.uuid4())[:8]),
+            evidence_type=payload.get("evidence_type", ""),
+            source=payload.get("source", ""),
+            collected_at=_dt_or_none(payload.get("collected_at")) or _utcnow_dt(),
+            collector=payload.get("collector", "queencalifia_auto"),
+            hash_sha256=payload.get("hash_sha256", ""),
+            size_bytes=int(payload.get("size_bytes", 0) or 0),
+            storage_location=payload.get("storage_location", ""),
+            chain_of_custody=payload.get("chain_of_custody", []) or [],
+            tombstoned=bool(payload.get("tombstoned", False)),
+            tombstoned_at=_dt_or_none(payload.get("tombstoned_at")),
+            tombstoned_by=payload.get("tombstoned_by"),
+            tombstone_reason=payload.get("tombstone_reason"),
+            notes=payload.get("notes", ""),
+        )
+
+    def _incident_to_dict(self, incident: Incident) -> Dict[str, Any]:
+        return {
+            "incident_id": incident.incident_id,
+            "title": incident.title,
+            "description": incident.description,
+            "severity": incident.severity.name,
+            "category": incident.category.value,
+            "status": incident.status.value,
+            "source_events": list(incident.source_events),
+            "attack_chain_id": incident.attack_chain_id,
+            "affected_assets": sorted(incident.affected_assets),
+            "affected_users": sorted(incident.affected_users),
+            "indicators": list(incident.indicators),
+            "mitre_techniques": list(incident.mitre_techniques),
+            "response_actions": [self._action_to_dict(a) for a in incident.response_actions],
+            "evidence": [e.to_dict() for e in incident.evidence],
+            "timeline": list(incident.timeline),
+            "assigned_to": incident.assigned_to,
+            "created_at": incident.created_at.isoformat(),
+            "updated_at": incident.updated_at.isoformat(),
+            "resolved_at": incident.resolved_at.isoformat() if incident.resolved_at else None,
+            "containment_time_min": incident.containment_time_min,
+            "root_cause": incident.root_cause,
+            "lessons_learned": incident.lessons_learned,
+        }
+
+    def _incident_from_dict(self, payload: Dict[str, Any]) -> Incident:
+        return Incident(
+            incident_id=payload.get("incident_id", f"INC-{uuid.uuid4().hex[:8].upper()}"),
+            title=payload.get("title", ""),
+            description=payload.get("description", ""),
+            severity=IncidentSeverity[payload.get("severity", IncidentSeverity.MEDIUM.name)],
+            category=IncidentCategory(payload.get("category", IncidentCategory.UNAUTHORIZED_ACCESS.value)),
+            status=IncidentStatus(payload.get("status", IncidentStatus.NEW.value)),
+            source_events=payload.get("source_events", []) or [],
+            attack_chain_id=payload.get("attack_chain_id"),
+            affected_assets=set(payload.get("affected_assets", []) or []),
+            affected_users=set(payload.get("affected_users", []) or []),
+            indicators=payload.get("indicators", []) or [],
+            mitre_techniques=payload.get("mitre_techniques", []) or [],
+            response_actions=[self._action_from_dict(item) for item in payload.get("response_actions", []) or []],
+            evidence=[self._evidence_from_dict(item) for item in payload.get("evidence", []) or []],
+            timeline=payload.get("timeline", []) or [],
+            assigned_to=payload.get("assigned_to"),
+            created_at=_dt_or_none(payload.get("created_at")) or _utcnow_dt(),
+            updated_at=_dt_or_none(payload.get("updated_at")) or _utcnow_dt(),
+            resolved_at=_dt_or_none(payload.get("resolved_at")),
+            containment_time_min=payload.get("containment_time_min"),
+            root_cause=payload.get("root_cause"),
+            lessons_learned=payload.get("lessons_learned"),
         )
 
 
@@ -320,7 +581,7 @@ class IncidentResponseOrchestrator:
             )
             ev.chain_of_custody.append(
                 {
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": _utcnow_iso(),
                     "actor": ev.collector,
                     "action": "ADDED",
                     "details": f"type={ev.evidence_type}",
@@ -331,9 +592,10 @@ class IncidentResponseOrchestrator:
 
             inc.evidence.append(ev)
             inc.timeline.append(
-                {"timestamp": datetime.utcnow().isoformat(), "event": "Evidence added", "details": ev.evidence_id}
+                {"timestamp": _utcnow_iso(), "event": "Evidence added", "details": ev.evidence_id}
             )
-            inc.updated_at = datetime.utcnow()
+            inc.updated_at = _utcnow_dt()
+            self._persist_incident(inc)
             return ev.to_dict()
 
     def get_evidence(self, incident_id: str, evidence_id: str) -> Dict[str, Any]:
@@ -354,21 +616,22 @@ class IncidentResponseOrchestrator:
             for ev in inc.evidence:
                 if ev.evidence_id == evidence_id:
                     ev.tombstoned = True
-                    ev.tombstoned_at = datetime.utcnow()
+                    ev.tombstoned_at = _utcnow_dt()
                     ev.tombstoned_by = (actor or "unknown")[:64]
                     ev.tombstone_reason = (reason or "")[:512]
                     ev.chain_of_custody.append(
                         {
-                            "timestamp": datetime.utcnow().isoformat(),
+                            "timestamp": _utcnow_iso(),
                             "actor": ev.tombstoned_by,
                             "action": "TOMBSTONED",
                             "details": ev.tombstone_reason or "",
                         }
                     )
                     inc.timeline.append(
-                        {"timestamp": datetime.utcnow().isoformat(), "event": "Evidence tombstoned", "details": ev.evidence_id}
+                        {"timestamp": _utcnow_iso(), "event": "Evidence tombstoned", "details": ev.evidence_id}
                     )
-                    inc.updated_at = datetime.utcnow()
+                    inc.updated_at = _utcnow_dt()
+                    self._persist_incident(inc)
                     return ev.to_dict()
             raise KeyError("evidence not found")
 
@@ -570,6 +833,9 @@ class IncidentResponseOrchestrator:
         # Execute playbook if auto-respond enabled
         if auto_respond:
             self._execute_playbook(incident)
+        else:
+            self._persist_incident(incident)
+            self._persist_runtime_state()
 
         return incident
 
@@ -580,6 +846,8 @@ class IncidentResponseOrchestrator:
         playbook = self.playbooks.get(incident.category.value)
         if not playbook:
             logger.warning(f"No playbook for category: {incident.category.value}")
+            self._persist_incident(incident)
+            self._persist_runtime_state()
             return
 
         incident.add_timeline_entry(
@@ -610,6 +878,9 @@ class IncidentResponseOrchestrator:
                         f"{action.action_type.value} on {action.target} requires approval"
                     )
 
+        self._persist_incident(incident)
+        self._persist_runtime_state()
+
     def _determine_action_target(self, incident: Incident, action_type: ActionType) -> str:
         """Determine the target for a response action"""
         if action_type in {ActionType.BLOCK_IP, ActionType.BLOCK_DOMAIN}:
@@ -628,7 +899,7 @@ class IncidentResponseOrchestrator:
     def _execute_action(self, action: ResponseAction, incident: Incident):
         """Execute a single response action"""
         action.status = ActionStatus.IN_PROGRESS
-        action.executed_at = datetime.utcnow()
+        action.executed_at = _utcnow_dt()
 
         try:
             # Execute based on action type
@@ -656,8 +927,9 @@ class IncidentResponseOrchestrator:
                 action.result = f"Action {action.action_type.value} queued for manual execution"
 
             action.status = ActionStatus.COMPLETED
-            action.completed_at = datetime.utcnow()
+            action.completed_at = _utcnow_dt()
             self.metrics["actions_executed"] += 1
+            self.executed_actions.append(action)
 
             incident.add_timeline_entry(
                 f"action_executed:{action.action_type.value}",
@@ -674,6 +946,9 @@ class IncidentResponseOrchestrator:
                 f"action_failed:{action.action_type.value}",
                 f"Error: {exc}"
             )
+        finally:
+            self._persist_incident(incident)
+            self._persist_runtime_state()
 
     # ─── Action Implementations ──────────────────────────────────────────────
 
@@ -684,7 +959,7 @@ class IncidentResponseOrchestrator:
         for ip in targets:
             if ip and ip != "unknown":
                 self.blocked_ips[ip] = {
-                    "blocked_at": datetime.utcnow().isoformat(),
+                    "blocked_at": _utcnow_iso(),
                     "incident_id": incident.incident_id,
                     "reason": incident.category.value,
                 }
@@ -718,7 +993,7 @@ class IncidentResponseOrchestrator:
         self.quarantined_files.append({
             "target": action.target,
             "incident_id": incident.incident_id,
-            "quarantined_at": datetime.utcnow().isoformat(),
+            "quarantined_at": _utcnow_iso(),
         })
         action.result = f"Files quarantined for incident {incident.incident_id}"
 
@@ -729,14 +1004,14 @@ class IncidentResponseOrchestrator:
             source=action.target,
             collector="queencalifia_ir_auto",
             hash_sha256=hashlib.sha256(
-                f"memdump_{action.target}_{datetime.utcnow().isoformat()}".encode()
+                f"memdump_{action.target}_{_utcnow_iso()}".encode()
             ).hexdigest(),
             notes=f"Auto-captured for incident {incident.incident_id}",
         )
         evidence.chain_of_custody.append({
             "action": "collected",
             "actor": "queencalifia_ir_auto",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": _utcnow_iso(),
         })
         incident.evidence.append(evidence)
         self.metrics["evidence_collected"] += 1
@@ -749,14 +1024,14 @@ class IncidentResponseOrchestrator:
             source=action.target,
             collector="queencalifia_ir_auto",
             hash_sha256=hashlib.sha256(
-                f"logs_{action.target}_{datetime.utcnow().isoformat()}".encode()
+                f"logs_{action.target}_{_utcnow_iso()}".encode()
             ).hexdigest(),
             notes=f"Log collection for incident {incident.incident_id}",
         )
         evidence.chain_of_custody.append({
             "action": "collected",
             "actor": "queencalifia_ir_auto",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": _utcnow_iso(),
         })
         incident.evidence.append(evidence)
         self.metrics["evidence_collected"] += 1
@@ -793,6 +1068,8 @@ class IncidentResponseOrchestrator:
                 if action.action_id == action_id and action.status == ActionStatus.PENDING:
                     action.approved_by = approver
                     self._execute_action(action, incident)
+                    self._persist_incident(incident)
+                    self._persist_runtime_state()
                     return True
 
         return False
@@ -808,15 +1085,17 @@ class IncidentResponseOrchestrator:
                 if action.action_id == action_id and action.status == ActionStatus.PENDING:
                     action.status = ActionStatus.DENIED
                     action.denied_by = denier
-                    action.denied_at = datetime.utcnow()
+                    action.denied_at = _utcnow_dt()
                     action.denied_reason = (reason or "").strip() or None
-                    action.completed_at = datetime.utcnow()
+                    action.completed_at = _utcnow_dt()
                     action.result = f"Denied by {denier}" + (f": {action.denied_reason}" if action.denied_reason else "")
 
                     incident.add_timeline_entry(
                         f"action_denied:{action.action_type.value}",
                         f"Target: {action.target} | {action.result}",
                     )
+                    self._persist_incident(incident)
+                    self._persist_runtime_state()
                     return True
 
         return False
@@ -837,7 +1116,7 @@ class IncidentResponseOrchestrator:
 
     def _perform_rollback(self, action: ResponseAction, incident: "Incident", *, actor: str, reason: str | None) -> None:
         action.rolled_back_by = actor
-        action.rolled_back_at = datetime.utcnow()
+        action.rolled_back_at = _utcnow_dt()
         action.rolled_back_reason = (reason or "").strip() or None
 
         rb = (action.rollback_action or "").strip()
@@ -869,7 +1148,7 @@ class IncidentResponseOrchestrator:
                 msg = "Rollback requires manual reversal"
 
             action.status = ActionStatus.ROLLED_BACK
-            action.completed_at = datetime.utcnow()
+            action.completed_at = _utcnow_dt()
             action.result = f"Rolled back by {actor}. {msg}" + (f" | Reason: {action.rolled_back_reason}" if action.rolled_back_reason else "")
 
             incident.add_timeline_entry(
@@ -883,6 +1162,9 @@ class IncidentResponseOrchestrator:
                 f"action_rollback_failed:{action.action_type.value}",
                 f"Error: {exc}",
             )
+        finally:
+            self._persist_incident(incident)
+            self._persist_runtime_state()
 
     def update_incident(
         self,
@@ -906,7 +1188,7 @@ class IncidentResponseOrchestrator:
             )
 
             if status == IncidentStatus.CLOSED:
-                incident.resolved_at = datetime.utcnow()
+                incident.resolved_at = _utcnow_dt()
                 if incident.created_at:
                     delta = incident.resolved_at - incident.created_at
                     incident.containment_time_min = delta.total_seconds() / 60
@@ -922,6 +1204,8 @@ class IncidentResponseOrchestrator:
         if notes:
             incident.add_timeline_entry("note_added", notes)
 
+        self._persist_incident(incident)
+        self._persist_runtime_state()
         return incident
 
     def close_incident(
@@ -933,7 +1217,7 @@ class IncidentResponseOrchestrator:
             return None
 
         incident.status = IncidentStatus.CLOSED
-        incident.resolved_at = datetime.utcnow()
+        incident.resolved_at = _utcnow_dt()
         incident.root_cause = root_cause
         incident.lessons_learned = lessons_learned
 
@@ -953,6 +1237,8 @@ class IncidentResponseOrchestrator:
 
         # Update MTTD/MTTC/MTTR
         self._update_response_metrics()
+        self._persist_incident(incident)
+        self._persist_runtime_state()
 
         logger.info(f"✅ Incident {incident_id} closed | MTTR: {incident.containment_time_min:.1f} min")
         return incident
@@ -999,7 +1285,7 @@ class IncidentResponseOrchestrator:
                 "mttr_minutes": self.metrics["mean_time_to_resolve_min"],
             },
             "playbooks_loaded": len(self.playbooks),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": _utcnow_iso(),
         }
 
     def get_incident_report(self, incident_id: str) -> Optional[Dict[str, Any]]:

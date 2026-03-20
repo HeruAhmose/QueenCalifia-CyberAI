@@ -24,10 +24,12 @@ import hashlib
 import json
 import logging
 import os
+import sqlite3
 import threading
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
+from pathlib import Path
 
 logger = logging.getLogger("sovereignty.audit_chain")
 
@@ -150,3 +152,90 @@ class AuditChain:
     def export_chain(self) -> List[dict]:
         with self._lock:
             return [e.to_dict() for e in self._entries]
+
+
+class SQLiteAuditChain(AuditChain):
+    """Durable audit chain backed by SQLite."""
+
+    def __init__(self, db_path: str, hash_alg: Optional[str] = None):
+        self._db_path = Path(db_path).expanduser().resolve()
+        super().__init__(hash_alg=hash_alg, persist_fn=self._persist_entry)
+        self._init_db()
+        self._load_chain()
+
+    def _connect(self) -> sqlite3.Connection:
+        self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(self._db_path))
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _init_db(self) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS qc_audit_chain (
+                    sequence INTEGER PRIMARY KEY,
+                    timestamp REAL NOT NULL,
+                    record_json TEXT NOT NULL,
+                    record_hash TEXT NOT NULL,
+                    prev_chain_hash TEXT NOT NULL,
+                    chain_hash TEXT NOT NULL,
+                    hash_alg TEXT NOT NULL
+                )
+                """
+            )
+
+    def _load_chain(self) -> None:
+        with self._lock:
+            with self._connect() as conn:
+                rows = conn.execute(
+                    """
+                    SELECT sequence, timestamp, record_json, record_hash,
+                           prev_chain_hash, chain_hash, hash_alg
+                    FROM qc_audit_chain
+                    ORDER BY sequence ASC
+                    """
+                ).fetchall()
+            self._entries = [
+                AuditEntry(
+                    sequence=int(row["sequence"]),
+                    timestamp=float(row["timestamp"]),
+                    record=json.loads(row["record_json"]),
+                    record_hash=row["record_hash"],
+                    prev_chain_hash=row["prev_chain_hash"],
+                    chain_hash=row["chain_hash"],
+                    hash_alg=row["hash_alg"],
+                )
+                for row in rows
+            ]
+            self._head = self._entries[-1].chain_hash if self._entries else GENESIS_HASH
+
+    def _persist_entry(self, entry: AuditEntry) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO qc_audit_chain (
+                    sequence, timestamp, record_json, record_hash,
+                    prev_chain_hash, chain_hash, hash_alg
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    entry.sequence,
+                    entry.timestamp,
+                    json.dumps(entry.record, sort_keys=True, separators=(",", ":"), default=str),
+                    entry.record_hash,
+                    entry.prev_chain_hash,
+                    entry.chain_hash,
+                    entry.hash_alg,
+                ),
+            )
+
+
+def build_default_audit_chain() -> AuditChain:
+    db_path = os.environ.get("QC_AUDIT_CHAIN_DB") or os.environ.get("QC_DB_PATH")
+    if db_path:
+        try:
+            return SQLiteAuditChain(db_path)
+        except Exception as exc:
+            logger.error("audit_chain.sqlite_init_failed: %s", exc)
+    return AuditChain()

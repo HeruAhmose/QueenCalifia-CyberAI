@@ -170,6 +170,8 @@ class EvolutionEngine:
 
         # Component registry
         self._components: Dict[str, ComponentHealth] = {}
+        self._component_checks: Dict[str, Any] = {}
+        self._component_recoveries: Dict[str, List[Any]] = defaultdict(list)
         self._start_time = datetime.now(timezone.utc).isoformat()
 
         # Learning state
@@ -409,11 +411,20 @@ class EvolutionEngine:
         self._components[component_id] = health
         return health
 
+    def register_component_probe(self, component_id: str, check_fn) -> None:
+        """Register a real health probe for verified recovery checks."""
+        self._component_checks[component_id] = check_fn
+
+    def register_component_recovery(self, component_id: str, recovery_fn) -> None:
+        """Register a real recovery callback for a component."""
+        self._component_recoveries[component_id].append(recovery_fn)
+
     def check_health(self, component_id: str, check_fn=None) -> ComponentHealth:
         """Check health of a registered component. Optionally run a check function."""
         health = self._components.get(component_id)
         if not health:
             health = self.register_component(component_id, component_id)
+        check_fn = check_fn or self._component_checks.get(component_id)
 
         now = datetime.now(timezone.utc)
         health.last_check = now.isoformat()
@@ -425,7 +436,7 @@ class EvolutionEngine:
                     if health.status in (HealthStatus.DEGRADED, HealthStatus.CRITICAL):
                         health.status = HealthStatus.RECOVERING
                         health.auto_healed += 1
-                        self._log_healing(component_id, "auto_recovery", "Component recovered")
+                        self._log_healing(component_id, "verified_recovery", "Component recovered via health probe")
                     else:
                         health.status = HealthStatus.HEALTHY
                     health.metrics = result.get("metrics", {})
@@ -433,6 +444,7 @@ class EvolutionEngine:
                     health.status = HealthStatus.DEGRADED
                     health.error_count += 1
                     health.last_error = result.get("error", "Health check failed")
+                    self._attempt_heal(component_id, health)
             except Exception as e:
                 health.status = HealthStatus.CRITICAL
                 health.error_count += 1
@@ -461,6 +473,13 @@ class EvolutionEngine:
             "success": False,
         }
 
+        probe_fn = self._component_checks.get(component_id)
+        if probe_fn is None:
+            action["reason"] = "no_probe_registered"
+            self._healing_actions.append(action)
+            self._log_healing(component_id, "skipped", "No verified probe registered")
+            return
+
         # Healing strategies based on component type
         strategies = self._get_healing_strategies(component_id)
 
@@ -469,10 +488,15 @@ class EvolutionEngine:
             try:
                 result = strategy(component_id)
                 if result.get("healed"):
+                    probe_result = probe_fn()
+                    if not probe_result.get("healthy", False):
+                        action["last_probe_error"] = probe_result.get("error", "post_recovery_probe_failed")
+                        continue
                     health.status = HealthStatus.RECOVERING
                     health.auto_healed += 1
                     action["success"] = True
                     action["strategy"] = result.get("strategy", "unknown")
+                    health.metrics = probe_result.get("metrics", {})
                     logger.info("Auto-healed component %s using %s", component_id, action["strategy"])
                     break
             except Exception as e:
@@ -483,20 +507,18 @@ class EvolutionEngine:
 
     def _get_healing_strategies(self, component_id: str) -> list:
         """Return ordered list of healing strategies for a component."""
-
-        def reinit_strategy(cid):
-            """Try to reinitialize the component."""
-            return {"healed": True, "strategy": "reinitialize"}
-
-        def clear_cache_strategy(cid):
-            """Clear any cached state that might be corrupted."""
-            return {"healed": True, "strategy": "cache_clear"}
-
-        def fallback_mode_strategy(cid):
-            """Switch to degraded/fallback mode."""
-            return {"healed": True, "strategy": "fallback_mode"}
-
-        return [reinit_strategy, clear_cache_strategy, fallback_mode_strategy]
+        strategies = []
+        for idx, recovery_fn in enumerate(self._component_recoveries.get(component_id, [])):
+            def _strategy(cid, fn=recovery_fn, i=idx):
+                result = fn(cid)
+                if isinstance(result, dict):
+                    return {
+                        "healed": bool(result.get("healed", False)),
+                        "strategy": result.get("strategy", f"recovery_{i}"),
+                    }
+                return {"healed": bool(result), "strategy": f"recovery_{i}"}
+            strategies.append(_strategy)
+        return strategies
 
     def _log_health(self, health: ComponentHealth):
         try:

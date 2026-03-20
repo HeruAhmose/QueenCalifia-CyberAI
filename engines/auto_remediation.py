@@ -31,10 +31,12 @@ import hashlib
 import logging
 import subprocess
 import threading
+import sqlite3
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass, field, asdict
 from enum import Enum
+from pathlib import Path
 
 logger = logging.getLogger("queencalifia.remediation")
 
@@ -120,6 +122,12 @@ class AutoRemediation:
         self.allow_execute = config.get("allow_execute", True)
         self.ssh_key_path = config.get("ssh_key_path", "")
         self.ssh_user = config.get("ssh_user", "root")
+        self.db_path = Path(
+            config.get("db_path")
+            or config.get("state_db_path")
+            or os.environ.get("QC_DB_PATH")
+            or "data/queen.db"
+        ).expanduser().resolve()
         self._lock = threading.Lock()
         self.plans: Dict[str, RemediationPlan] = {}
         self.action_log: List[Dict] = []
@@ -136,7 +144,137 @@ class AutoRemediation:
         else:
             self.platform = Platform.LINUX
 
+        self._init_state_store()
+        self._load_persisted_state()
+
         logger.info(f"AutoRemediation initialized | platform={self.platform.value} | mode={self.default_mode.value}")
+
+    def _connect_state_store(self) -> sqlite3.Connection:
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(self.db_path))
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _init_state_store(self) -> None:
+        try:
+            with self._connect_state_store() as conn:
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS qc_remediation_plans (
+                        plan_id TEXT PRIMARY KEY,
+                        plan_json TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    )
+                    """
+                )
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS qc_remediation_action_log (
+                        log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        action_json TEXT NOT NULL,
+                        created_at TEXT NOT NULL
+                    )
+                    """
+                )
+        except Exception:
+            logger.exception("Failed to initialize remediation state store")
+
+    def _load_persisted_state(self) -> None:
+        try:
+            with self._connect_state_store() as conn:
+                for row in conn.execute("SELECT plan_json FROM qc_remediation_plans"):
+                    payload = json.loads(row["plan_json"])
+                    plan = self._plan_from_dict(payload)
+                    self.plans[plan.plan_id] = plan
+                self.action_log = [
+                    json.loads(row["action_json"])
+                    for row in conn.execute(
+                        "SELECT action_json FROM qc_remediation_action_log ORDER BY log_id ASC"
+                    )
+                ]
+        except Exception:
+            logger.exception("Failed to load remediation state")
+
+    def reload_persisted_state(self) -> Dict[str, Any]:
+        with self._lock:
+            self.plans = {}
+            self.action_log = []
+            self._init_state_store()
+            self._load_persisted_state()
+            return {
+                "healed": True,
+                "strategy": "reload_remediation_state",
+                "plans": len(self.plans),
+            }
+
+    def probe_health(self) -> Dict[str, Any]:
+        with self._lock:
+            with self._connect_state_store() as conn:
+                plan_rows = conn.execute("SELECT COUNT(*) AS count FROM qc_remediation_plans").fetchone()
+            return {
+                "healthy": True,
+                "metrics": {
+                    "db_path": str(self.db_path),
+                    "persisted_plans": int(plan_rows["count"]) if plan_rows else 0,
+                    "active_plans": len(self.plans),
+                },
+            }
+
+    def _persist_plan(self, plan: RemediationPlan) -> None:
+        try:
+            with self._connect_state_store() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO qc_remediation_plans (plan_id, plan_json, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(plan_id) DO UPDATE SET
+                        plan_json=excluded.plan_json,
+                        updated_at=excluded.updated_at
+                    """,
+                    (
+                        plan.plan_id,
+                        json.dumps(plan.to_dict(), default=str),
+                        datetime.now(timezone.utc).isoformat(),
+                    ),
+                )
+        except Exception:
+            logger.exception("Failed to persist remediation plan", extra={"plan_id": plan.plan_id})
+
+    def _append_action_log(self, entry: Dict[str, Any]) -> None:
+        self.action_log.append(entry)
+        try:
+            with self._connect_state_store() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO qc_remediation_action_log (action_json, created_at)
+                    VALUES (?, ?)
+                    """,
+                    (
+                        json.dumps(entry, default=str),
+                        entry.get("timestamp") or datetime.now(timezone.utc).isoformat(),
+                    ),
+                )
+        except Exception:
+            logger.exception("Failed to persist remediation action log")
+
+    def _action_from_dict(self, payload: Dict[str, Any]) -> RemediationAction:
+        return RemediationAction(**payload)
+
+    def _plan_from_dict(self, payload: Dict[str, Any]) -> RemediationPlan:
+        actions = [self._action_from_dict(item) for item in payload.get("actions", [])]
+        return RemediationPlan(
+            plan_id=payload.get("plan_id", f"PLAN-{uuid.uuid4().hex[:8].upper()}"),
+            finding_ids=payload.get("finding_ids", []) or [],
+            target_host=payload.get("target_host", ""),
+            actions=actions,
+            mode=payload.get("mode", "preview"),
+            status=payload.get("status", "pending"),
+            created_at=payload.get("created_at", datetime.now(timezone.utc).isoformat()),
+            executed_at=payload.get("executed_at", ""),
+            total_actions=int(payload.get("total_actions", len(actions))),
+            completed_actions=int(payload.get("completed_actions", 0)),
+            failed_actions=int(payload.get("failed_actions", 0)),
+        )
 
     # ─── Plan Generation ─────────────────────────────────────────────────────
 
@@ -160,6 +298,7 @@ class AutoRemediation:
 
         with self._lock:
             self.plans[plan.plan_id] = plan
+            self._persist_plan(plan)
 
         logger.info(f"Generated plan {plan.plan_id}: {plan.total_actions} actions for {target_host}")
         return plan
@@ -506,6 +645,7 @@ class AutoRemediation:
                 plan.failed_actions += 1
 
         plan.status = "completed" if plan.failed_actions == 0 else "partial"
+        self._persist_plan(plan)
         return plan.to_dict()
 
     def execute_action(self, action: RemediationAction, target: str = "localhost") -> Dict:
@@ -547,14 +687,19 @@ class AutoRemediation:
 
         action.completed_at = datetime.now(timezone.utc).isoformat()
 
-        self.action_log.append({
+        log_entry = {
             "action_id": action.action_id,
             "finding_id": action.finding_id,
             "title": action.title,
             "status": action.status,
             "target": target,
             "timestamp": action.completed_at,
-        })
+        }
+        self._append_action_log(log_entry)
+
+        plan = next((candidate for candidate in self.plans.values() if any(a.action_id == action.action_id for a in candidate.actions)), None)
+        if plan:
+            self._persist_plan(plan)
 
         return action.to_dict()
 
@@ -568,6 +713,7 @@ class AutoRemediation:
             if action.action_id == action_id:
                 action.status = "approved"
                 action.approved_by = approved_by
+                self._persist_plan(plan)
                 return action.to_dict()
 
         return {"error": "Action not found"}

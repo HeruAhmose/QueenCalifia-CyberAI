@@ -20,6 +20,7 @@ import os
 import sys
 import json
 import logging
+import hashlib
 
 from core.logging_setup import configure_logging
 import argparse
@@ -29,8 +30,11 @@ from flask import request
 from core.tamerian_mesh import TamerianSecurityMesh
 from engines.vulnerability_engine import VulnerabilityEngine
 from engines.incident_response import IncidentResponseOrchestrator
+from engines.auto_remediation import AutoRemediation
+from engines.evolution_engine import EvolutionEngine
 from engines.zero_day_predictor import ZeroDayPredictor
 from engines.advanced_telemetry import AdvancedTelemetry
+from engines.threat_intel_auto import ThreatIntelEngine
 
 configure_logging()
 logger = logging.getLogger("queencalifia")
@@ -68,6 +72,12 @@ def build_system(no_auth: bool, origins: str) -> dict:
     vuln_engine = VulnerabilityEngine(config=vuln_config)
 
     incident_orchestrator = IncidentResponseOrchestrator(config={})
+    remediator = AutoRemediation()
+    evolution_engine = EvolutionEngine()
+    try:
+        threat_intel = ThreatIntelEngine()
+    except Exception:
+        threat_intel = None
 
     # ── Zero-Day Prediction & Advanced Telemetry ──
     predictor_config = {
@@ -84,6 +94,145 @@ def build_system(no_auth: bool, origins: str) -> dict:
     }
     advanced_telemetry = AdvancedTelemetry(config=telemetry_config)
 
+    def _probe(fn, name: str) -> dict:
+        try:
+            result = fn()
+            if isinstance(result, dict):
+                result.setdefault("healthy", True)
+                return result
+            return {"healthy": bool(result), "metrics": {"probe": name}}
+        except Exception as exc:
+            logger.warning("health probe failed for %s: %s", name, exc)
+            return {"healthy": False, "error": str(exc), "metrics": {"probe": name}}
+
+    def _recover(callback, probe_fn, strategy: str):
+        try:
+            result = callback()
+            probe = _probe(probe_fn, strategy)
+            if probe.get("healthy"):
+                payload = result if isinstance(result, dict) else {"healed": bool(result)}
+                payload.setdefault("strategy", strategy)
+                payload["healed"] = True
+                return payload
+            return {"healed": False, "strategy": strategy, "error": probe.get("error", "post_recovery_probe_failed")}
+        except Exception as exc:
+            logger.warning("recovery callback failed for %s: %s", strategy, exc)
+            return {"healed": False, "strategy": strategy, "error": str(exc)}
+
+    component_specs = {
+        "security_mesh": {
+            "name": "Security Mesh",
+            "probe": lambda: {
+                "healthy": bool(security_mesh.nodes) and bool(security_mesh.circuits),
+                "metrics": {
+                    "nodes": len(security_mesh.nodes),
+                    "circuits": len(security_mesh.circuits),
+                    "active_threats": len(security_mesh.active_threats),
+                },
+            },
+        },
+        "vulnerability_engine": {
+            "name": "Vulnerability Engine",
+            "probe": vuln_engine.probe_health,
+            "recover": lambda: vuln_engine.recover_runtime_state(),
+        },
+        "incident_response": {
+            "name": "Incident Response",
+            "probe": incident_orchestrator.probe_health,
+            "recover": lambda: incident_orchestrator.reload_persisted_state(),
+        },
+        "auto_remediation": {
+            "name": "Auto Remediation",
+            "probe": remediator.probe_health,
+            "recover": lambda: remediator.reload_persisted_state(),
+        },
+        "zero_day_predictor": {
+            "name": "Zero Day Predictor",
+            "probe": lambda: {
+                "healthy": zero_day_predictor.get_status().get("status") == "operational",
+                "metrics": {
+                    "signal_bus_depth": zero_day_predictor.get_status().get("signal_bus_depth", 0),
+                    "active_predictions": zero_day_predictor.get_status().get("active_predictions", {}).get("total", 0),
+                },
+            },
+        },
+        "advanced_telemetry": {
+            "name": "Advanced Telemetry",
+            "probe": lambda: {
+                "healthy": advanced_telemetry.check_collection_health().get("overall_health") != "critical",
+                "metrics": {
+                    "sensors_registered": len(advanced_telemetry.sensors),
+                    "overall_health": advanced_telemetry.check_collection_health().get("overall_health"),
+                },
+            },
+        },
+    }
+    if threat_intel is not None:
+        component_specs["threat_intel"] = {
+            "name": "Threat Intelligence",
+            "probe": threat_intel.probe_health,
+            "recover": lambda: threat_intel.recover_runtime_state(),
+        }
+
+    for component_id, spec in component_specs.items():
+        evolution_engine.register_component(component_id, spec["name"])
+        evolution_engine.register_component_probe(
+            component_id,
+            lambda probe=spec["probe"], cid=component_id: _probe(probe, cid),
+        )
+        if "recover" in spec:
+            evolution_engine.register_component_recovery(
+                component_id,
+                lambda _cid, recover=spec["recover"], probe=spec["probe"], strategy=component_id: _recover(recover, probe, strategy),
+            )
+
+    node_domain_map = {
+        "network": ["vulnerability_engine"] + (["threat_intel"] if threat_intel is not None else []),
+        "endpoint": ["advanced_telemetry", "auto_remediation"],
+        "identity": ["incident_response", "zero_day_predictor"],
+        "data": ["security_mesh", "auto_remediation"],
+    }
+
+    def _aggregate_probe(component_ids: list[str]) -> dict:
+        metrics = {}
+        healthy = False
+        for component_id in component_ids:
+            spec = component_specs.get(component_id)
+            if not spec:
+                continue
+            result = _probe(spec["probe"], component_id)
+            metrics[component_id] = result.get("metrics", {})
+            healthy = healthy or bool(result.get("healthy"))
+            if not healthy and "recover" in spec:
+                recovery = _recover(spec["recover"], spec["probe"], component_id)
+                healthy = healthy or bool(recovery.get("healed"))
+        return {"healthy": healthy, "health": 1.0 if healthy else 0.0, "metrics": metrics}
+
+    for node_id, node in security_mesh.nodes.items():
+        component_ids = node_domain_map.get(node.security_domain, ["security_mesh"])
+        security_mesh.register_node_recovery_check(
+            node_id,
+            lambda _nid, component_ids=component_ids: _aggregate_probe(component_ids),
+        )
+
+    circuit_component_map = {
+        "ingestion_pipeline": ["advanced_telemetry", "threat_intel"] if threat_intel is not None else ["advanced_telemetry"],
+        "detection_pipeline": ["security_mesh", "zero_day_predictor"],
+        "correlation_pipeline": ["security_mesh", "incident_response"],
+        "response_pipeline": ["incident_response", "auto_remediation"],
+        "intelligence_pipeline": ["vulnerability_engine", "zero_day_predictor"] + (["threat_intel"] if threat_intel is not None else []),
+        "audit_pipeline": ["incident_response", "auto_remediation"],
+    }
+    for circuit_id, circuit in security_mesh.circuits.items():
+        component_ids = circuit_component_map.get(circuit.pipeline_type, ["security_mesh"])
+        security_mesh.register_circuit_recovery_check(
+            circuit_id,
+            lambda _cid, component_ids=component_ids, circuit_id=circuit_id: {
+                "healthy": _aggregate_probe(component_ids).get("healthy", False),
+                "integrity_hash": hashlib.sha256(circuit_id.encode()).hexdigest()[:16],
+            },
+        )
+
     api_config = SecurityConfig(
         require_api_key=not no_auth,
         allowed_origins=_parse_origins(origins),
@@ -98,6 +247,9 @@ def build_system(no_auth: bool, origins: str) -> dict:
         config=api_config,
         zero_day_predictor=zero_day_predictor,
         advanced_telemetry=advanced_telemetry,
+        remediator=remediator,
+        evolution_engine=evolution_engine,
+        threat_intel=threat_intel,
     )
 
     return {
@@ -105,8 +257,11 @@ def build_system(no_auth: bool, origins: str) -> dict:
         "security_mesh": security_mesh,
         "vuln_engine": vuln_engine,
         "incident_orchestrator": incident_orchestrator,
+        "remediator": remediator,
+        "evolution_engine": evolution_engine,
         "zero_day_predictor": zero_day_predictor,
         "advanced_telemetry": advanced_telemetry,
+        "threat_intel": threat_intel,
     }
 
 

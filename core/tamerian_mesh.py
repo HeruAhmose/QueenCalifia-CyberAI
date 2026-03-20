@@ -28,7 +28,7 @@ import hmac
 import logging
 import threading
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional, Tuple, Set
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
@@ -39,6 +39,14 @@ import ipaddress
 import re
 
 logger = logging.getLogger("queencalifia.mesh")
+
+
+def _utcnow_dt() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _utcnow_iso() -> str:
+    return _utcnow_dt().isoformat()
 
 
 # ─── Enumerations ───────────────────────────────────────────────────────────
@@ -90,7 +98,7 @@ class DetectionMethod(Enum):
 class SecurityEvent:
     """Normalized security event from any source"""
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=_utcnow_dt)
     source_ip: Optional[str] = None
     dest_ip: Optional[str] = None
     source_port: Optional[int] = None
@@ -120,15 +128,15 @@ class ThreatIndicator:
     severity: ThreatSeverity = ThreatSeverity.MEDIUM
     confidence: float = 0.5
     source: str = "internal"
-    first_seen: datetime = field(default_factory=datetime.utcnow)
-    last_seen: datetime = field(default_factory=datetime.utcnow)
+    first_seen: datetime = field(default_factory=_utcnow_dt)
+    last_seen: datetime = field(default_factory=_utcnow_dt)
     tags: List[str] = field(default_factory=list)
     mitre_techniques: List[str] = field(default_factory=list)
     ttl: int = 86400  # Seconds until expiry
 
     @property
     def is_expired(self) -> bool:
-        return (datetime.utcnow() - self.last_seen).total_seconds() > self.ttl
+        return (_utcnow_dt() - self.last_seen).total_seconds() > self.ttl
 
 @dataclass
 class AttackChain:
@@ -140,8 +148,8 @@ class AttackChain:
     confidence: float = 0.0
     mitre_techniques: List[str] = field(default_factory=list)
     affected_assets: Set[str] = field(default_factory=set)
-    first_seen: datetime = field(default_factory=datetime.utcnow)
-    last_activity: datetime = field(default_factory=datetime.utcnow)
+    first_seen: datetime = field(default_factory=_utcnow_dt)
+    last_activity: datetime = field(default_factory=_utcnow_dt)
     is_active: bool = True
     recommended_actions: List[str] = field(default_factory=list)
 
@@ -155,7 +163,7 @@ class MeshNode:
     health: float = 1.0
     connections: List[str] = field(default_factory=list)
     events_processed: int = 0
-    last_heartbeat: datetime = field(default_factory=datetime.utcnow)
+    last_heartbeat: datetime = field(default_factory=_utcnow_dt)
     detection_rules: List[str] = field(default_factory=list)
     repair_count: int = 0
 
@@ -169,7 +177,7 @@ class TamerianCircuit:
     redundant_paths: int = 3
     throughput_events_sec: int = 0
     is_healthy: bool = True
-    last_integrity_check: datetime = field(default_factory=datetime.utcnow)
+    last_integrity_check: datetime = field(default_factory=_utcnow_dt)
 
 
 # ─── Core Security Mesh ─────────────────────────────────────────────────────
@@ -216,6 +224,8 @@ class TamerianSecurityMesh:
         self.signature_rules = self._load_default_signatures()
         self.behavioral_baselines: Dict[str, Dict] = defaultdict(dict)
         self.anomaly_scores: Dict[str, deque] = defaultdict(lambda: deque(maxlen=1000))
+        self.node_recovery_checks: Dict[str, Any] = {}
+        self.circuit_recovery_checks: Dict[str, Any] = {}
 
         # ── Correlation state ──
         self.correlation_windows: Dict[str, List[SecurityEvent]] = defaultdict(list)
@@ -230,7 +240,7 @@ class TamerianSecurityMesh:
             "ips_blocked": 0,
             "mesh_heals": 0,
             "false_positives_suppressed": 0,
-            "start_time": datetime.utcnow(),
+            "start_time": _utcnow_dt(),
         }
 
         # ── Thread pool for parallel detection ──
@@ -257,6 +267,12 @@ class TamerianSecurityMesh:
             f"{len(self.nodes)} nodes | {len(self.circuits)} circuits | "
             f"{len(self.signature_rules)} signatures loaded"
         )
+
+    def register_node_recovery_check(self, node_id: str, check_fn) -> None:
+        self.node_recovery_checks[node_id] = check_fn
+
+    def register_circuit_recovery_check(self, circuit_id: str, check_fn) -> None:
+        self.circuit_recovery_checks[circuit_id] = check_fn
 
     # ─── Mesh Topology Construction ──────────────────────────────────────────
 
@@ -691,7 +707,7 @@ class TamerianSecurityMesh:
         if hub_id in self.nodes:
             node = self.nodes[hub_id]
             node.events_processed += 1
-            node.last_heartbeat = datetime.utcnow()
+            node.last_heartbeat = _utcnow_dt()
 
     # ─── Detection Pipeline ──────────────────────────────────────────────────
 
@@ -737,7 +753,7 @@ class TamerianSecurityMesh:
                         "confidence": 0.90,
                         "description": rule["description"],
                         "event_id": event.event_id,
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": _utcnow_iso(),
                     }
                     matches.append(detection)
 
@@ -779,7 +795,7 @@ class TamerianSecurityMesh:
                             "event_id": event.event_id,
                             "baseline_value": 50,
                             "observed_value": current_count,
-                            "timestamp": datetime.utcnow().isoformat(),
+                            "timestamp": _utcnow_iso(),
                         }
                     )
 
@@ -800,7 +816,7 @@ class TamerianSecurityMesh:
                             "confidence": 0.85,
                             "description": f"Source {source_key} has {fail_count} auth failures",
                             "event_id": event.event_id,
-                            "timestamp": datetime.utcnow().isoformat(),
+                            "timestamp": _utcnow_iso(),
                         }
                     )
 
@@ -821,7 +837,7 @@ class TamerianSecurityMesh:
         if event.raw_data.get("url"):
             check_values.append(("url", str(event.raw_data["url"])))
 
-        now = datetime.utcnow()
+        now = _utcnow_dt()
         with self._lock:
             for ioc_type, value in check_values:
                 ioc_key = f"{ioc_type}:{value}"
@@ -863,7 +879,7 @@ class TamerianSecurityMesh:
         }
 
         threshold = float(self.config.get("anomaly_z_threshold", 3.0))
-        now = datetime.utcnow()
+        now = _utcnow_dt()
 
         with self._lock:
             for feature_name, value in features.items():
@@ -922,7 +938,7 @@ class TamerianSecurityMesh:
 
         correlations: List[Dict[str, Any]] = []
         source = event.source_ip or "unknown"
-        now = datetime.utcnow()
+        now = _utcnow_dt()
 
         with self._lock:
             self.correlation_windows[source].append(event)
@@ -1055,7 +1071,7 @@ class TamerianSecurityMesh:
             self.stats["iocs_active"] = len([i for i in self.ioc_database.values() if not i.is_expired])
 
             if indicator.indicator_type == "ip" and indicator.severity >= ThreatSeverity.HIGH:
-                self.blocked_ips[indicator.value] = datetime.utcnow()
+                self.blocked_ips[indicator.value] = _utcnow_dt()
                 self.stats["ips_blocked"] = len(self.blocked_ips)
             elif indicator.indicator_type == "domain":
                 self.blocked_domains.add(indicator.value)
@@ -1091,7 +1107,7 @@ class TamerianSecurityMesh:
         """Background thread: monitor and heal mesh nodes (thread-safe)."""
         while self._healing_active:
             try:
-                now = datetime.utcnow()
+                now = _utcnow_dt()
                 with self._lock:
                     for node_id, node in list(self.nodes.items()):
                         if (now - node.last_heartbeat).total_seconds() > 120:
@@ -1100,14 +1116,32 @@ class TamerianSecurityMesh:
                                 logger.warning(f"🔧 Node {node_id} degraded — no heartbeat")
 
                         if node.state == MeshNodeState.DEGRADED:
-                            node.state = MeshNodeState.HEALING
-                            node.health = min(1.0, node.health + 0.1)
-                            node.repair_count += 1
-                            if node.health >= 0.8:
+                            if (now - node.last_heartbeat).total_seconds() <= 120:
                                 node.state = MeshNodeState.ACTIVE
-                                node.last_heartbeat = now
+                                node.health = min(1.0, max(node.health, 0.8))
                                 self.stats["mesh_heals"] += 1
-                                logger.info(f"✅ Node {node_id} healed — back online")
+                                logger.info(f"✅ Node {node_id} recovered via heartbeat")
+                                continue
+
+                            recovery_check = self.node_recovery_checks.get(node_id)
+                            if recovery_check:
+                                node.state = MeshNodeState.HEALING
+                                node.repair_count += 1
+                                result = recovery_check(node_id)
+                                if isinstance(result, dict):
+                                    recovered = bool(result.get("healthy", False))
+                                    reported_health = float(result.get("health", node.health))
+                                else:
+                                    recovered = bool(result)
+                                    reported_health = node.health
+                                if recovered:
+                                    node.health = min(1.0, max(reported_health, 0.8))
+                                    node.state = MeshNodeState.ACTIVE
+                                    node.last_heartbeat = now
+                                    self.stats["mesh_heals"] += 1
+                                    logger.info(f"✅ Node {node_id} healed — probe verified")
+                                else:
+                                    node.state = MeshNodeState.DEGRADED
 
                     for circuit_id, circuit in list(self.circuits.items()):
                         if not circuit.is_healthy:
@@ -1149,17 +1183,33 @@ class TamerianSecurityMesh:
             return False
 
         expected_hash = hashlib.sha256(circuit.circuit_id.encode()).hexdigest()[:16]
-        return circuit.integrity_hash == expected_hash and circuit.is_healthy
+        return circuit.integrity_hash == expected_hash
 
     def _heal_circuit(self, circuit_id: str):
-        """Heal a compromised circuit by resetting integrity and failover"""
+        """Heal a compromised circuit only when a real recovery check passes."""
         circuit = self.circuits.get(circuit_id)
-        if circuit:
-            circuit.integrity_hash = hashlib.sha256(circuit.circuit_id.encode()).hexdigest()[:16]
+        if not circuit:
+            return
+        recovery_check = self.circuit_recovery_checks.get(circuit_id)
+        if not recovery_check:
+            logger.warning("Circuit %s unhealthy with no recovery check; leaving degraded", circuit_id)
+            return
+        result = recovery_check(circuit_id)
+        if isinstance(result, dict):
+            integrity_hash = result.get("integrity_hash")
+            recovered = bool(result.get("healthy", False))
+        else:
+            integrity_hash = None
+            recovered = bool(result)
+        if integrity_hash:
+            circuit.integrity_hash = integrity_hash
+        circuit.last_integrity_check = _utcnow_dt()
+        if recovered and self._verify_circuit_integrity(circuit_id):
             circuit.is_healthy = True
-            circuit.last_integrity_check = datetime.utcnow()
             self.stats["mesh_heals"] += 1
             logger.info(f"🔧 Circuit {circuit_id} healed and integrity restored")
+        else:
+            logger.warning("Circuit %s recovery probe failed integrity verification", circuit_id)
 
     # ─── Mesh Status ─────────────────────────────────────────────────────────
 
@@ -1200,8 +1250,8 @@ class TamerianSecurityMesh:
                     "blocked_domains": len(self.blocked_domains),
                 },
                 "statistics": self.stats,
-                "uptime_hours": round((datetime.utcnow() - self.stats["start_time"]).total_seconds() / 3600, 2),
-                "timestamp": datetime.utcnow().isoformat(),
+                "uptime_hours": round((_utcnow_dt() - self.stats["start_time"]).total_seconds() / 3600, 2),
+                "timestamp": _utcnow_iso(),
             }
     def shutdown(self):
         """Gracefully shutdown the mesh"""

@@ -68,6 +68,14 @@ from collections import defaultdict, deque
 logger = logging.getLogger("queencalifia.telemetry")
 
 
+def _utcnow_dt() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _utcnow_iso() -> str:
+    return _utcnow_dt().isoformat()
+
+
 # ─── Enumerations ──────────────────────────────────────────────────────────
 
 class TelemetryStream(Enum):
@@ -112,8 +120,8 @@ class NetworkFlowFingerprint:
     tls_version: str = ""
     server_name: str = ""
     certificate_chain_hash: str = ""
-    first_seen: datetime = field(default_factory=datetime.utcnow)
-    last_seen: datetime = field(default_factory=datetime.utcnow)
+    first_seen: datetime = field(default_factory=_utcnow_dt)
+    last_seen: datetime = field(default_factory=_utcnow_dt)
     connection_count: int = 1
     known_malicious: bool = False
     reputation_score: float = 0.5  # 0.0 = known bad, 1.0 = known good
@@ -130,7 +138,7 @@ class BeaconProfile:
     classification: BeaconClassification = BeaconClassification.NONE
     confidence: float = 0.0
     data_volume_per_beacon: List[int] = field(default_factory=list)
-    first_detected: datetime = field(default_factory=datetime.utcnow)
+    first_detected: datetime = field(default_factory=_utcnow_dt)
     sample_count: int = 0
 
 
@@ -143,8 +151,8 @@ class AssetRelationship:
     ports: Set[int] = field(default_factory=set)
     total_bytes: int = 0
     connection_count: int = 0
-    first_seen: datetime = field(default_factory=datetime.utcnow)
-    last_seen: datetime = field(default_factory=datetime.utcnow)
+    first_seen: datetime = field(default_factory=_utcnow_dt)
+    last_seen: datetime = field(default_factory=_utcnow_dt)
     baseline_bytes_per_hour: float = 0.0
     baseline_connections_per_hour: float = 0.0
     is_new: bool = True  # True until baseline established
@@ -155,7 +163,7 @@ class SensorStatus:
     """Health status for a telemetry sensor/source."""
     sensor_id: str = ""
     sensor_type: str = ""
-    last_event_at: datetime = field(default_factory=datetime.utcnow)
+    last_event_at: datetime = field(default_factory=_utcnow_dt)
     events_per_minute: float = 0.0
     drop_rate: float = 0.0
     latency_ms: float = 0.0
@@ -175,7 +183,7 @@ class TelemetrySignal:
     confidence: float = 0.0
     severity: str = "medium"
     details: Dict[str, Any] = field(default_factory=dict)
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=_utcnow_dt)
     description: str = ""
     recommended_enrichment: List[str] = field(default_factory=list)
 
@@ -482,7 +490,7 @@ class AdvancedTelemetry:
                 ))
             else:
                 fp = self.flow_fingerprints[fp_key]
-                fp.last_seen = datetime.utcnow()
+                fp.last_seen = _utcnow_dt()
                 fp.connection_count += 1
 
             # ── Known-bad fingerprint match ──
@@ -573,7 +581,7 @@ class AdvancedTelemetry:
                 "query": query_name,
                 "type": query_type,
                 "response_size": response_size,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": _utcnow_iso(),
             })
 
         # ── DGA Detection (Domain Generation Algorithm) ──
@@ -656,7 +664,7 @@ class AdvancedTelemetry:
             recent = [
                 d for d in self.dns_profiles[source]
                 if datetime.fromisoformat(d["timestamp"])
-                > datetime.utcnow() - timedelta(minutes=1)
+                > _utcnow_dt() - timedelta(minutes=1)
             ]
             if len(recent) > int(self.config.get("dns_qps_threshold", 50)):
                 signals.append(TelemetrySignal(
@@ -870,7 +878,7 @@ class AdvancedTelemetry:
         signals: List[TelemetrySignal] = []
         source = event.get("source_ip", "unknown")
         dest = event.get("dest_ip", event.get("server_name", "unknown"))
-        now = datetime.utcnow()
+        now = _utcnow_dt()
 
         # Record event timestamp for this communication pair
         pair_key = f"{source}->{dest}"
@@ -1027,7 +1035,7 @@ class AdvancedTelemetry:
         if bytes_out < 1000:
             return None
 
-        now = datetime.utcnow()
+        now = _utcnow_dt()
 
         with self._lock:
             bursts = self.burst_windows[pair_key]
@@ -1287,13 +1295,13 @@ class AdvancedTelemetry:
                 "operation": operation,
                 "file_path": file_path,
                 "process": process,
-                "timestamp": datetime.utcnow().timestamp(),
+                "timestamp": _utcnow_dt().timestamp(),
             })
 
             # ── Ransomware pattern: rapid read → write → rename/delete ──
             recent = [
                 e for e in io_history
-                if e["timestamp"] > datetime.utcnow().timestamp() - 30
+                if e["timestamp"] > _utcnow_dt().timestamp() - 30
             ]
 
         if len(recent) > 20:
@@ -1494,7 +1502,7 @@ class AdvancedTelemetry:
             "user_to": user_to,
             "method": method,
             "process": process,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": _utcnow_iso(),
         }
 
         with self._lock:
@@ -1505,7 +1513,7 @@ class AdvancedTelemetry:
                 t for t in self.privilege_transitions
                 if t["asset"] == asset
                 and datetime.fromisoformat(t["timestamp"])
-                > datetime.utcnow() - timedelta(minutes=30)
+                > _utcnow_dt() - timedelta(minutes=30)
             ]
 
         # Multiple escalations on same asset in short window
@@ -1606,7 +1614,7 @@ class AdvancedTelemetry:
                 rel.ports.add(dest_port)
             rel.total_bytes += bytes_transferred
             rel.connection_count += 1
-            rel.last_seen = datetime.utcnow()
+            rel.last_seen = _utcnow_dt()
 
         # ── New lateral communication detection ──
         if is_new_pair:
@@ -1747,7 +1755,7 @@ class AdvancedTelemetry:
                 "outcome": outcome,
                 "layers": contributing_layers,
                 "signal_types": signal_types,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": _utcnow_iso(),
             })
 
             for layer in contributing_layers:
@@ -1809,16 +1817,16 @@ class AdvancedTelemetry:
                     if f["outcome"] == "false_positive"
                     and set(f["signal_types"]) & set(signal_types)
                     and datetime.fromisoformat(f["timestamp"])
-                    > datetime.utcnow() - timedelta(hours=24)
+                    > _utcnow_dt() - timedelta(hours=24)
                 ]
                 if len(recent_fps) >= 3:
                     rule = {
                         "signal_types": signal_types,
                         "suppression_factor": 0.5,
                         "reason": f"Auto-suppressed: {len(recent_fps)} FPs in 24h",
-                        "created_at": datetime.utcnow().isoformat(),
+                        "created_at": _utcnow_iso(),
                         "expires_at": (
-                            datetime.utcnow() + timedelta(hours=72)
+                            _utcnow_dt() + timedelta(hours=72)
                         ).isoformat(),
                     }
                     self.suppression_rules.append(rule)
@@ -1844,7 +1852,7 @@ class AdvancedTelemetry:
         for rule in self.suppression_rules:
             if signal_type in rule.get("signal_types", []):
                 expires = datetime.fromisoformat(rule["expires_at"])
-                if datetime.utcnow() < expires:
+                if _utcnow_dt() < expires:
                     weight *= rule["suppression_factor"]
 
         return weight
@@ -1872,7 +1880,7 @@ class AdvancedTelemetry:
         if not sensor_id:
             return
 
-        now = datetime.utcnow()
+        now = _utcnow_dt()
 
         with self._lock:
             if sensor_id not in self.sensors:
@@ -1917,7 +1925,7 @@ class AdvancedTelemetry:
 
         Returns health status, coverage gaps, and blind spot alerts.
         """
-        now = datetime.utcnow()
+        now = _utcnow_dt()
         health_report: Dict[str, Any] = {
             "timestamp": now.isoformat(),
             "sensors": {},
@@ -2098,10 +2106,10 @@ class AdvancedTelemetry:
                 },
                 "signal_bus_depth": len(self.telemetry_signals),
                 "uptime_hours": round(
-                    (datetime.utcnow() - self.stats["start_time"]).total_seconds()
+                    (_utcnow_dt() - self.stats["start_time"]).total_seconds()
                     / 3600, 2
                 ),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": _utcnow_iso(),
             }
 
     def get_beacon_report(self) -> List[Dict[str, Any]]:
@@ -2139,7 +2147,7 @@ class AdvancedTelemetry:
                     if r > 0.5
                 ],
                 "total_tracked": len(self.asset_risk_scores),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": _utcnow_iso(),
             }
 
     def get_lateral_movement_graph(self) -> Dict[str, Any]:
@@ -2175,7 +2183,7 @@ class AdvancedTelemetry:
             "edges": edges,
             "total_nodes": len(nodes),
             "total_edges": len(edges),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": _utcnow_iso(),
         }
 
     def get_feedback_summary(self) -> Dict[str, Any]:
@@ -2211,8 +2219,8 @@ class AdvancedTelemetry:
                     }
                     for r in self.suppression_rules
                     if datetime.fromisoformat(r["expires_at"])
-                    > datetime.utcnow()
+                    > _utcnow_dt()
                 ],
                 "total_feedback_entries": len(self.feedback_history),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": _utcnow_iso(),
             }

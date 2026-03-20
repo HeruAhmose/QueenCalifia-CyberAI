@@ -1,16 +1,15 @@
 services:
   - type: web
     name: queen-califia-cyberai
-    env: python
-    rootDir: backend
+    runtime: docker
+    dockerfilePath: backend/Dockerfile
+    dockerCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
     disk:
       name: qc-data
       mountPath: /var/data
       sizeGB: 10
-    buildCommand: pip install -r requirements.txt
     # Async scan state is externalized to Redis/Celery, so the web tier can
     # safely run multiple workers without cross-process scan polling drift.
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
     healthCheckPath: /healthz
     envVars:
       - key: PYTHON_VERSION
@@ -41,6 +40,8 @@ services:
         value: /var/data/keys.json
       - key: QC_AUDIT_LOG_FILE
         value: /var/data/audit.log.jsonl
+      - key: QC_AUDIT_CHAIN_DB
+        value: /var/data/queen.db
       - key: QC_CORS_ORIGINS
         value: https://queencalifia-cyberai.web.app,https://queencalifia-cyberai.firebaseapp.com
       - key: QC_REDIS_URL
@@ -52,16 +53,24 @@ services:
         value: "1"
       - key: QC_REQUIRE_REDIS
         value: "1"
+      - key: QC_PQ_BACKEND
+        sync: false
+      - key: QC_ALLOW_SIMULATED_PQ
+        value: "0"
+      - key: OQS_INSTALL_DIR
+        value: /opt/render/project/.render/liboqs
+      - key: LD_LIBRARY_PATH
+        value: /opt/render/project/.render/liboqs/lib:/usr/local/lib
       - key: QC_API_KEY
         sync: false
       - key: QC_API_KEY_PEPPER
         sync: false
       - key: QC_AUDIT_HMAC_KEY
         sync: false
-      # Convenience for the dashboard: allow scan/remediation without requiring
-      # a manually provided X-QC-API-Key in the UI.
+      # Production auth must be explicit. Leave QC_NO_AUTH unset unless you are
+      # intentionally running a development-only deployment.
       - key: QC_NO_AUTH
-        value: "1"
+        sync: false
       - key: QC_ADMIN_KEY
         sync: false
       - key: QC_MEMORY_EXPORT_TOKEN
@@ -76,10 +85,9 @@ services:
       # enforce them with --require-fred / --require-nasdaq.
   - type: worker
     name: queen-califia-cyberai-worker
-    env: python
-    rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: celery -A celery_app.celery_app worker -l INFO --concurrency 4 -Q scans
+    runtime: docker
+    dockerfilePath: backend/Dockerfile
+    dockerCommand: celery -A celery_app.celery_app worker -l INFO --concurrency 4 -Q scans
     envVars:
       - key: PYTHON_VERSION
         value: "3.12"
@@ -100,6 +108,16 @@ services:
         sync: false
       - key: QC_AUDIT_HMAC_KEY
         sync: false
+      - key: QC_AUDIT_CHAIN_DB
+        value: /var/data/queen.db
+      - key: QC_PQ_BACKEND
+        sync: false
+      - key: QC_ALLOW_SIMULATED_PQ
+        value: "0"
+      - key: OQS_INSTALL_DIR
+        value: /opt/render/project/.render/liboqs
+      - key: LD_LIBRARY_PATH
+        value: /opt/render/project/.render/liboqs/lib:/usr/local/lib
   - type: keyvalue
     name: queen-califia-cyberai-redis
     ipAllowList: []

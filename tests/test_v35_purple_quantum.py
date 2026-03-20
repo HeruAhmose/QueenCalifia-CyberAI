@@ -9,6 +9,7 @@ Tests for:
   - Threat intel: feeds, indicators, CVEs, attribution, auto-decay
   - Policy: new action categories, engagement requirements
 """
+import os
 import time
 import pytest
 
@@ -19,6 +20,16 @@ from sovereignty.schemas import (
 )
 from sovereignty.action_policy import ActionPolicy
 from sovereignty.executor import SovereigntyExecutor, SovereigntyError
+
+
+def _pq_runtime_available():
+    from engines.quantum_engine import HAS_OQS
+    return HAS_OQS or os.environ.get("QC_ALLOW_SIMULATED_PQ", "0") == "1"
+
+
+def _require_pq_runtime():
+    if not _pq_runtime_available():
+        pytest.skip("Real PQ backend unavailable and simulated PQ not explicitly enabled")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -60,6 +71,7 @@ class TestQuantumEntropy:
 class TestQuantumLatticeKeys:
 
     def test_generate_dilithium3(self):
+        _require_pq_runtime()
         from engines.quantum_engine import LatticeKeyGenerator, LatticeAlgorithm
         gen = LatticeKeyGenerator()
         kp = gen.generate_keypair(LatticeAlgorithm.DILITHIUM_3)
@@ -68,6 +80,7 @@ class TestQuantumLatticeKeys:
         assert kp.key_id
 
     def test_generate_kyber768(self):
+        _require_pq_runtime()
         from engines.quantum_engine import LatticeKeyGenerator, LatticeAlgorithm
         gen = LatticeKeyGenerator()
         kp = gen.generate_keypair(LatticeAlgorithm.KYBER_768, purpose="kem")
@@ -75,11 +88,13 @@ class TestQuantumLatticeKeys:
         assert kp.purpose == "kem"
 
     def test_generate_falcon512(self):
+        _require_pq_runtime()
         from engines.quantum_engine import LatticeKeyGenerator, LatticeAlgorithm
         kp = LatticeKeyGenerator().generate_keypair(LatticeAlgorithm.FALCON_512)
         assert len(kp.public_key) == 897
 
     def test_kem_encapsulation(self):
+        _require_pq_runtime()
         from engines.quantum_engine import LatticeKeyGenerator, LatticeAlgorithm
         gen = LatticeKeyGenerator()
         kp = gen.generate_keypair(LatticeAlgorithm.KYBER_768)
@@ -88,6 +103,7 @@ class TestQuantumLatticeKeys:
         assert len(result.ciphertext) == 1088
 
     def test_key_ttl(self):
+        _require_pq_runtime()
         from engines.quantum_engine import LatticeKeyGenerator, LatticeAlgorithm
         kp = LatticeKeyGenerator().generate_keypair(LatticeAlgorithm.DILITHIUM_3, ttl_hours=1)
         assert kp.expires_at > kp.created_at
@@ -97,6 +113,7 @@ class TestQuantumLatticeKeys:
 class TestQuantumKeyVault:
 
     def test_generate_and_store(self):
+        _require_pq_runtime()
         from engines.quantum_engine import QuantumKeyVault, LatticeAlgorithm
         vault = QuantumKeyVault()
         kid = vault.generate_and_store(LatticeAlgorithm.DILITHIUM_5)
@@ -104,6 +121,7 @@ class TestQuantumKeyVault:
         assert vault.get_public_key(kid) is not None
 
     def test_rotate_key(self):
+        _require_pq_runtime()
         from engines.quantum_engine import QuantumKeyVault, LatticeAlgorithm
         vault = QuantumKeyVault()
         old = vault.generate_and_store(LatticeAlgorithm.DILITHIUM_3)
@@ -113,6 +131,7 @@ class TestQuantumKeyVault:
         assert len(vault.rotation_history) == 1
 
     def test_revoke(self):
+        _require_pq_runtime()
         from engines.quantum_engine import QuantumKeyVault, LatticeAlgorithm
         vault = QuantumKeyVault()
         kid = vault.generate_and_store(LatticeAlgorithm.KYBER_768)
@@ -127,13 +146,17 @@ class TestQuantumKeyVault:
 class TestQuantumReadiness:
 
     def test_basic_assessment(self):
-        from engines.quantum_engine import assess_quantum_readiness
+        from engines.quantum_engine import HAS_OQS, assess_quantum_readiness
         report = assess_quantum_readiness()
         assert 0.0 <= report.score <= 1.0
         assert report.entropy_health
-        assert len(report.pq_algorithms_available) >= 4
+        if HAS_OQS or os.environ.get("QC_ALLOW_SIMULATED_PQ", "0") == "1":
+            assert len(report.pq_algorithms_available) >= 1
+        else:
+            assert report.pq_algorithms_available == []
 
     def test_assessment_with_vault(self):
+        _require_pq_runtime()
         from engines.quantum_engine import assess_quantum_readiness, QuantumKeyVault, LatticeAlgorithm
         vault = QuantumKeyVault()
         vault.generate_and_store(LatticeAlgorithm.DILITHIUM_3)

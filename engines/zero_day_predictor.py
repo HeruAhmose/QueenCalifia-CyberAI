@@ -66,6 +66,14 @@ except Exception:  # pragma: no cover
 logger = logging.getLogger("queencalifia.zeroday")
 
 
+def _utcnow_dt() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _utcnow_iso() -> str:
+    return _utcnow_dt().isoformat()
+
+
 # ─── Enumerations ──────────────────────────────────────────────────────────
 
 class PredictionConfidence(Enum):
@@ -129,8 +137,8 @@ class ThreatPrediction:
     auto_hardening_applied: List[str] = field(default_factory=list)
 
     # Metadata
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=_utcnow_dt)
+    updated_at: datetime = field(default_factory=_utcnow_dt)
     validated: bool = False
     outcome: Optional[str] = None  # confirmed, false_positive, inconclusive
 
@@ -161,7 +169,7 @@ class ThreatPrediction:
 class AttackSurfaceSnapshot:
     """Point-in-time capture of the attack surface"""
     snapshot_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=_utcnow_dt)
     open_ports: Dict[str, List[int]] = field(default_factory=dict)
     exposed_services: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     configuration_hashes: Dict[str, str] = field(default_factory=dict)
@@ -183,7 +191,7 @@ class BehavioralGenome:
     auth_patterns: Dict[str, int] = field(default_factory=dict)
     timing_baselines: Dict[str, List[float]] = field(default_factory=dict)
     entropy_baselines: Dict[str, List[float]] = field(default_factory=dict)
-    last_updated: datetime = field(default_factory=datetime.utcnow)
+    last_updated: datetime = field(default_factory=_utcnow_dt)
     sample_count: int = 0
 
 
@@ -570,7 +578,7 @@ class ZeroDayPredictor:
                 "service": service,
                 "confidence": 0.6,
                 "severity": "medium",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": _utcnow_iso(),
                 "description": (
                     f"New service {service}:{port} detected on {asset} — "
                     f"attack surface expanded"
@@ -602,7 +610,7 @@ class ZeroDayPredictor:
                     "change_type": change_type,
                     "confidence": 0.65,
                     "severity": "high",
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": _utcnow_iso(),
                     "description": (
                         f"High-risk configuration change: {change_type} "
                         f"on {asset}/{component}"
@@ -622,7 +630,7 @@ class ZeroDayPredictor:
                     "days_remaining": days_remaining,
                     "confidence": 0.8,
                     "severity": "critical" if days_remaining < 3 else "high",
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": _utcnow_iso(),
                     "description": (
                         f"Certificate for {domain} expires in "
                         f"{days_remaining} days — MitM risk window"
@@ -692,7 +700,7 @@ class ZeroDayPredictor:
                             "critical" if anomaly_type == "encryption_onset"
                             else "high"
                         ),
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": _utcnow_iso(),
                         "description": (
                             f"Entropy anomaly ({anomaly_type}) on stream "
                             f"{stream_id}: {entropy:.2f} vs baseline "
@@ -717,7 +725,7 @@ class ZeroDayPredictor:
                             ),
                             "confidence": 0.75,
                             "severity": "high",
-                            "timestamp": datetime.utcnow().isoformat(),
+                            "timestamp": _utcnow_iso(),
                             "description": (
                                 f"Sustained high entropy on {stream_id} "
                                 f"({high_entropy_ratio:.0%} of samples) — "
@@ -782,7 +790,7 @@ class ZeroDayPredictor:
                 genome.process_chains.get(chain, 0) + 1
             )
             genome.sample_count += 1
-            genome.last_updated = datetime.utcnow()
+            genome.last_updated = _utcnow_dt()
 
             # After sufficient learning, detect deviations
             if genome.sample_count < 100:
@@ -833,7 +841,7 @@ class ZeroDayPredictor:
                             else "high" if suspicion_count >= 1
                             else "medium"
                         ),
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": _utcnow_iso(),
                         "description": (
                             f"Novel execution chain on {asset}: {chain} "
                             f"({suspicion_count} suspicious indicators)"
@@ -844,7 +852,7 @@ class ZeroDayPredictor:
                     self.genome_deviations.append({
                         "asset": asset,
                         "chain": chain,
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": _utcnow_iso(),
                     })
 
         return signals
@@ -898,7 +906,7 @@ class ZeroDayPredictor:
                 with self._lock:
                     self.campaign_indicators[vector_name].append({
                         "indicators": list(matched),
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": _utcnow_iso(),
                         "event_type": event.get("event_type"),
                     })
 
@@ -906,7 +914,7 @@ class ZeroDayPredictor:
                     recent = [
                         i for i in self.campaign_indicators[vector_name]
                         if datetime.fromisoformat(i["timestamp"])
-                        > datetime.utcnow() - timedelta(hours=24)
+                        > _utcnow_dt() - timedelta(hours=24)
                     ]
 
                 if len(recent) >= 3:
@@ -929,7 +937,7 @@ class ZeroDayPredictor:
                             if vector["risk_multiplier"] >= 1.5
                             else "high"
                         ),
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": _utcnow_iso(),
                         "description": (
                             f"Strategic threat correlation: {vector_name} "
                             f"campaign indicators detected "
@@ -1281,7 +1289,7 @@ class ZeroDayPredictor:
 
             pred.validated = True
             pred.outcome = outcome
-            pred.updated_at = datetime.utcnow()
+            pred.updated_at = _utcnow_dt()
 
             # Update accuracy stats
             if outcome in self.prediction_accuracy:
@@ -1338,12 +1346,12 @@ class ZeroDayPredictor:
                 "signal_bus_depth": len(self.signal_bus),
                 "uptime_hours": round(
                     (
-                        datetime.utcnow() - self.stats["start_time"]
+                        _utcnow_dt() - self.stats["start_time"]
                     ).total_seconds()
                     / 3600,
                     2,
                 ),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": _utcnow_iso(),
             }
 
     def get_active_predictions(
@@ -1368,5 +1376,5 @@ class ZeroDayPredictor:
                 for k, v in self.campaign_indicators.items()
                 if v
             },
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": _utcnow_iso(),
         }

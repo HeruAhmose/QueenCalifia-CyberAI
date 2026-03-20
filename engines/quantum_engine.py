@@ -31,8 +31,16 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 logger = logging.getLogger("engines.quantum_engine")
+
+try:
+    import oqs  # type: ignore
+    HAS_OQS = True
+except ImportError:  # pragma: no cover
+    oqs = None  # type: ignore
+    HAS_OQS = False
 
 
 # ─── Quantum-Grade Entropy ──────────────────────────────────────────────────
@@ -148,6 +156,7 @@ class LatticeKeyPair:
     expires_at: float
     purpose: str = "signing"
     generation_entropy_bits: int = 256
+    backend: str = "placeholder"
 
 
 @dataclass
@@ -180,6 +189,29 @@ class LatticeKeyGenerator:
 
     def __init__(self, entropy_pool: Optional[EntropyPool] = None):
         self._pool = entropy_pool or _ENTROPY_POOL
+        self._allow_placeholder = os.environ.get("QC_ALLOW_SIMULATED_PQ", "0") == "1"
+
+    @staticmethod
+    def _normalize_mech_name(name: str) -> str:
+        return "".join(ch for ch in name.lower() if ch.isalnum())
+
+    def _resolve_oqs_sig_mechanism(self, algorithm: LatticeAlgorithm) -> Optional[str]:
+        if not HAS_OQS or oqs is None:
+            return None
+        desired = self._normalize_mech_name(algorithm.value)
+        for mech in oqs.get_enabled_sig_mechanisms():
+            if self._normalize_mech_name(mech) == desired:
+                return mech
+        return None
+
+    def _resolve_oqs_kem_mechanism(self, algorithm: LatticeAlgorithm) -> Optional[str]:
+        if not HAS_OQS or oqs is None:
+            return None
+        desired = self._normalize_mech_name(algorithm.value)
+        for mech in oqs.get_enabled_kem_mechanisms():
+            if self._normalize_mech_name(mech) == desired:
+                return mech
+        return None
 
     def generate_keypair(
         self, algorithm: LatticeAlgorithm, purpose: str = "signing",
@@ -189,12 +221,33 @@ class LatticeKeyGenerator:
         sizes = self.KEY_SIZES[algorithm]
         key_id = secrets.token_urlsafe(16)
         now = time.time()
+        backend = "placeholder"
 
-        # Generate key material from quantum-grade entropy
-        pub_bytes = self._pool.extract(sizes["pub"])
-        priv_bytes = self._pool.extract(sizes["priv"])
+        pub_bytes: bytes
+        priv_bytes: bytes
+        sig_mech = self._resolve_oqs_sig_mechanism(algorithm)
+        kem_mech = self._resolve_oqs_kem_mechanism(algorithm)
+        if sig_mech:
+            signer = oqs.Signature(sig_mech)  # type: ignore[attr-defined]
+            pub_bytes = signer.generate_keypair()
+            priv_bytes = signer.export_secret_key()
+            backend = f"oqs:{sig_mech}"
+        elif kem_mech:
+            kem = oqs.KeyEncapsulation(kem_mech)  # type: ignore[attr-defined]
+            pub_bytes = kem.generate_keypair()
+            priv_bytes = kem.export_secret_key()
+            backend = f"oqs:{kem_mech}"
+        elif self._allow_placeholder:
+            logger.warning("quantum.keygen: using placeholder backend for %s", algorithm.value)
+            pub_bytes = self._pool.extract(sizes["pub"])
+            priv_bytes = self._pool.extract(sizes["priv"])
+        else:
+            raise RuntimeError(
+                f"No standards-backed PQ backend available for {algorithm.value}. "
+                "Install liboqs-python/oqs or set QC_ALLOW_SIMULATED_PQ=1 explicitly."
+            )
 
-        # Encrypt private key at rest using derived key
+        # Encrypt private key at rest using AES-GCM.
         wrap_key = self._pool.extract(32)
         priv_encrypted = self._encrypt_key(priv_bytes, wrap_key)
 
@@ -204,26 +257,39 @@ class LatticeKeyGenerator:
             created_at=now, expires_at=now + (ttl_hours * 3600),
             purpose=purpose,
             generation_entropy_bits=sizes["priv"] * 8,
+            backend=backend,
         )
         logger.info("quantum.keygen: id=%s alg=%s purpose=%s ttl=%dh",
                      key_id, algorithm.value, purpose, ttl_hours)
         return kp
 
     def generate_kem_encapsulation(self, algorithm: LatticeAlgorithm, public_key: bytes) -> KEMResult:
-        """Simulate KEM encapsulation (Kyber)."""
-        shared = self._pool.extract(32)
-        ct_size = {
-            LatticeAlgorithm.KYBER_768: 1088,
-            LatticeAlgorithm.KYBER_1024: 1568,
-        }.get(algorithm, 1088)
-        ciphertext = self._pool.extract(ct_size)
-        return KEMResult(shared_secret=shared, ciphertext=ciphertext, algorithm=algorithm)
+        """Perform KEM encapsulation with a real PQ backend when available."""
+        kem_mech = self._resolve_oqs_kem_mechanism(algorithm)
+        if kem_mech:
+            kem = oqs.KeyEncapsulation(kem_mech)  # type: ignore[attr-defined]
+            ciphertext, shared = kem.encap_secret(public_key)
+            return KEMResult(shared_secret=shared, ciphertext=ciphertext, algorithm=algorithm)
+        if self._allow_placeholder:
+            logger.warning("quantum.kem: using placeholder backend for %s", algorithm.value)
+            shared = self._pool.extract(32)
+            ct_size = {
+                LatticeAlgorithm.KYBER_768: 1088,
+                LatticeAlgorithm.KYBER_1024: 1568,
+            }.get(algorithm, 1088)
+            ciphertext = self._pool.extract(ct_size)
+            return KEMResult(shared_secret=shared, ciphertext=ciphertext, algorithm=algorithm)
+        raise RuntimeError(
+            f"No standards-backed KEM backend available for {algorithm.value}. "
+            "Install liboqs-python/oqs or set QC_ALLOW_SIMULATED_PQ=1 explicitly."
+        )
 
     @staticmethod
     def _encrypt_key(plaintext: bytes, key: bytes) -> bytes:
-        """XOR-based key wrapping (placeholder — use AES-KW in production)."""
-        extended = (key * (len(plaintext) // len(key) + 1))[:len(plaintext)]
-        return bytes(a ^ b for a, b in zip(plaintext, extended))
+        """Encrypt private key material at rest using AES-GCM."""
+        nonce = os.urandom(12)
+        ciphertext = AESGCM(key).encrypt(nonce, plaintext, None)
+        return nonce + ciphertext
 
 
 # ─── Quantum Key Vault ──────────────────────────────────────────────────────
@@ -340,8 +406,16 @@ def assess_quantum_readiness(
     else:
         recs.append("CRITICAL: Entropy pool health degraded — check hardware RNG")
 
-    pq_algs = [a.value for a in LatticeAlgorithm]
-    score += 0.20  # PQ algorithm support
+    pq_algs: List[str] = []
+    if HAS_OQS and oqs is not None:
+        pq_algs = list(oqs.get_enabled_kem_mechanisms()) + list(oqs.get_enabled_sig_mechanisms())
+    elif os.environ.get("QC_ALLOW_SIMULATED_PQ", "0") == "1":
+        pq_algs = [f"{a.value}:placeholder" for a in LatticeAlgorithm]
+
+    if pq_algs:
+        score += 0.20
+    else:
+        recs.append("Install liboqs-python/oqs or explicitly enable QC_ALLOW_SIMULATED_PQ=1 for non-production testing")
 
     if hybrid_enabled:
         score += 0.20
@@ -362,10 +436,10 @@ def assess_quantum_readiness(
     score += 0.10  # Crypto-agility architecture exists
 
     pq_hook = os.environ.get("QC_PQ_VERIFY_HOOK", "").strip()
-    if pq_hook:
+    if pq_hook or HAS_OQS:
         score += 0.15
     else:
-        recs.append("Configure QC_PQ_VERIFY_HOOK for production PQ verification")
+        recs.append("Configure QC_PQ_VERIFY_HOOK or install oqs for production PQ verification")
 
     return QuantumReadinessReport(
         score=min(score, 1.0), entropy_health=entropy_ok,

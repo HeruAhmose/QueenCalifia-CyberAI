@@ -32,12 +32,12 @@ from typing import Any, Callable, Dict, Optional, Set
 from sovereignty.action_policy import ActionPolicy, PolicyDecision
 from sovereignty.approvals import (
     ApprovalStore,
-    InMemoryApprovalStore,
+    build_default_approval_store,
     KeyRegistry,
     check_hybrid_requirement,
     verify_signature,
 )
-from sovereignty.audit_chain import AuditChain
+from sovereignty.audit_chain import AuditChain, build_default_audit_chain
 from sovereignty.schemas import ActionRequest, HybridSignaturePolicy, ProposedAction
 
 logger = logging.getLogger("sovereignty.executor")
@@ -83,9 +83,9 @@ class SovereigntyExecutor:
         self.audit_write_fn = audit_write_fn or self._default_audit
         self.idempotency_check_fn = idempotency_check_fn
         self.action_dispatch_fn = action_dispatch_fn or self._default_dispatch
-        self.approval_store = approval_store or InMemoryApprovalStore()
+        self.approval_store = approval_store or build_default_approval_store()
         self.key_registry = key_registry or KeyRegistry()
-        self.audit_chain = audit_chain or AuditChain()
+        self.audit_chain = audit_chain or build_default_audit_chain()
         self.hybrid_policy = hybrid_policy or HybridSignaturePolicy()
 
     # ── Main Execution Path ──────────────────────────────────────────────────

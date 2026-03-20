@@ -36,7 +36,7 @@ import logging
 import secrets
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Callable
 from collections import defaultdict, deque
 import ipaddress
@@ -56,6 +56,7 @@ except Exception:  # pragma: no cover
 
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
+from core.auth import require_admin
 from core.log_context import set_request_id, set_principal, clear_request_id, clear_principal
 from core.redis_client import key_prefix
 from core.otel import instrument_flask, inject, current_trace_ids
@@ -105,7 +106,7 @@ class SecurityConfig:
 # ─── Utilities ──────────────────────────────────────────────────────────────
 
 def _utcnow() -> str:
-    return datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _constant_time_eq(a: str, b: str) -> bool:
@@ -887,7 +888,17 @@ def require_permission(permission: str) -> Callable:
 
 # ─── API Factory ─────────────────────────────────────────────────────────────
 
-def create_security_api(security_mesh, vuln_engine, incident_orchestrator, config: Optional[SecurityConfig] = None, zero_day_predictor=None, advanced_telemetry=None) -> Flask:
+def create_security_api(
+    security_mesh,
+    vuln_engine,
+    incident_orchestrator,
+    config: Optional[SecurityConfig] = None,
+    zero_day_predictor=None,
+    advanced_telemetry=None,
+    remediator=None,
+    evolution_engine=None,
+    threat_intel=None,
+) -> Flask:
     config = config or SecurityConfig()
 
     # Secrets
@@ -984,7 +995,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
             principal = api_keys.validate(presented) if api_keys else None
             if not principal:
                 # Allow unauthenticated health/readiness probes
-                if request.path in ("/api/health", "/api/ready", "/healthz", "/readyz", "/metrics"):
+                if request.path in ("/api/health", "/api/ready", "/healthz", "/readyz", "/metrics", "/api/config"):
                     g.principal = None
                     g.user_role = "public"
                     return None
@@ -1248,6 +1259,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
 
     # --- Telemetry endpoints (optional) ---
     @app.route('/api/v1/telemetry/ingest', methods=['POST'])
+    @require_permission("write")
     def telemetry_ingest():
         """Ingest one telemetry event and return current derived signals."""
         try:
@@ -1260,6 +1272,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify(process_event(payload))
 
     @app.route('/api/v1/telemetry/summary')
+    @require_permission("read")
     def telemetry_summary():
         """Return a safe summary snapshot for dashboards."""
         try:
@@ -1272,6 +1285,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
 
     # --- Zero-Day Predictor API ---
     @app.route('/api/v1/predictor/analyze', methods=['POST'])
+    @require_permission("write")
     def predictor_analyze():
         """Analyze an event through the 5-layer prediction engine."""
         if zero_day_predictor is None:
@@ -1282,6 +1296,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify(zero_day_predictor.analyze_event(payload))
 
     @app.route('/api/v1/predictor/predictions')
+    @require_permission("read")
     def predictor_predictions():
         """Get active predictions above optional confidence threshold."""
         if zero_day_predictor is None:
@@ -1290,6 +1305,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify({'predictions': zero_day_predictor.get_active_predictions(min_conf)})
 
     @app.route('/api/v1/predictor/status')
+    @require_permission("read")
     def predictor_status():
         """Get predictor engine status."""
         if zero_day_predictor is None:
@@ -1297,6 +1313,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify(zero_day_predictor.get_status())
 
     @app.route('/api/v1/predictor/landscape')
+    @require_permission("read")
     def predictor_landscape():
         """Get strategic threat landscape assessment."""
         if zero_day_predictor is None:
@@ -1304,6 +1321,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify(zero_day_predictor.get_threat_landscape())
 
     @app.route('/api/v1/predictor/validate', methods=['POST'])
+    @require_permission("write")
     def predictor_validate():
         """Validate a prediction outcome."""
         if zero_day_predictor is None:
@@ -1320,6 +1338,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
 
     # --- Advanced Telemetry API ---
     @app.route('/api/v1/telemetry/advanced/process', methods=['POST'])
+    @require_permission("write")
     def telemetry_advanced_process():
         """Process event through 6-stream telemetry matrix."""
         if advanced_telemetry is None:
@@ -1336,6 +1355,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify(tel_result)
 
     @app.route('/api/v1/telemetry/advanced/status')
+    @require_permission("read")
     def telemetry_advanced_status():
         """Get advanced telemetry status."""
         if advanced_telemetry is None:
@@ -1343,6 +1363,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify(advanced_telemetry.get_status())
 
     @app.route('/api/v1/telemetry/advanced/beacons')
+    @require_permission("read")
     def telemetry_beacons():
         """Get detected beacon profiles."""
         if advanced_telemetry is None:
@@ -1350,6 +1371,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify({'beacons': advanced_telemetry.get_beacon_report()})
 
     @app.route('/api/v1/telemetry/advanced/risk-map')
+    @require_permission("read")
     def telemetry_risk_map():
         """Get asset risk scoring map."""
         if advanced_telemetry is None:
@@ -1357,6 +1379,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify(advanced_telemetry.get_asset_risk_map())
 
     @app.route('/api/v1/telemetry/advanced/graph')
+    @require_permission("read")
     def telemetry_lateral_graph():
         """Get lateral movement communication graph."""
         if advanced_telemetry is None:
@@ -1364,6 +1387,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify(advanced_telemetry.get_lateral_movement_graph())
 
     @app.route('/api/v1/telemetry/advanced/health')
+    @require_permission("read")
     def telemetry_health():
         """Get collection health report."""
         if advanced_telemetry is None:
@@ -1371,6 +1395,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify(advanced_telemetry.check_collection_health())
 
     @app.route('/api/v1/telemetry/advanced/feedback')
+    @require_permission("read")
     def telemetry_feedback():
         """Get adaptive feedback loop summary."""
         if advanced_telemetry is None:
@@ -1378,6 +1403,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify(advanced_telemetry.get_feedback_summary())
 
     @app.route('/api/v1/telemetry/advanced/feedback', methods=['POST'])
+    @require_permission("write")
     def telemetry_record_feedback():
         """Record a prediction outcome for adaptive calibration."""
         if advanced_telemetry is None:
@@ -1538,6 +1564,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         # Distributed queue (Celery+Redis) for horizontal scale
         redis_url = os.environ.get("QC_REDIS_URL", "").strip()
         use_celery = os.environ.get("QC_USE_CELERY", "1" if redis_url else "0") == "1"
+        allow_local_fallback = os.environ.get("QC_ALLOW_LOCAL_SCAN_FALLBACK", "0") == "1"
         if use_celery:
             try:
                 from celery_app import celery_app
@@ -1558,11 +1585,13 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
                 audit.log("vuln_scan_queued", _safe_remote_addr(), g.user_role, 202, details={"target": target, "scan_id": async_result.id})
                 return jsonify({"success": True, "data": payload}), 202
             except Exception as exc:
-                # Fall back to in-process queue if Celery misconfigured
-                logger.exception("Celery enqueue failed; falling back to local queue")
+                logger.exception("Celery enqueue failed")
+                if not allow_local_fallback:
+                    audit.log("vuln_scan_enqueue_failed", _safe_remote_addr(), g.user_role, 503, details={"target": target, "error": str(exc)})
+                    return jsonify({"error": "celery_unavailable", "message": "Async scan queue unavailable; local fallback is disabled in production."}), 503
                 payload = vuln_engine.submit_scan(target=target, scan_type=scan_type)
                 audit.log("vuln_scan_queued_local", _safe_remote_addr(), g.user_role, 202, details={"target": target, "scan_id": payload.get("scan_id"), "error": str(exc)})
-                return jsonify({"success": True, "data": payload}), 202
+                return jsonify({"success": True, "data": payload, "degraded_mode": "local_queue_fallback"}), 202
 
         # Legacy fallback (single-process only)
         job = vuln_engine.submit_scan(target=target, scan_type=scan_type)
@@ -1576,6 +1605,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
 
         redis_url = os.environ.get("QC_REDIS_URL", "").strip()
         use_celery = os.environ.get("QC_USE_CELERY", "1" if redis_url else "0") == "1"
+        allow_local_fallback = os.environ.get("QC_ALLOW_LOCAL_SCAN_FALLBACK", "0") == "1"
         if use_celery:
             try:
                 from celery_app import celery_app
@@ -1598,8 +1628,10 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
                 elif res.state in ("STARTED", "RUNNING", "WAITING"):
                     payload["meta"] = getattr(res, "info", None)
                 return jsonify({"success": True, "data": payload})
-            except Exception:
-                logger.exception("Celery status lookup failed; falling back to local job store")
+            except Exception as exc:
+                logger.exception("Celery status lookup failed")
+                if not allow_local_fallback:
+                    return jsonify({"error": "celery_status_unavailable", "message": "Async scan status backend unavailable; local fallback is disabled in production.", "scan_id": scan_id}), 503
 
         job = vuln_engine.get_scan_job(scan_id)
         if not job:
@@ -1963,9 +1995,10 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
     from engines.auto_remediation import AutoRemediation
 
     live_scanner = LiveScanner()
-    remediator = AutoRemediation()
+    remediator = remediator or AutoRemediation()
 
     @app.route("/api/v1/scanner/scan", methods=["POST"])
+    @require_permission("execute")
     def api_live_scan():
         """Launch a live network scan. Body: {target, scan_type?, ports?}"""
         body = request.get_json(force=True, silent=True) or {}
@@ -1989,6 +2022,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
             return jsonify({"error": str(e)}), 500
 
     @app.route("/api/v1/scanner/scan/<scan_id>", methods=["GET"])
+    @require_permission("read")
     def api_get_scan(scan_id):
         """Get scan report by ID"""
         report = live_scanner.get_scan(scan_id)
@@ -1997,6 +2031,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify({"error": "Scan not found"}), 404
 
     @app.route("/api/v1/scanner/findings", methods=["GET"])
+    @require_permission("read")
     def api_findings():
         """Get all findings, optionally filtered by severity"""
         severity = request.args.get("severity")
@@ -2005,11 +2040,13 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify({"findings": findings, "total": len(findings)})
 
     @app.route("/api/v1/scanner/baselines", methods=["GET"])
+    @require_permission("read")
     def api_baselines():
         """Get learned network baselines"""
         return jsonify({"baselines": live_scanner.get_baselines()})
 
     @app.route("/api/v1/scanner/status", methods=["GET"])
+    @require_permission("read")
     def api_scanner_status():
         """Get live scanner status"""
         return jsonify(live_scanner.get_status())
@@ -2017,6 +2054,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
     # ─── Remediation Endpoints ─────────────────────────────────────────────
 
     @app.route("/api/v1/remediate/plan", methods=["POST"])
+    @require_permission("execute")
     def api_remediation_plan():
         """Generate a remediation plan. Body: {findings?, target?, mode?}"""
         body = request.get_json(force=True, silent=True) or {}
@@ -2029,6 +2067,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify(plan.to_dict())
 
     @app.route("/api/v1/remediate/plan/<plan_id>", methods=["GET"])
+    @require_permission("read")
     def api_get_plan(plan_id):
         """Get remediation plan by ID"""
         plan = remediator.get_plan(plan_id)
@@ -2037,6 +2076,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify({"error": "Plan not found"}), 404
 
     @app.route("/api/v1/remediate/execute/<plan_id>", methods=["POST"])
+    @require_permission("execute")
     def api_execute_plan(plan_id):
         """Execute a remediation plan"""
         body = request.get_json(force=True, silent=True) or {}
@@ -2045,6 +2085,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify(result)
 
     @app.route("/api/v1/remediate/approve", methods=["POST"])
+    @require_permission("execute")
     def api_approve_action():
         """Approve a single remediation action. Body: {plan_id, action_id}"""
         body = request.get_json(force=True, silent=True) or {}
@@ -2055,16 +2096,19 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify(result)
 
     @app.route("/api/v1/remediate/status", methods=["GET"])
+    @require_permission("read")
     def api_remediation_status():
         """Get remediation engine status"""
         return jsonify(remediator.get_status())
 
     @app.route("/api/v1/remediate/log", methods=["GET"])
+    @require_permission("read")
     def api_remediation_log():
         """Get remediation action log"""
         return jsonify({"log": remediator.get_action_log()})
 
     @app.route("/api/v1/scanner/findings/<finding_id>/remediate", methods=["POST"])
+    @require_permission("execute")
     def api_remediate_finding(finding_id):
         """One-click: generate and preview remediation for a single finding"""
         findings = live_scanner.get_all_findings()
@@ -2078,11 +2122,12 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
 
     # ─── Evolution Engine (Self-Healing / Learning / Evolving) ──────────
 
-    try:
-        from engines.evolution_engine import EvolutionEngine
-        evolution_engine = EvolutionEngine()
-    except Exception:
-        evolution_engine = None
+    if evolution_engine is None:
+        try:
+            from engines.evolution_engine import EvolutionEngine
+            evolution_engine = EvolutionEngine()
+        except Exception:
+            evolution_engine = None
 
     def _memory_admin_authorized() -> bool:
         principal = getattr(g, "principal", None) or {}
@@ -2094,6 +2139,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return bool(token and provided and hmac.compare_digest(provided, token))
 
     @app.route("/api/v1/evolution/status", methods=["GET"])
+    @require_permission("read")
     def api_evolution_status():
         """Get evolution engine status — health, learning, evolution metrics"""
         if not evolution_engine:
@@ -2101,6 +2147,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify(evolution_engine.get_status())
 
     @app.route("/api/v1/evolution/health", methods=["GET"])
+    @require_permission("read")
     def api_evolution_health():
         """Run health checks on all registered components"""
         if not evolution_engine:
@@ -2111,6 +2158,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         })
 
     @app.route("/api/v1/evolution/learn", methods=["POST"])
+    @require_permission("write")
     def api_evolution_learn():
         """Feed scan/incident data to the learning system. Body: {scan_report?, incident?}"""
         if not evolution_engine:
@@ -2124,6 +2172,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify(result)
 
     @app.route("/api/v1/evolution/evolve", methods=["POST"])
+    @require_permission("execute")
     def api_evolution_evolve():
         """Trigger an evolution cycle — generates new rules, profiles, playbooks"""
         if not evolution_engine:
@@ -2131,6 +2180,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify(evolution_engine.evolve())
 
     @app.route("/api/v1/evolution/intelligence", methods=["GET"])
+    @require_permission("read")
     def api_evolution_intelligence():
         """Get comprehensive intelligence report"""
         if not evolution_engine:
@@ -2138,6 +2188,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify(evolution_engine.get_intelligence_report())
 
     @app.route("/api/v1/evolution/baselines", methods=["GET"])
+    @require_permission("read")
     def api_evolution_baselines():
         """Get learned network baselines"""
         if not evolution_engine:
@@ -2145,6 +2196,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify({"baselines": evolution_engine.get_learned_baselines()})
 
     @app.route("/api/v1/evolution/storage", methods=["GET"])
+    @require_permission("admin")
     def api_evolution_storage():
         """Get storage/backup status for persistent memory."""
         if not evolution_engine:
@@ -2154,6 +2206,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify({"success": True, "data": evolution_engine.get_storage_status()})
 
     @app.route("/api/v1/evolution/backups", methods=["GET"])
+    @require_permission("admin")
     def api_evolution_backups():
         """List available memory snapshots."""
         if not evolution_engine:
@@ -2164,6 +2217,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify({"success": True, "data": evolution_engine.list_backups(limit=limit)})
 
     @app.route("/api/v1/evolution/backup", methods=["POST"])
+    @require_permission("admin")
     def api_evolution_backup():
         """Create a point-in-time evolution memory snapshot."""
         if not evolution_engine:
@@ -2176,6 +2230,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify(result), 201
 
     @app.route("/api/v1/evolution/backups/<backup_name>", methods=["GET"])
+    @require_permission("admin")
     def api_evolution_download_backup(backup_name: str):
         """Download an existing memory snapshot."""
         if not evolution_engine:
@@ -2194,6 +2249,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return send_file(backup_path, as_attachment=True, download_name=safe_name)
 
     @app.route("/api/v1/evolution/evolutions", methods=["GET"])
+    @require_permission("read")
     def api_evolution_list():
         """Get evolution events. Query: ?type=detection_rule|scan_profile|..."""
         if not evolution_engine:
@@ -2202,6 +2258,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify({"evolutions": evolution_engine.get_evolutions(etype)})
 
     @app.route("/api/v1/evolution/false-positive", methods=["POST"])
+    @require_permission("write")
     def api_mark_fp():
         """Mark a finding as false positive. Body: {rule_id, finding_hash}"""
         if not evolution_engine:
@@ -2215,6 +2272,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
     # ─── One-Click Operations ──────────────────────────────────────────
 
     @app.route("/api/v1/one-click/scan-and-fix", methods=["POST"])
+    @require_permission("execute")
     def api_one_click():
         """
         THE ONE-CLICK OPERATION.
@@ -2259,6 +2317,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         _qe_hybrid = False
 
     @app.route("/api/v1/quantum/readiness", methods=["GET"])
+    @require_permission("read")
     def api_quantum_readiness():
         """Assess post-quantum cryptographic readiness"""
         try:
@@ -2268,6 +2327,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
             return jsonify({"error": str(e)}), 500
 
     @app.route("/api/v1/quantum/keygen", methods=["POST"])
+    @require_permission("admin")
     def api_quantum_keygen():
         """Generate a post-quantum keypair. Body: {algorithm?, purpose?}"""
         if not _qe_vault:
@@ -2281,6 +2341,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify({"key_id": key_id, "algorithm": alg.value, "purpose": purpose})
 
     @app.route("/api/v1/quantum/vault", methods=["GET"])
+    @require_permission("admin")
     def api_quantum_vault():
         """Get quantum key vault status"""
         if not _qe_vault:
@@ -2292,6 +2353,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         })
 
     @app.route("/api/v1/quantum/hash", methods=["POST"])
+    @require_permission("read")
     def api_quantum_hash():
         """Compute a quantum-safe hash. Body: {data, algorithm?}"""
         body = request.get_json(force=True, silent=True) or {}
@@ -2302,19 +2364,22 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
 
     # ─── Threat Intelligence ───────────────────────────────────────────
 
-    try:
-        from engines.threat_intel_auto import ThreatIntelEngine
-        threat_intel = ThreatIntelEngine()
-    except Exception:
-        threat_intel = None
+    if threat_intel is None:
+        try:
+            from engines.threat_intel_auto import ThreatIntelEngine
+            threat_intel = ThreatIntelEngine()
+        except Exception:
+            threat_intel = None
 
     @app.route("/api/v1/threat-intel/status", methods=["GET"])
+    @require_permission("read")
     def api_threat_intel_status():
         if not threat_intel:
             return jsonify({"error": "Threat intel engine not available"}), 503
         return jsonify(threat_intel.get_stats())
 
     @app.route("/api/v1/threat-intel/feeds", methods=["GET"])
+    @require_permission("read")
     def api_threat_intel_feeds():
         if not threat_intel:
             return jsonify({"error": "Threat intel engine not available"}), 503
@@ -2352,6 +2417,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify(result), (200 if ok else 502)
 
     @app.route("/api/v1/threat-intel/indicators", methods=["GET"])
+    @require_permission("read")
     def api_threat_intel_indicators():
         if not threat_intel:
             return jsonify({"error": "Threat intel engine not available"}), 503
@@ -2360,6 +2426,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify({"indicators": [i.__dict__ for i in indicators]})
 
     @app.route("/api/v1/threat-intel/cves/critical", methods=["GET"])
+    @require_permission("read")
     def api_threat_intel_cves():
         if not threat_intel:
             return jsonify({"error": "Threat intel engine not available"}), 503
@@ -2367,6 +2434,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify({"cves": [c.__dict__ for c in cves]})
 
     @app.route("/api/v1/threat-intel/actors", methods=["GET"])
+    @require_permission("read")
     def api_threat_intel_actors():
         if not threat_intel:
             return jsonify({"error": "Threat intel engine not available"}), 503
@@ -2390,6 +2458,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         red_team = blue_detection = blue_ioc = blue_hunt = blue_soar = purple_team = None
 
     @app.route("/api/v1/purple-team/assess", methods=["POST"])
+    @require_permission("execute")
     def api_purple_assess():
         """Run a purple team assessment. Body: {engagement_id, techniques, target?}"""
         if not purple_team:
@@ -2403,6 +2472,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify(result.__dict__ if hasattr(result, "__dict__") else result)
 
     @app.route("/api/v1/purple-team/heatmap", methods=["GET"])
+    @require_permission("read")
     def api_purple_heatmap():
         """Get MITRE ATT&CK coverage heatmap"""
         if not purple_team:
@@ -2410,6 +2480,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify(purple_team.get_mitre_heatmap())
 
     @app.route("/api/v1/blue-team/rules", methods=["GET"])
+    @require_permission("read")
     def api_blue_rules():
         """Get active detection rules"""
         if not blue_detection:
@@ -2418,6 +2489,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify({"rules": [r.__dict__ for r in rules], "total": blue_detection.rule_count()})
 
     @app.route("/api/v1/blue-team/iocs", methods=["GET"])
+    @require_permission("read")
     def api_blue_iocs():
         """Get IOC correlation engine status"""
         if not blue_ioc:
@@ -2425,6 +2497,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify({"ioc_count": blue_ioc.ioc_count(), "correlations": blue_ioc.correlation_count()})
 
     @app.route("/api/v1/blue-team/hunt", methods=["POST"])
+    @require_permission("execute")
     def api_blue_hunt():
         """Execute a threat hunt. Body: {query_id, data}"""
         if not blue_hunt:
@@ -2434,6 +2507,7 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         return jsonify(result.__dict__ if hasattr(result, "__dict__") else result)
 
     @app.route("/api/v1/blue-team/soar/playbooks", methods=["GET"])
+    @require_permission("read")
     def api_soar_playbooks():
         """Get SOAR playbook count and status"""
         if not blue_soar:

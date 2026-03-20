@@ -27,10 +27,12 @@ import base64
 import logging
 import os
 import secrets
+import sqlite3
 import threading
 import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Set
+from pathlib import Path
 
 from sovereignty.schemas import (
     ApprovalRecord,
@@ -286,6 +288,142 @@ class InMemoryApprovalStore(ApprovalStore):
         for n in expired:
             self._used_nonces.discard(n)
             del self._nonce_ts[n]
+
+
+class SQLiteApprovalStore(ApprovalStore):
+    """Durable approval store backed by SQLite."""
+
+    def __init__(self, db_path: str):
+        self._lock = threading.RLock()
+        self._db_path = Path(db_path).expanduser().resolve()
+        self._init_db()
+
+    def _connect(self) -> sqlite3.Connection:
+        self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(self._db_path))
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _init_db(self) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS qc_approval_records (
+                    approval_id TEXT PRIMARY KEY,
+                    approval_json TEXT NOT NULL,
+                    updated_at REAL NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS qc_used_nonces (
+                    nonce TEXT PRIMARY KEY,
+                    used_at REAL NOT NULL
+                )
+                """
+            )
+
+    def _write_record(self, rec: ApprovalRecord) -> ApprovalRecord:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO qc_approval_records (approval_id, approval_json, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(approval_id) DO UPDATE SET
+                    approval_json=excluded.approval_json,
+                    updated_at=excluded.updated_at
+                """,
+                (rec.approval_id, rec.model_dump_json(), time.time()),
+            )
+        return rec
+
+    def create(self, *, tenant_id: str, decision_hash: str, requested_by: str, ttl_sec: int = 900) -> ApprovalRecord:
+        with self._lock:
+            now = time.time()
+            rec = ApprovalRecord(
+                approval_id=secrets.token_urlsafe(16),
+                tenant_id=tenant_id,
+                decision_hash=decision_hash,
+                requested_by=requested_by,
+                created_at=now,
+                expires_at=now + float(ttl_sec),
+                nonce=secrets.token_urlsafe(16),
+            )
+            logger.info("approvals.created: id=%s by=%s ttl=%ds", rec.approval_id, requested_by, ttl_sec)
+            return self._write_record(rec)
+
+    def add_signature(self, approval_id: str, sig: ApprovalSignature) -> ApprovalRecord:
+        with self._lock:
+            rec = self.get(approval_id)
+            if not rec:
+                raise KeyError(f"Approval {approval_id} not found")
+            now = time.time()
+            if rec.revoked:
+                raise ValueError(f"Approval {approval_id} is revoked")
+            if rec.expires_at < now:
+                raise ValueError(f"Approval {approval_id} has expired")
+            existing = {s.approver_id for s in rec.signatures if s.alg == sig.alg}
+            if sig.approver_id in existing:
+                raise ValueError(f"Approver {sig.approver_id} already signed with {sig.alg}")
+            rec.signatures.append(sig)
+            logger.info(
+                "approvals.sig_added: id=%s by=%s alg=%s total=%d",
+                approval_id,
+                sig.approver_id,
+                sig.alg,
+                len(rec.signatures),
+            )
+            return self._write_record(rec)
+
+    def get(self, approval_id: str) -> Optional[ApprovalRecord]:
+        with self._lock:
+            with self._connect() as conn:
+                row = conn.execute(
+                    "SELECT approval_json FROM qc_approval_records WHERE approval_id = ?",
+                    (approval_id,),
+                ).fetchone()
+            if not row:
+                return None
+            return ApprovalRecord.model_validate_json(row["approval_json"])
+
+    def revoke(self, approval_id: str) -> bool:
+        with self._lock:
+            rec = self.get(approval_id)
+            if not rec:
+                return False
+            rec.revoked = True
+            rec.revoked_at = time.time()
+            self._write_record(rec)
+            return True
+
+    def mark_nonce_used(self, nonce: str) -> bool:
+        with self._lock:
+            now = time.time()
+            cutoff = now - 7200
+            with self._connect() as conn:
+                conn.execute("DELETE FROM qc_used_nonces WHERE used_at < ?", (cutoff,))
+                exists = conn.execute(
+                    "SELECT 1 FROM qc_used_nonces WHERE nonce = ?",
+                    (nonce,),
+                ).fetchone()
+                if exists:
+                    return False
+                conn.execute(
+                    "INSERT INTO qc_used_nonces (nonce, used_at) VALUES (?, ?)",
+                    (nonce, now),
+                )
+            return True
+
+
+def build_default_approval_store() -> ApprovalStore:
+    db_path = os.environ.get("QC_APPROVALS_DB") or os.environ.get("QC_DB_PATH")
+    if db_path:
+        try:
+            return SQLiteApprovalStore(db_path)
+        except Exception as exc:
+            logger.error("approvals.store: failed to initialize sqlite store: %s", exc)
+    return InMemoryApprovalStore()
 
 
 # ─── Convenience ─────────────────────────────────────────────────────────────
