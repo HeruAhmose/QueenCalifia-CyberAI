@@ -3392,10 +3392,12 @@ function GuidedWizard({ onExit, onAvatarStateChange }) {
   const [target, setTarget] = useState("192.168.1.0/24");
   const [scanType, setScanType] = useState("full");
   const [apiKey, setApiKey] = useState("");
+  const [scriptFmt, setScriptFmt] = useState("bash");
   const [ack, setAck] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState(null);
+  const [remediationPlan, setRemediationPlan] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -3423,6 +3425,7 @@ function GuidedWizard({ onExit, onAvatarStateChange }) {
   const runScan = async () => {
     if (!ack) { setError("You must confirm you are authorized to scan this target."); return; }
     setScanning(true); setError(""); setStep(2); setProgress(0);
+    setRemediationPlan(null);
 
     // Simulate progress while waiting for API
     const progressInterval = setInterval(() => {
@@ -3452,6 +3455,16 @@ function GuidedWizard({ onExit, onAvatarStateChange }) {
       clearInterval(progressInterval);
       setProgress(100);
       setResult(data);
+      const workflowPlan = normalizeRemediationPlan(data?.phases?.remediation || null, data?.target || target);
+      if (workflowPlan?.priority_actions?.length) {
+        setRemediationPlan(workflowPlan);
+      } else {
+        try {
+          const planResp = await fetch(`${QC_API}/api/vulns/remediation`, { headers });
+          const planJson = await planResp.json().catch(() => ({}));
+          if (planResp.ok) setRemediationPlan(normalizeRemediationPlan(planJson?.data || null, data?.target || target));
+        } catch {}
+      }
       setTimeout(() => setStep(3), 500);
     } catch (e) {
       clearInterval(progressInterval);
@@ -3502,6 +3515,64 @@ function GuidedWizard({ onExit, onAvatarStateChange }) {
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 500);
+  };
+
+  const remediationToScript = (plan, format) => {
+    const actions = plan?.priority_actions || [];
+    if (!actions.length) return "# No remediation actions available.\n";
+
+    if (format === "powershell") {
+      const lines = [
+        "# QueenCalifia — Remediation Guidance (PowerShell)",
+        "# Review carefully before applying changes.",
+        "",
+      ];
+      for (const a of actions) {
+        lines.push(`# [P${a.priority}] ${a.title} (${a.cve_id || a.vuln_id || a.action_id}) — Severity: ${a.severity}`);
+        lines.push(`# Asset: ${a.affected_asset || target || "n/a"}`);
+        lines.push(`# Guidance: ${a.remediation || "n/a"}`);
+        if (Array.isArray(a.commands) && a.commands.length) lines.push(`# Commands: ${a.commands.join(" ; ")}`);
+        lines.push("");
+      }
+      return lines.join("\n");
+    }
+
+    if (format === "ansible") {
+      const lines = [
+        "# QueenCalifia — Remediation Guidance (Ansible YAML scaffold)",
+        "---",
+        "- name: QC remediation (review + adapt)",
+        "  hosts: all",
+        "  become: true",
+        "  tasks:",
+      ];
+      for (const a of actions) {
+        lines.push(`    - name: "[P${a.priority}] ${a.title}"`);
+        lines.push("      debug:");
+        lines.push(`        msg: "${String(a.remediation || "n/a").replaceAll('"', '\\"')}"`);
+      }
+      lines.push("");
+      return lines.join("\n");
+    }
+
+    const lines = [
+      "#!/usr/bin/env bash",
+      "# QueenCalifia — Remediation Guidance (Bash)",
+      "# Review carefully before applying changes.",
+      "set -euo pipefail",
+      "",
+    ];
+    for (const a of actions) {
+      lines.push(`# [P${a.priority}] ${a.title} (${a.cve_id || a.vuln_id || a.action_id}) — Severity: ${a.severity}`);
+      lines.push(`# Asset: ${a.affected_asset || target || "n/a"}`);
+      lines.push(`# Guidance: ${a.remediation || "n/a"}`);
+      if (Array.isArray(a.commands) && a.commands.length) {
+        lines.push("# Candidate commands:");
+        for (const cmd of a.commands) lines.push(`# ${cmd}`);
+      }
+      lines.push("");
+    }
+    return lines.join("\n");
   };
 
   const stepStyle = (s) => ({
@@ -3686,6 +3757,78 @@ function GuidedWizard({ onExit, onAvatarStateChange }) {
 
             <div style={{ fontSize: 12, fontWeight: 600, color: C.accent, marginBottom: 16 }}>
               💡 {result.recommendation}
+            </div>
+
+            <div style={{ padding: 12, background: C.surface, borderRadius: 8, marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>🛠 Remediation Plan</div>
+              {!remediationPlan?.priority_actions?.length ? (
+                <div style={{ fontSize: 11, color: C.textDim }}>
+                  No detailed remediation plan is loaded yet for this workflow.
+                </div>
+              ) : (
+                <div style={{ display: "grid", gap: 10 }}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <Badge color={C.green}>Plan: <span style={{ fontFamily: MONO }}>{remediationPlan.plan_id}</span></Badge>
+                    <Badge color={C.textDim}>Total: {remediationPlan.total_vulnerabilities}</Badge>
+                    <Badge color={C.red}>Critical: {remediationPlan.summary?.critical || 0}</Badge>
+                    <Badge color={C.amber}>High: {remediationPlan.summary?.high || 0}</Badge>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <select
+                      value={scriptFmt}
+                      onChange={(e) => setScriptFmt(e.target.value)}
+                      style={{ padding: "8px 12px", background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: MONO, fontSize: 12 }}
+                    >
+                      <option value="bash">Bash</option>
+                      <option value="powershell">PowerShell</option>
+                      <option value="ansible">Ansible YAML</option>
+                    </select>
+                    <button onClick={() => {
+                      const ext = scriptFmt === "powershell" ? "ps1" : scriptFmt === "ansible" ? "yml" : "sh";
+                      const content = remediationToScript(remediationPlan, scriptFmt);
+                      const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = `qc_remediation_${remediationPlan.plan_id}.${ext}`;
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                      setTimeout(() => URL.revokeObjectURL(url), 500);
+                    }} style={{
+                      padding: "8px 16px", background: C.green, color: "#fff", border: "none",
+                      borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT,
+                    }}>
+                      Export Remediation Script
+                    </button>
+                  </div>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {remediationPlan.priority_actions.slice(0, 6).map((a) => (
+                      <div key={a.vuln_id || a.action_id} style={{ padding: "8px 10px", background: C.panel, borderRadius: 6 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+                          <div style={{ fontSize: 11, color: C.text }}>
+                            <span style={{ color: C.textDim, fontFamily: MONO }}>P{a.priority}</span>{" "}
+                            {a.title}
+                          </div>
+                          <Badge color={a.severity === "CRITICAL" ? C.red : a.severity === "HIGH" ? C.amber : C.textDim}>
+                            {a.severity}
+                          </Badge>
+                        </div>
+                        {!!a.affected_asset && (
+                          <div style={{ marginTop: 4, fontSize: 10, color: C.textDim }}>
+                            Asset: <span style={{ fontFamily: MONO }}>{a.affected_asset}</span>
+                          </div>
+                        )}
+                        {!!a.remediation && (
+                          <div style={{ marginTop: 4, fontSize: 10, color: C.textDim }}>
+                            Fix: {a.remediation}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Export buttons */}
