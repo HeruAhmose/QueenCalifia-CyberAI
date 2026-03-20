@@ -59,7 +59,7 @@ import hashlib
 import logging
 import threading
 import statistics
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional, Tuple, Set, Deque
 from dataclasses import dataclass, field
 from enum import Enum
@@ -288,7 +288,7 @@ class AdvancedTelemetry:
             "blind_spots_identified": 0,
             "threshold_adjustments": 0,
             "false_positives_suppressed": 0,
-            "start_time": datetime.utcnow(),
+            "start_time": datetime.now(timezone.utc),
         }
 
         logger.info(

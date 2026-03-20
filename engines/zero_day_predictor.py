@@ -51,7 +51,7 @@ import hashlib
 import logging
 import threading
 import statistics
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional, Tuple, Set
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
@@ -265,7 +265,7 @@ class ZeroDayPredictor:
             "zero_days_predicted": 0,
             "preemptive_actions_taken": 0,
             "accuracy_rate": 0.0,
-            "start_time": datetime.utcnow(),
+            "start_time": datetime.now(timezone.utc),
         }
 
         logger.info(
@@ -466,7 +466,7 @@ class ZeroDayPredictor:
         """
         signals: List[Dict[str, Any]] = []
         source = event.get("source_ip", "unknown")
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # Extract numerical features
         features = {

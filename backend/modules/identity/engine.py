@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from core.database import get_db, utc_now, audit, log_event
 from . import store
+import os
 
 VALID_LANES = store.VALID_LANES
 
@@ -292,3 +293,39 @@ def run_learning_cycle(db_path) -> dict:
             "audit_events": event_count,
         },
     }
+
+
+def run_learning_cycle_if_due(db_path) -> dict:
+    """
+    Run the identity learning cycle quietly when the configured interval has elapsed.
+
+    This keeps memory/reflection generation moving forward during normal product
+    use without exposing public traffic to direct state rewrites.
+    """
+    enabled = os.environ.get("QC_AUTO_LEARNING_ENABLED", "1") == "1"
+    if not enabled:
+        return {"ok": True, "skipped": True, "reason": "disabled"}
+
+    interval_minutes = max(15, int(os.environ.get("QC_AUTO_LEARNING_INTERVAL_MINUTES", "180")))
+    with get_db(db_path) as c:
+        last = c.execute(
+            """SELECT created_at FROM audit_log
+               WHERE event_type IN ('learning_cycle', 'learning_cycle_auto')
+               ORDER BY id DESC LIMIT 1"""
+        ).fetchone()
+
+    if last and last["created_at"]:
+        try:
+            last_run = last["created_at"]
+            # Normalize trailing Z timestamps for fromisoformat.
+            from datetime import datetime, timezone, timedelta
+
+            last_dt = datetime.fromisoformat(str(last_run).replace("Z", "+00:00"))
+            if datetime.now(timezone.utc) - last_dt < timedelta(minutes=interval_minutes):
+                return {"ok": True, "skipped": True, "reason": "interval_not_elapsed"}
+        except Exception:
+            pass
+
+    result = run_learning_cycle(db_path)
+    audit(db_path, "learning_cycle_auto", "system", None, {"interval_minutes": interval_minutes})
+    return result

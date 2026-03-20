@@ -16,7 +16,11 @@ def _db():
 @identity_bp.get("/state")
 @require_api_key
 def persona_state():
-    from modules.identity.engine import get_persona_state
+    from modules.identity.engine import get_persona_state, run_learning_cycle_if_due
+    try:
+        run_learning_cycle_if_due(_db())
+    except Exception:
+        current_app.logger.exception("Automatic identity learning cycle failed")
     return jsonify(get_persona_state(_db()))
 
 

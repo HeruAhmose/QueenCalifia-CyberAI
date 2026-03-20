@@ -186,6 +186,7 @@ class EvolutionEngine:
         # False positive tracking
         self._fp_tracker: Dict[str, int] = defaultdict(int)
         self._suppressed_rules: Set[str] = set()
+        self._processed_scan_ids: Set[str] = set()
 
         # Self-healing state
         self._healing_actions: List[Dict[str, Any]] = []
@@ -193,6 +194,7 @@ class EvolutionEngine:
 
         # Initialize database
         self._init_db()
+        self._load_persisted_state()
 
         logger.info("Evolution Engine v%s initialized — self-healing + learning + evolving", self.VERSION)
 
@@ -256,6 +258,20 @@ class EvolutionEngine:
                     timestamp TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS network_baselines (
+                    baseline_key TEXT PRIMARY KEY,
+                    baseline_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS processed_scan_learning (
+                    scan_id TEXT PRIMARY KEY,
+                    learned_at TEXT NOT NULL,
+                    source TEXT,
+                    learning_json TEXT,
+                    evolution_json TEXT
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_health_component ON health_log(component_id);
                 CREATE INDEX IF NOT EXISTS idx_patterns_type ON learned_patterns(learning_type);
                 CREATE INDEX IF NOT EXISTS idx_scan_intel_host ON scan_intelligence(host_ip);
@@ -292,6 +308,91 @@ class EvolutionEngine:
             "sha256": self._sha256_file(path),
             "created_at": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat(),
         }
+
+    def _load_persisted_state(self):
+        """Hydrate durable learning/evolution state after process restarts."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+
+                pattern_rows = conn.execute(
+                    """SELECT pattern_id, learning_type, source_engine, pattern_json,
+                              confidence, observations, first_seen, last_seen, applied
+                       FROM learned_patterns"""
+                ).fetchall()
+                for row in pattern_rows:
+                    try:
+                        learning_type = LearningType(row["learning_type"])
+                    except Exception:
+                        continue
+                    self._patterns[row["pattern_id"]] = LearnedPattern(
+                        pattern_id=row["pattern_id"],
+                        learning_type=learning_type,
+                        source_engine=row["source_engine"],
+                        pattern_data=json.loads(row["pattern_json"] or "{}"),
+                        confidence=float(row["confidence"] or 0),
+                        observations=int(row["observations"] or 0),
+                        first_seen=row["first_seen"],
+                        last_seen=row["last_seen"],
+                        applied=bool(row["applied"]),
+                    )
+
+                baseline_rows = conn.execute(
+                    "SELECT baseline_key, baseline_json FROM network_baselines"
+                ).fetchall()
+                for row in baseline_rows:
+                    self._network_baselines[row["baseline_key"]] = json.loads(row["baseline_json"] or "{}")
+
+                evo_rows = conn.execute(
+                    """SELECT evolution_id, evolution_type, description, payload_json,
+                              source_patterns, created_at, applied, success, impact_score
+                       FROM evolutions"""
+                ).fetchall()
+                for row in evo_rows:
+                    try:
+                        evo_type = EvolutionType(row["evolution_type"])
+                    except Exception:
+                        continue
+                    self._evolutions[row["evolution_id"]] = EvolutionEvent(
+                        evolution_id=row["evolution_id"],
+                        evolution_type=evo_type,
+                        description=row["description"],
+                        payload=json.loads(row["payload_json"] or "{}"),
+                        source_patterns=json.loads(row["source_patterns"] or "[]"),
+                        created_at=row["created_at"],
+                        applied=bool(row["applied"]),
+                        success=row["success"],
+                        impact_score=float(row["impact_score"] or 0),
+                    )
+
+                fp_rows = conn.execute(
+                    "SELECT rule_id, COUNT(*) AS cnt FROM false_positives GROUP BY rule_id"
+                ).fetchall()
+                for row in fp_rows:
+                    count = int(row["cnt"] or 0)
+                    self._fp_tracker[row["rule_id"]] = count
+                    if count >= FALSE_POSITIVE_THRESHOLD:
+                        self._suppressed_rules.add(row["rule_id"])
+
+                processed_rows = conn.execute(
+                    "SELECT scan_id FROM processed_scan_learning"
+                ).fetchall()
+                self._processed_scan_ids = {row["scan_id"] for row in processed_rows if row["scan_id"]}
+
+                self._auto_rules_generated = sum(
+                    1 for evo in self._evolutions.values()
+                    if evo.evolution_type == EvolutionType.DETECTION_RULE
+                )
+                self._scan_optimizations = sum(
+                    1 for evo in self._evolutions.values()
+                    if evo.evolution_type == EvolutionType.SCAN_PROFILE
+                )
+                self._remediation_improvements = sum(
+                    1 for evo in self._evolutions.values()
+                    if evo.evolution_type == EvolutionType.REMEDIATION_PLAYBOOK
+                )
+        except Exception as exc:
+            logger.warning("Failed to reload persisted evolution state: %s", exc)
 
     # ═════════════════════════════════════════════════════════════════════
     #  SELF-HEALING
@@ -520,7 +621,53 @@ class EvolutionEngine:
         learned["scan_optimizations"] = len(optimizations)
 
         self._persist_patterns()
+        self._persist_baselines()
         return learned
+
+    def learn_from_completed_scan(self, scan_report: Dict[str, Any], source: str = "scan_status") -> Dict[str, Any]:
+        """
+        Silently learn from a completed scan result exactly once.
+
+        This path is safe to call from polling/status routes because it is
+        idempotent on scan_id and persists completion markers in the DB.
+        """
+        scan_id = str(scan_report.get("scan_id") or "").strip()
+        if scan_id and scan_id in self._processed_scan_ids:
+            return {"scan_id": scan_id, "already_processed": True}
+
+        if scan_report.get("hosts"):
+            learning = self.learn_from_scan(scan_report)
+        else:
+            learning = self._learn_from_scan_summary(scan_report)
+
+        evolution = self.evolve()
+
+        if scan_id:
+            learned_at = datetime.now(timezone.utc).isoformat()
+            try:
+                with sqlite3.connect(self.db_path) as conn:
+                    conn.execute(
+                        """INSERT OR REPLACE INTO processed_scan_learning
+                           (scan_id, learned_at, source, learning_json, evolution_json)
+                           VALUES (?, ?, ?, ?, ?)""",
+                        (
+                            scan_id,
+                            learned_at,
+                            source,
+                            json.dumps(learning, default=str),
+                            json.dumps(evolution, default=str),
+                        ),
+                    )
+                self._processed_scan_ids.add(scan_id)
+            except Exception as exc:
+                logger.warning("Failed to persist processed scan learning marker for %s: %s", scan_id, exc)
+
+        return {
+            "scan_id": scan_id or None,
+            "already_processed": False,
+            "learning": learning,
+            "evolution": evolution,
+        }
 
     def learn_from_incident(self, incident: Dict[str, Any]) -> Dict[str, Any]:
         """Extract TTP patterns from incident data."""
@@ -616,6 +763,89 @@ class EvolutionEngine:
         except Exception as e:
             logger.warning("Failed to record scan intel: %s", e)
 
+    def _learn_from_scan_summary(self, scan_report: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Learn from summary-only scan results when detailed host telemetry is
+        unavailable from the async scan path.
+        """
+        learned = {
+            "summary_patterns": 0,
+            "new_baselines": 0,
+            "updated_baselines": 0,
+            "new_patterns": 0,
+            "service_fingerprints": 0,
+            "scan_optimizations": 0,
+        }
+
+        target = str(scan_report.get("target") or "").strip()
+        scan_type = str(scan_report.get("scan_type") or "full").strip()
+        summary_key = hashlib.sha256(
+            f"summary:{target}:{scan_type}:{scan_report.get('risk_score', 0)}".encode()
+        ).hexdigest()[:16]
+
+        self._record_pattern(
+            pattern_id=summary_key,
+            learning_type=LearningType.SCAN_STRATEGY,
+            source="async_summary",
+            data={
+                "target": target,
+                "scan_type": scan_type,
+                "risk_score": scan_report.get("risk_score", 0),
+                "critical_count": scan_report.get("critical_count", 0),
+                "high_count": scan_report.get("high_count", 0),
+                "medium_count": scan_report.get("medium_count", 0),
+                "low_count": scan_report.get("low_count", 0),
+                "assets_discovered": scan_report.get("assets_discovered", 0),
+                "vulnerabilities_found": scan_report.get("vulnerabilities_found", 0),
+            },
+        )
+        learned["summary_patterns"] = 1
+
+        if target and "/" not in target:
+            baseline_key = f"baseline:{target}"
+            now = datetime.now(timezone.utc).isoformat()
+            existing = self._network_baselines.get(baseline_key)
+            if existing:
+                existing["scan_count"] = existing.get("scan_count", 0) + 1
+                existing["last_seen"] = now
+                existing["last_risk_score"] = scan_report.get("risk_score", 0)
+                existing["last_summary"] = {
+                    "critical_count": scan_report.get("critical_count", 0),
+                    "high_count": scan_report.get("high_count", 0),
+                    "medium_count": scan_report.get("medium_count", 0),
+                    "low_count": scan_report.get("low_count", 0),
+                    "assets_discovered": scan_report.get("assets_discovered", 0),
+                }
+                learned["updated_baselines"] += 1
+            else:
+                self._network_baselines[baseline_key] = {
+                    "host_ip": target,
+                    "first_seen": now,
+                    "last_seen": now,
+                    "scan_count": 1,
+                    "open_ports": [],
+                    "services": {},
+                    "os_guess": "",
+                    "port_history": [],
+                    "os_history": [],
+                    "stability": 1.0,
+                    "last_risk_score": scan_report.get("risk_score", 0),
+                    "last_summary": {
+                        "critical_count": scan_report.get("critical_count", 0),
+                        "high_count": scan_report.get("high_count", 0),
+                        "medium_count": scan_report.get("medium_count", 0),
+                        "low_count": scan_report.get("low_count", 0),
+                        "assets_discovered": scan_report.get("assets_discovered", 0),
+                    },
+                }
+                learned["new_baselines"] += 1
+
+        optimizations = self._optimize_scan_strategy()
+        learned["scan_optimizations"] = len(optimizations)
+        self._persist_patterns()
+        self._persist_baselines()
+        return learned
+
     def _optimize_scan_strategy(self) -> List[Dict[str, Any]]:
         """Analyze learned data to optimize future scan parameters."""
         optimizations = []
@@ -674,6 +904,21 @@ class EvolutionEngine:
                     )
         except Exception as e:
             logger.warning("Failed to persist patterns: %s", e)
+
+    def _persist_baselines(self):
+        """Write network baselines to DB so restarts preserve scan history."""
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            with sqlite3.connect(self.db_path) as conn:
+                for key, baseline in self._network_baselines.items():
+                    conn.execute(
+                        """INSERT OR REPLACE INTO network_baselines
+                           (baseline_key, baseline_json, updated_at)
+                           VALUES (?, ?, ?)""",
+                        (key, json.dumps(baseline, default=str), now),
+                    )
+        except Exception as e:
+            logger.warning("Failed to persist baselines: %s", e)
 
     # ═════════════════════════════════════════════════════════════════════
     #  SELF-EVOLVING

@@ -1527,6 +1527,11 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
 
         if mode == "sync":
             scan = vuln_engine.scan_target(target=target, scan_type=scan_type)
+            if evolution_engine:
+                try:
+                    evolution_engine.learn_from_completed_scan(scan.to_dict(), source="sync_scan")
+                except Exception:
+                    logger.exception("Automatic evolution learning failed for sync scan")
             audit.log("vuln_scan_sync", _safe_remote_addr(), g.user_role, 200, details={"target": target, "scan_id": scan.scan_id})
             return jsonify({"success": True, "data": scan.to_dict()})
 
@@ -1583,6 +1588,11 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
                 }
                 if res.successful():
                     payload["result"] = _serialize_result(res.result)
+                    if evolution_engine and isinstance(payload["result"], dict):
+                        try:
+                            evolution_engine.learn_from_completed_scan(payload["result"], source="async_scan_poll")
+                        except Exception:
+                            logger.exception("Automatic evolution learning failed for async scan result")
                 elif res.failed():
                     payload["error"] = str(res.result)
                 elif res.state in ("STARTED", "RUNNING", "WAITING"):
@@ -1594,6 +1604,11 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         job = vuln_engine.get_scan_job(scan_id)
         if not job:
             return jsonify({"error": "scan not found"}), 404
+        if evolution_engine and isinstance(job, dict) and job.get("status") == "completed" and isinstance(job.get("result"), dict):
+            try:
+                evolution_engine.learn_from_completed_scan(job["result"], source="local_scan_poll")
+            except Exception:
+                logger.exception("Automatic evolution learning failed for local scan result")
         return jsonify({"success": True, "data": job})
 
     @app.route("/api/vulns/status")
@@ -2298,6 +2313,43 @@ def create_security_api(security_mesh, vuln_engine, incident_orchestrator, confi
         if not threat_intel:
             return jsonify({"error": "Threat intel engine not available"}), 503
         return jsonify(threat_intel.get_stats())
+
+    @app.route("/api/v1/threat-intel/feeds", methods=["GET"])
+    def api_threat_intel_feeds():
+        if not threat_intel:
+            return jsonify({"error": "Threat intel engine not available"}), 503
+        return jsonify({
+            "items": [
+                {
+                    "feed_id": feed.feed_id,
+                    "name": feed.name,
+                    "source_url": feed.source_url,
+                    "feed_format": feed.feed_format.value,
+                    "status": feed.status.value,
+                    "update_interval_sec": feed.update_interval_sec,
+                    "last_sync": feed.last_sync,
+                    "last_success": feed.last_success,
+                    "error_count": feed.error_count,
+                    "ioc_count": feed.ioc_count,
+                    "tags": feed.tags,
+                }
+                for feed in threat_intel.list_feeds()
+            ]
+        })
+
+    @app.route("/api/v1/threat-intel/sync", methods=["POST"])
+    @require_admin
+    def api_threat_intel_sync():
+        if not threat_intel:
+            return jsonify({"error": "Threat intel engine not available"}), 503
+        body = request.get_json(force=True, silent=True) or {}
+        feed_id = str(body.get("feed_id", "")).strip()
+        if feed_id:
+            result = threat_intel.sync_feed(feed_id)
+            return jsonify(result), (200 if result.get("ok") else 502)
+        result = threat_intel.sync_due_feeds()
+        ok = all(item.get("ok") for item in result.get("results", []))
+        return jsonify(result), (200 if ok else 502)
 
     @app.route("/api/v1/threat-intel/indicators", methods=["GET"])
     def api_threat_intel_indicators():

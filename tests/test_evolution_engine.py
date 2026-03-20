@@ -179,6 +179,48 @@ class TestSelfLearning:
         result = engine.learn_from_remediation(plan_result)
         assert result["playbook_improvements"] == 1  # Only the successful one
 
+    def test_persisted_state_reloads_after_restart(self):
+        db = os.path.join(tempfile.gettempdir(), f"qc_evo_reload_{uuid.uuid4().hex[:8]}.db")
+        try:
+            first = EvolutionEngine({"db_path": db})
+            report = self._mock_scan_report()
+            first.learn_from_scan(report)
+            first.mark_false_positive("rule-xyz", "hash-1")
+            first.mark_false_positive("rule-xyz", "hash-2")
+            first.evolve()
+
+            second = EvolutionEngine({"db_path": db})
+            assert len(second._patterns) >= 1
+            assert len(second._network_baselines) == 2
+            assert second._fp_tracker["rule-xyz"] == 2
+            assert len(second._evolutions) >= 0
+        finally:
+            try:
+                os.unlink(db)
+            except OSError:
+                pass
+
+    def test_completed_scan_learning_is_idempotent(self, engine):
+        scan_result = {
+            "scan_id": "scan-123",
+            "target": "127.0.0.1",
+            "scan_type": "full",
+            "critical_count": 0,
+            "high_count": 1,
+            "medium_count": 0,
+            "low_count": 0,
+            "assets_discovered": 1,
+            "vulnerabilities_found": 1,
+            "risk_score": 5.5,
+        }
+
+        first = engine.learn_from_completed_scan(scan_result)
+        second = engine.learn_from_completed_scan(scan_result)
+
+        assert first["already_processed"] is False
+        assert second["already_processed"] is True
+        assert "scan-123" in engine._processed_scan_ids
+
 
 # ─── Self-Evolving Tests ────────────────────────────────────────────────────
 

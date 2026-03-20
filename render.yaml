@@ -25,6 +25,18 @@ services:
         value: /var/data/qc_evolution.db
       - key: QC_MEMORY_BACKUP_DIR
         value: /var/data/memory-backups
+      - key: QC_THREAT_INTEL_DB
+        value: /var/data/qc_threat_intel.db
+      - key: QC_THREAT_INTEL_AUTO_SYNC
+        value: "1"
+      - key: QC_THREAT_INTEL_POLL_SECONDS
+        value: "60"
+      - key: QC_THREAT_INTEL_LEASE_SECONDS
+        value: "180"
+      - key: QC_AUTO_LEARNING_ENABLED
+        value: "1"
+      - key: QC_AUTO_LEARNING_INTERVAL_MINUTES
+        value: "180"
       - key: QC_API_KEYS_FILE
         value: /var/data/keys.json
       - key: QC_AUDIT_LOG_FILE
