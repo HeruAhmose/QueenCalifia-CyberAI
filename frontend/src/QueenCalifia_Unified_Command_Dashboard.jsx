@@ -1684,19 +1684,23 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
   }, [apiKey]);
 
   const apiFetch = useCallback(async (path, init = {}) => {
-    const res = await fetch(`${QC_API}${path}`, { ...init, headers: { ...(init.headers || {}), ...headers } });
-    const text = await res.text();
-    let json = null;
-    try { json = text ? JSON.parse(text) : null; } catch { json = null; }
-    if (!res.ok) {
-      const msg = json?.error || json?.message || `${res.status} ${res.statusText}`;
-      throw new Error(msg);
+    try {
+      const res = await fetch(`${QC_API}${path}`, { ...init, headers: { ...(init.headers || {}), ...headers } });
+      const text = await res.text();
+      let json = null;
+      try { json = text ? JSON.parse(text) : null; } catch { json = null; }
+      if (!res.ok) {
+        const msg = json?.error || json?.message || `${res.status} ${res.statusText}`;
+        throw new Error(msg);
+      }
+      if (text && json === null) {
+        const snippet = String(text).slice(0, 220).replace(/\s+/g, " ");
+        throw new Error(`Non-JSON response from backend (${res.status}). Snippet: ${snippet}`);
+      }
+      return json;
+    } catch (err) {
+      throw qcRequestError(err);
     }
-    if (text && json === null) {
-      const snippet = String(text).slice(0, 220).replace(/\s+/g, " ");
-      throw new Error(`Non-JSON response from backend (${res.status}). Snippet: ${snippet}`);
-    }
-    return json;
   }, [headers]);
 
   const normalizeStatus = useCallback((payload) => {
@@ -1781,145 +1785,6 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
       lines.push("");
     }
     return lines.join("\n");
-  }, []);
-
-  // If the real vuln backend is not reachable on production, we fall back to a deterministic simulation
-  // so the UI experience (tabs/buttons/avatar states/animations) still works end-to-end.
-  const simulateSeed = useCallback((s) => {
-    const str = String(s || "");
-    let h = 0;
-    for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) % 100000;
-    return h;
-  }, []);
-
-  const simulateScan = useCallback((opts) => {
-    const target = String(opts?.target || "");
-    const scanType = String(opts?.scanType || "full");
-    const webUrl = String(opts?.webUrl || "https://example.com");
-    const seed = simulateSeed(`${target}|${scanType}|${webUrl}`);
-
-    const critical_count = seed % 2 === 0 ? 1 : 0;
-    const high_count = (seed % 3) + 1; // 1..3
-    const medium_count = (seed % 5) + 1; // 1..5
-    const low_count = (seed % 4); // 0..3
-    const info_count = 0;
-
-    const assets_discovered = 10 + (seed % 40);
-    const vulnerabilities_found = critical_count + high_count + medium_count + low_count + info_count;
-    const risk_score = Math.round(((critical_count * 9 + high_count * 6 + medium_count * 3 + low_count) / Math.max(1, vulnerabilities_found)) * 100) / 100;
-
-    const sevOrder = [
-      { key: "CRITICAL", count: critical_count, color: C.red },
-      { key: "HIGH", count: high_count, color: C.amber },
-      { key: "MEDIUM", count: medium_count, color: C.textSoft },
-      { key: "LOW", count: low_count, color: C.green },
-    ];
-
-    const findingPool = [];
-    let idx = 0;
-    for (const block of sevOrder) {
-      for (let i = 0; i < block.count; i++) {
-        const j = idx++;
-        findingPool.push({
-          title: `${block.key} — ${target || "target"} :: Oracle Path Drift ${j}`,
-          severity: block.key,
-          description: `Simulated finding for UI continuity (severity ${block.key}).`,
-          remediation: `Apply patch guidance for ${block.key} (${j}).`,
-          cve_id: `CVE-${2020 + (seed % 6)}-${1000 + j}`,
-          vuln_id: `VULN-${seed % 9000}-${j}`,
-          affected_service: scanType === "web_app" ? "web_app" : "network_service",
-          affected_asset: scanType === "web_app" ? webUrl : target,
-          cvss_score: block.key === "CRITICAL" ? 9.8 : block.key === "HIGH" ? 8.2 : block.key === "MEDIUM" ? 5.6 : 3.1,
-          exploitability: block.key === "CRITICAL" || block.key === "HIGH" ? "active" : "theoretical",
-        });
-      }
-    }
-
-    // Cap findings so the UI stays fast.
-    const findings = findingPool.slice(0, 10);
-
-    if (scanType === "web_app") {
-      return {
-        target_url: webUrl,
-        scan_type: "web_app",
-        critical_count,
-        high_count,
-        medium_count,
-        low_count,
-        risk_score,
-        summary: { critical: critical_count, high: high_count, medium: medium_count, low: low_count, info: info_count },
-        findings,
-      };
-    }
-
-    const scan_id = `sim-${Date.now()}-${seed.toString(16).slice(0, 6)}`;
-    return {
-      scan_id,
-      target,
-      scan_type: scanType,
-      completed_at: new Date().toISOString(),
-      critical_count,
-      high_count,
-      medium_count,
-      low_count,
-      assets_discovered,
-      vulnerabilities_found,
-      risk_score,
-      summary: { critical: critical_count, high: high_count, medium: medium_count, low: low_count, info: info_count },
-      findings,
-    };
-  }, [C.red, C.amber, C.textSoft, C.green, simulateSeed]);
-
-  const simulateRemediationPlan = useCallback((scanOrCounts, planForTarget) => {
-    const scan = scanOrCounts || {};
-    const critical = scan.summary?.critical ?? scan.critical_count ?? 0;
-    const high = scan.summary?.high ?? scan.high_count ?? 0;
-    const medium = scan.summary?.medium ?? scan.medium_count ?? 0;
-    const low = scan.summary?.low ?? scan.low_count ?? 0;
-    const total = critical + high + medium + low;
-
-    const actions = [];
-    const mk = (priority, sevKey) => {
-      const baseTitle = sevKey === "CRITICAL" ? "Critical Exploit Chain Shutdown" :
-        sevKey === "HIGH" ? "High-Risk Vector Hardening" :
-          sevKey === "MEDIUM" ? "Medium-Risk Control Tightening" : "Low-Risk Noise Reduction";
-      const j = actions.length;
-      const affected_asset = scan?.target || planForTarget || "127.0.0.1";
-      return {
-        priority: priority,
-        title: `${baseTitle} (#${j + 1})`,
-        severity: sevKey,
-        cve_id: scan?.findings?.[j]?.cve_id || `CVE-${2025}-${1000 + j}`,
-        vuln_id: scan?.findings?.[j]?.vuln_id || `VULN-${10000 + j}`,
-        cvss_score: sevKey === "CRITICAL" ? 9.9 : sevKey === "HIGH" ? 8.4 : sevKey === "MEDIUM" ? 5.9 : 2.8,
-        affected_asset,
-        remediation: `Simulated remediation guidance for ${sevKey} against ${affected_asset}.`,
-        affected_asset_root: affected_asset,
-      };
-    };
-
-    // Prioritize critical → high → medium → low (stable priorities).
-    let prio = 1;
-    for (let i = 0; i < critical; i++) actions.push(mk(prio++, "CRITICAL"));
-    for (let i = 0; i < high; i++) actions.push(mk(prio++, "HIGH"));
-    for (let i = 0; i < medium; i++) actions.push(mk(prio++, "MEDIUM"));
-    for (let i = 0; i < low; i++) actions.push(mk(prio++, "LOW"));
-
-    const plan_id = `plan-${Date.now()}`;
-    return {
-      plan_id,
-      total_vulnerabilities: total,
-      summary: { critical, high, medium, low, info: 0 },
-      priority_actions: actions.slice(0, 24),
-    };
-  }, []);
-
-  const simulateOneClickResult = useCallback((plan) => {
-    const total = plan?.total_vulnerabilities ?? plan?.priority_actions?.length ?? 0;
-    return {
-      total,
-      actions_executed: (plan?.priority_actions || []).slice(0, 8).map((a) => `Applied: ${a.title}`),
-    };
   }, []);
 
   const isLikelyAuthFailure = useCallback((err) => {
@@ -2102,8 +1967,6 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
 
   useEffect(() => {
     if (!scanId) return;
-    // Skip polling when we are in UI simulation mode.
-    if (String(scanId).startsWith("sim-")) return;
     let cancelled = false;
     let notFoundStreak = 0;
     const tick = async () => {
@@ -2489,8 +2352,33 @@ const qcH = (ak,apiKey) => {
   if (resolvedAdminKey) h["X-QC-Admin-Key"]=resolvedAdminKey;
   return h;
 };
-const qcGet = async (p,ak,apiKey) => { const r=await fetch(`${QC_API}${p}`,{headers:qcH(ak,apiKey)}); const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(d.error||`HTTP ${r.status}`); return d; };
-const qcPost = async (p,b,ak,apiKey) => { const r=await fetch(`${QC_API}${p}`,{method:"POST",headers:qcH(ak,apiKey),body:JSON.stringify(b||{})}); const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(d.error||`HTTP ${r.status}`); return d; };
+const qcRequestError = (err) => {
+  const msg = String(err?.message || err || "");
+  if (/failed to fetch/i.test(msg)) {
+    return new Error("Failed to fetch live backend data. Check the saved QC keys, backend availability, and network/CORS settings.");
+  }
+  return err instanceof Error ? err : new Error(msg || "Backend request failed.");
+};
+const qcGet = async (p,ak,apiKey) => {
+  try {
+    const r=await fetch(`${QC_API}${p}`,{headers:qcH(ak,apiKey)});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.error||`HTTP ${r.status}`);
+    return d;
+  } catch (err) {
+    throw qcRequestError(err);
+  }
+};
+const qcPost = async (p,b,ak,apiKey) => {
+  try {
+    const r=await fetch(`${QC_API}${p}`,{method:"POST",headers:qcH(ak,apiKey),body:JSON.stringify(b||{})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.error||`HTTP ${r.status}`);
+    return d;
+  } catch (err) {
+    throw qcRequestError(err);
+  }
+};
 
 const EMPTY_MESH = {
   mesh_id: "unavailable",
@@ -3781,6 +3669,9 @@ export default function QueenCalifiaCommandDashboard() {
   const [showAuthPanel, setShowAuthPanel] = useState(false);
   const [authSavedAt, setAuthSavedAt] = useState(0);
   const [authForm, setAuthForm] = useState(() => loadStoredDashboardAuth());
+  const [isNarrow, setIsNarrow] = useState(() => {
+    try { return window.innerWidth <= 980; } catch { return false; }
+  });
   const { enabled, toggle, play } = useSound();
   const prevTabRef = useRef("overview");
 
@@ -3797,6 +3688,12 @@ export default function QueenCalifiaCommandDashboard() {
   useEffect(() => {
     const interval = setInterval(() => setTick(t => t + 1), 15000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const onResize = () => setIsNarrow(window.innerWidth <= 980);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   const [liveData, setLiveData] = useState(() => ({
@@ -3913,11 +3810,12 @@ export default function QueenCalifiaCommandDashboard() {
   }, [play]);
 
   const authConfigured = Boolean(authForm.apiKey);
-  const saveAuth = useCallback(() => {
+  const saveAuth = useCallback(async () => {
     saveStoredDashboardAuth(authForm);
     setAuthSavedAt(Date.now());
     play("button_click");
-  }, [authForm, play]);
+    await loadLiveData();
+  }, [authForm, loadLiveData, play]);
 
   const clearAuth = useCallback(() => {
     const cleared = { apiKey: "", adminKey: "" };
@@ -3925,7 +3823,18 @@ export default function QueenCalifiaCommandDashboard() {
     saveStoredDashboardAuth(cleared);
     setAuthSavedAt(Date.now());
     play("button_click");
+    setLiveDataErrors(["Backend auth cleared. Re-enter a real API key to load protected routes."]);
   }, [play]);
+
+  useEffect(() => {
+    if (!authConfigured) setShowAuthPanel(true);
+  }, [authConfigured]);
+
+  const authPrompt = !authConfigured
+    ? "Connect the live backend with your API key to unlock protected routes."
+    : liveDataErrors.length > 0
+      ? "Live backend requests are failing or partially degraded. Review auth and backend health below."
+      : "Live backend connected.";
 
   const renderActiveTab = () => {
     if (activeTab === "overview") return <OverviewTab mesh={mesh} predictions={predictions} incidents={incidents} snapshotData={snapshotData} landscape={landscape} />;
@@ -3986,13 +3895,14 @@ export default function QueenCalifiaCommandDashboard() {
 
       {/* Header */}
       <header style={{
-        display: "flex", justifyContent: "space-between", alignItems: "center",
+        display: "flex", justifyContent: "space-between", alignItems: isNarrow ? "stretch" : "center",
+        flexWrap: "wrap",
         padding: "12px 24px", borderBottom: `1px solid ${C.border}`,
         background: `linear-gradient(180deg, ${C.panel} 0%, ${C.bg} 100%)`,
         position: "relative",
         zIndex: 2,
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0, flex: "1 1 420px" }}>
           <motion.div
             key={`header-avatar-${qcAvatarState}`}
             initial={{ opacity: 0.72, scale: 0.92, y: 4 }}
@@ -4075,23 +3985,23 @@ export default function QueenCalifiaCommandDashboard() {
             </div>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: isNarrow ? "flex-start" : "flex-end", gap: 12, flexWrap: "wrap", flex: "1 1 360px", marginTop: isNarrow ? 12 : 0 }}>
           <button
             onClick={() => setShowAuthPanel(v => !v)}
             style={{
-              padding: "6px 12px",
-              background: authConfigured ? `${C.green}12` : C.surface,
-              border: `1px solid ${authConfigured ? C.green + "40" : C.border}`,
+              padding: isNarrow ? "10px 14px" : "6px 12px",
+              background: !authConfigured || liveDataErrors.length > 0 ? `${C.red}10` : `${C.green}12`,
+              border: `1px solid ${!authConfigured || liveDataErrors.length > 0 ? C.red + "35" : C.green + "40"}`,
               borderRadius: 999,
               cursor: "pointer",
-              fontSize: 10,
+              fontSize: isNarrow ? 11 : 10,
               fontWeight: 700,
               fontFamily: MONO,
-              color: authConfigured ? C.green : C.textDim,
+              color: !authConfigured || liveDataErrors.length > 0 ? C.red : C.green,
               letterSpacing: "0.08em",
             }}
           >
-            {authConfigured ? "AUTH READY" : "SET AUTH"}
+            {!authConfigured ? "CONNECT BACKEND" : liveDataErrors.length > 0 ? "CHECK BACKEND" : "AUTH READY"}
           </button>
           {/* Wizard launcher */}
           <button onClick={openWizard} style={{
@@ -4145,9 +4055,52 @@ export default function QueenCalifiaCommandDashboard() {
         </div>
       </header>
 
+      <div style={{
+        padding: isNarrow ? "12px 16px" : "12px 24px",
+        borderBottom: `1px solid ${C.border}`,
+        background: !authConfigured || liveDataErrors.length > 0
+          ? `linear-gradient(135deg, ${C.redGlow}, ${C.panel})`
+          : `linear-gradient(135deg, ${C.greenGlow}, ${C.panel})`,
+        position: "relative",
+        zIndex: 2,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ display: "grid", gap: 4 }}>
+            <div style={{ fontSize: 10, color: !authConfigured || liveDataErrors.length > 0 ? C.red : C.green, fontFamily: MONO, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+              {!authConfigured ? "Backend auth required" : liveDataErrors.length > 0 ? "Backend needs attention" : "Backend live"}
+            </div>
+            <div style={{ fontSize: isNarrow ? 12 : 13, color: C.text }}>
+              {authPrompt}
+            </div>
+            {authConfigured && (
+              <div style={{ fontSize: 10, color: C.textDim, fontFamily: MONO }}>
+                Saved headers: `X-QC-API-Key` {authForm.adminKey ? "and `X-QC-Admin-Key`" : ""}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => setShowAuthPanel(v => !v)}
+            style={{
+              padding: "10px 14px",
+              background: C.surface,
+              border: `1px solid ${C.borderLit}`,
+              borderRadius: 10,
+              color: C.text,
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: "pointer",
+              fontFamily: FONT,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {showAuthPanel ? "Hide Keys" : "Enter Keys"}
+          </button>
+        </div>
+      </div>
+
       {showAuthPanel && (
         <div style={{
-          padding: "12px 24px",
+          padding: isNarrow ? "14px 16px" : "12px 24px",
           borderBottom: `1px solid ${C.border}`,
           background: `linear-gradient(180deg, ${C.panel} 0%, ${C.bg} 100%)`,
           position: "relative",
@@ -4155,7 +4108,7 @@ export default function QueenCalifiaCommandDashboard() {
         }}>
           <div style={{
             display: "grid",
-            gridTemplateColumns: "1.4fr 1.4fr auto auto",
+            gridTemplateColumns: isNarrow ? "1fr" : "1.4fr 1.4fr auto auto",
             gap: 10,
             alignItems: "end",
           }}>
@@ -4232,8 +4185,8 @@ export default function QueenCalifiaCommandDashboard() {
               Clear
             </button>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, marginTop: 8, fontSize: 10, color: C.textDim }}>
-            <span>Production auth is now explicit. Save a real API key here to unlock protected backend routes across the dashboard.</span>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginTop: 8, fontSize: 10, color: C.textDim }}>
+            <span>Enter the exact header values here: `X-QC-API-Key = your QC_API_KEY` and `X-QC-Admin-Key = your QC_ADMIN_KEY` for admin-only actions. These are stored only in this browser session.</span>
             <span style={{ fontFamily: MONO, color: authSavedAt ? C.green : C.textDim }}>
               {authSavedAt ? "SESSION AUTH SAVED" : "NOT SAVED"}
             </span>
@@ -4243,10 +4196,12 @@ export default function QueenCalifiaCommandDashboard() {
 
       {/* Navigation */}
       <nav style={{
-        display: "flex", gap: 2, padding: "0 24px",
+        display: "flex", gap: 2, padding: isNarrow ? "0 8px" : "0 24px",
         borderBottom: `1px solid ${C.border}`, background: C.panel,
         position: "relative",
         zIndex: 2,
+        overflowX: "auto",
+        scrollbarWidth: "thin",
       }}>
         {visibleNav.map(item => (
           <button

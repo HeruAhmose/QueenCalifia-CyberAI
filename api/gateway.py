@@ -979,7 +979,7 @@ def create_security_api(
         app,
         origins=config.allowed_origins,
         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allow_headers=[config.api_key_header, "Content-Type", "Authorization"],
+        allow_headers=[config.api_key_header, "X-QC-Admin-Key", "Content-Type", "Authorization"],
         supports_credentials=True,
         max_age=3600,
     )
@@ -990,7 +990,7 @@ def create_security_api(
         if origin.endswith(".web.app") or "localhost" in origin:
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
-            response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,X-QC-API-Key"
+            response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,X-QC-API-Key,X-QC-Admin-Key"
             response.headers["Access-Control-Max-Age"] = "3600"
         return response
 
@@ -1001,7 +1001,7 @@ def create_security_api(
         resp.status_code = 204
         resp.headers["Access-Control-Allow-Origin"] = origin
         resp.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
-        resp.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,X-QC-API-Key"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,X-QC-API-Key,X-QC-Admin-Key"
         resp.headers["Access-Control-Max-Age"] = "3600"
         return resp
 
@@ -1011,6 +1011,13 @@ def create_security_api(
         g.request_id = InputSanitizer.sanitize_string(rid, max_length=128) if rid else uuid.uuid4().hex
         set_request_id(g.request_id)
         g._start_time_monotonic = time.monotonic()
+
+        # Browser CORS preflight must remain unauthenticated so custom key
+        # headers can be negotiated before protected requests are sent.
+        if request.method == "OPTIONS":
+            g.principal = None
+            g.user_role = "public"
+            return None
 
         # Size guard
         if request.content_length and request.content_length > config.max_request_size_bytes:

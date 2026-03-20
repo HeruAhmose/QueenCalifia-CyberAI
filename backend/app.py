@@ -50,8 +50,14 @@ init_db(settings.db_path)
 # Make settings available to the dashboard route modules.
 app.config["settings"] = settings
 
-# Enable CORS for all dashboard API requests.
-CORS(app, resources={r"/api/*": {"origins": parse_origins(settings.cors_origins)}}, supports_credentials=False)
+# Enable CORS for all dashboard API requests, including admin-gated browser flows.
+CORS(
+    app,
+    resources={r"/api/*": {"origins": parse_origins(settings.cors_origins)}},
+    supports_credentials=False,
+    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-QC-API-Key", "X-QC-Admin-Key"],
+)
 
 # Mount the dashboard-friendly blueprints onto the security-gateway app.
 # (The root security app mainly provides vuln routes; the dashboard UI also

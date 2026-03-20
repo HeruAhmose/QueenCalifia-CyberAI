@@ -72,3 +72,23 @@ def test_gateway_bootstraps_legacy_env_keys_in_production(tmp_path, monkeypatch)
     assert admin_meta is not None
     assert "execute" in api_meta["permissions"]
     assert "admin" in admin_meta["permissions"]
+
+
+def test_preflight_allows_admin_header(app_factory):
+    app = app_factory(require_api_key=True)
+    client = app.test_client()
+
+    rv = client.open(
+        "/api/v1/scanner/status",
+        method="OPTIONS",
+        headers={
+            "Origin": "https://queencalifia-cyberai.web.app",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "X-QC-API-Key,X-QC-Admin-Key,Content-Type",
+        },
+    )
+
+    assert rv.status_code in (200, 204)
+    allow_headers = rv.headers.get("Access-Control-Allow-Headers", "")
+    assert "X-QC-API-Key" in allow_headers
+    assert "X-QC-Admin-Key" in allow_headers
