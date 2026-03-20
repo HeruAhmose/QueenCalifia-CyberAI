@@ -21,10 +21,6 @@ from flask_cors import CORS
 
 
 def _load_root_app():
-    # Dashboard UX assumes the API is reachable without you needing to paste an
-    # API key. Default to allowing requests unless explicitly configured.
-    os.environ.setdefault("QC_NO_AUTH", "1")
-
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     if repo_root in sys.path:
         sys.path.remove(repo_root)

@@ -538,7 +538,7 @@ function TelemetryNetworkPanel({ t }) {
           <Stat label="Known Bad Matches" value={t.fingerprints.known_bad} color={t.fingerprints.known_bad > 0 ? C.red : C.green} />
           <Stat label="New (1h)" value={t.fingerprints.new_last_hour} color={C.cyan} />
         </div>
-        {t.fingerprints.recent_matches.length > 0 ? (
+        {Array.isArray(t.fingerprints.recent_matches) && t.fingerprints.recent_matches.length > 0 ? (
           <div>
             <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Active Threat Matches</div>
             {t.fingerprints.recent_matches.map((m, i) => (
@@ -556,6 +556,10 @@ function TelemetryNetworkPanel({ t }) {
               </div>
             ))}
           </div>
+        ) : t.fingerprints.recent_matches === null ? (
+          <div style={{ textAlign: "center", padding: 20, color: C.textDim, fontSize: 11 }}>
+            Detailed fingerprint match history is not yet exposed by the active telemetry collector.
+          </div>
         ) : (
           <div style={{ textAlign: "center", padding: 20, color: C.green, fontSize: 11 }}>
             ✓ No malicious fingerprints detected
@@ -567,22 +571,27 @@ function TelemetryNetworkPanel({ t }) {
       <Panel title="🌐 DNS Transaction Intelligence">
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
           <Stat label="Sources Profiled" value={t.dns.sources_profiled} />
-          <Stat label="Queries/min" value={t.dns.queries_per_min.toLocaleString()} />
+          <Stat label="Queries/min" value={t.dns.queries_per_min == null ? "N/A" : t.dns.queries_per_min.toLocaleString()} />
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
-          <div style={{ padding: "10px", background: t.dns.dga_detected > 0 ? C.redDim : C.greenDim, borderRadius: 6, textAlign: "center" }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: t.dns.dga_detected > 0 ? C.red : C.green, fontFamily: MONO }}>{t.dns.dga_detected}</div>
+          <div style={{ padding: "10px", background: (t.dns.dga_detected || 0) > 0 ? C.redDim : C.greenDim, borderRadius: 6, textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: (t.dns.dga_detected || 0) > 0 ? C.red : C.green, fontFamily: MONO }}>{t.dns.dga_detected == null ? "N/A" : t.dns.dga_detected}</div>
             <div style={{ fontSize: 9, color: C.textSoft }}>DGA Domains</div>
           </div>
-          <div style={{ padding: "10px", background: t.dns.tunneling_alerts > 0 ? C.amberDim : C.greenDim, borderRadius: 6, textAlign: "center" }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: t.dns.tunneling_alerts > 0 ? C.amber : C.green, fontFamily: MONO }}>{t.dns.tunneling_alerts}</div>
+          <div style={{ padding: "10px", background: (t.dns.tunneling_alerts || 0) > 0 ? C.amberDim : C.greenDim, borderRadius: 6, textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: (t.dns.tunneling_alerts || 0) > 0 ? C.amber : C.green, fontFamily: MONO }}>{t.dns.tunneling_alerts == null ? "N/A" : t.dns.tunneling_alerts}</div>
             <div style={{ fontSize: 9, color: C.textSoft }}>Tunneling</div>
           </div>
-          <div style={{ padding: "10px", background: t.dns.exfil_indicators > 0 ? C.redDim : C.greenDim, borderRadius: 6, textAlign: "center" }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: t.dns.exfil_indicators > 0 ? C.red : C.green, fontFamily: MONO }}>{t.dns.exfil_indicators}</div>
+          <div style={{ padding: "10px", background: (t.dns.exfil_indicators || 0) > 0 ? C.redDim : C.greenDim, borderRadius: 6, textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: (t.dns.exfil_indicators || 0) > 0 ? C.red : C.green, fontFamily: MONO }}>{t.dns.exfil_indicators == null ? "N/A" : t.dns.exfil_indicators}</div>
             <div style={{ fontSize: 9, color: C.textSoft }}>Exfil Indicators</div>
           </div>
         </div>
+        {t.dns.queries_per_min == null && (
+          <div style={{ marginTop: 10, fontSize: 10, color: C.textDim }}>
+            DNS rate and detection counters require DNS telemetry ingestion; unavailable values are shown as `N/A` instead of fabricated activity.
+          </div>
+        )}
       </Panel>
     </div>
   );
@@ -720,8 +729,8 @@ function TelemetryGraphPanel({ t }) {
               </div>
               <ProgressBar value={a.risk} max={1} color={a.risk > 0.8 ? C.red : C.amber} />
               <div style={{ display: "flex", gap: 12, marginTop: 4, fontSize: 9, color: C.textSoft }}>
-                <span>Direct: {a.direct_targets}</span>
-                <span>Blast Radius: <span style={{ color: C.amber }}>{a.blast_radius}</span> assets</span>
+                <span>Direct: {a.direct_targets == null ? "N/A" : a.direct_targets}</span>
+                <span>Blast Radius: <span style={{ color: C.amber }}>{a.blast_radius == null ? "N/A" : a.blast_radius}</span>{a.blast_radius == null ? "" : " assets"}</span>
               </div>
             </div>
           ))
@@ -793,7 +802,7 @@ function TelemetryHealthPanel({ t }) {
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
       <Panel title="💊 Sensor Collection Health">
         <div style={{ display: "grid", gap: 6 }}>
-          {t.sensors.map((s, i) => (
+          {t.sensors.length > 0 ? t.sensors.map((s, i) => (
             <div key={i} style={{ padding: "8px 12px", background: C.surface, borderRadius: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <div style={{ fontSize: 11, fontWeight: 600, color: C.text, textTransform: "capitalize" }}>
@@ -810,7 +819,11 @@ function TelemetryHealthPanel({ t }) {
                 <div style={{ fontSize: 8, color: C.textDim }}>coverage</div>
               </div>
             </div>
-          ))}
+          )) : (
+            <div style={{ fontSize: 10, color: C.textDim }}>
+              No real sensor registrations have been reported yet by the telemetry collector.
+            </div>
+          )}
         </div>
       </Panel>
 
@@ -824,12 +837,16 @@ function TelemetryHealthPanel({ t }) {
           </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          {t.sensors.map((s, i) => (
+          {t.sensors.length > 0 ? t.sensors.map((s, i) => (
             <div key={i} style={{ padding: "8px", background: C.surface, borderRadius: 6, textAlign: "center" }}>
               <ProgressBar value={s.coverage_pct} max={100} color={s.coverage_pct > 90 ? C.green : C.amber} />
               <div style={{ fontSize: 9, color: C.textSoft, marginTop: 4, textTransform: "capitalize" }}>{s.type}</div>
             </div>
-          ))}
+          )) : (
+            <div style={{ gridColumn: "1 / -1", fontSize: 10, color: C.textDim }}>
+              Coverage bars will appear when the collector begins registering sensors and coverage summaries.
+            </div>
+          )}
         </div>
       </Panel>
     </div>
@@ -838,7 +855,7 @@ function TelemetryHealthPanel({ t }) {
 
 // ─── OVERVIEW TAB ─────────────────────────────────────────────────────────
 
-function OverviewTab({ mesh, predictions, incidents, timeSeries, landscape }) {
+function OverviewTab({ mesh, predictions, incidents, snapshotData, landscape }) {
   const topPreds = predictions.slice(0, 3);
   const criticalIncidents = incidents.filter(i => i.severity === "CRITICAL").length;
   const highPreds = predictions.filter(p => p.confidence > 0.7).length;
@@ -882,27 +899,20 @@ function OverviewTab({ mesh, predictions, incidents, timeSeries, landscape }) {
           </div>
         </Panel>
 
-        <Panel title="Event Timeline — 24h" icon="📊" accent={C.accent}>
+        <Panel title="Current Operational Snapshot" icon="📊" accent={C.accent}>
           <ResponsiveContainer width="100%" height={160}>
-            <AreaChart data={timeSeries} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
-              <defs>
-                <linearGradient id="evtGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={C.accent} stopOpacity={0.15} />
-                  <stop offset="100%" stopColor={C.accent} stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="threatGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={C.red} stopOpacity={0.2} />
-                  <stop offset="100%" stopColor={C.red} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="time" tick={{ fill: C.textDim, fontSize: 9, fontFamily: MONO }} axisLine={false} tickLine={false} interval={3} />
+            <BarChart data={snapshotData} margin={{ top: 12, right: 8, bottom: 0, left: -20 }}>
+              <XAxis dataKey="metric" tick={{ fill: C.textDim, fontSize: 9, fontFamily: MONO }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: C.textDim, fontSize: 9, fontFamily: MONO }} axisLine={false} tickLine={false} width={40} />
               <Tooltip contentStyle={{ background: C.panel, border: `1px solid ${C.borderLit}`, borderRadius: 6, fontFamily: MONO, fontSize: 11, color: C.text }} />
-              <Area type="monotone" dataKey="events" stroke={C.accent} fill="url(#evtGrad)" strokeWidth={1.5} />
-              <Area type="monotone" dataKey="threats" stroke={C.red} fill="url(#threatGrad)" strokeWidth={1.5} />
-              <Line type="monotone" dataKey="predictions" stroke={C.purple} strokeWidth={1.5} strokeDasharray="4 4" dot={false} />
-            </AreaChart>
+              <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                {snapshotData.map((entry, index) => <Cell key={`${entry.metric}-${index}`} fill={entry.color} fillOpacity={0.85} />)}
+              </Bar>
+            </BarChart>
           </ResponsiveContainer>
+          <div style={{ marginTop: 8, fontSize: 10, color: C.textDim }}>
+            This panel now shows live current-state counts from the backend instead of synthetic 24h history.
+          </div>
         </Panel>
 
         <Panel title="Mesh Health" icon="🕷" accent={C.green}>
@@ -1005,14 +1015,20 @@ function OverviewTab({ mesh, predictions, incidents, timeSeries, landscape }) {
       {/* Threat Landscape Radar */}
       <Panel title="Strategic Threat Landscape" icon="🌐" accent={C.cyan}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          <ResponsiveContainer width="100%" height={220}>
-            <RadarChart cx="50%" cy="50%" outerRadius="70%" data={landscape}>
-              <PolarGrid stroke={C.border} />
-              <PolarAngleAxis dataKey="vector" tick={{ fill: C.textSoft, fontSize: 9 }} />
-              <PolarRadiusAxis tick={false} domain={[0, 100]} axisLine={false} />
-              <Radar name="Risk" dataKey="risk" stroke={C.red} fill={C.red} fillOpacity={0.12} strokeWidth={2} />
-            </RadarChart>
-          </ResponsiveContainer>
+          {landscape.length > 0 ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <RadarChart cx="50%" cy="50%" outerRadius="70%" data={landscape}>
+                <PolarGrid stroke={C.border} />
+                <PolarAngleAxis dataKey="vector" tick={{ fill: C.textSoft, fontSize: 9 }} />
+                <PolarRadiusAxis tick={false} domain={[0, 100]} axisLine={false} />
+                <Radar name="Risk" dataKey="risk" stroke={C.red} fill={C.red} fillOpacity={0.12} strokeWidth={2} />
+              </RadarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 220, color: C.textDim, fontSize: 11 }}>
+              Threat landscape will populate once the predictor ingests real signals.
+            </div>
+          )}
           <div style={{ display: "flex", flexDirection: "column", gap: 6, justifyContent: "center" }}>
             {landscape.map(l => (
               <div key={l.vector} style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1033,47 +1049,44 @@ function OverviewTab({ mesh, predictions, incidents, timeSeries, landscape }) {
 
 // ─── PREDICTOR TAB ─────────────────────────────────────────────────────────
 
-function PredictorTab({ predictions, layerActivity }) {
+function PredictorTab({ predictions, predictorStatus }) {
+  const categoryData = Object.entries(predictorStatus.active_predictions.by_category || {}).map(([name, count]) => ({
+    name: humanizeMetricKey(name),
+    count,
+  }));
+
   return (
     <div style={{ display: "grid", gap: 16 }}>
       {/* Prediction Engine Status */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <Panel title="Prediction Layer Activity" icon="⚡" accent={C.purple}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {layerActivity.map(l => (
-              <div key={l.layer}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                  <span style={{ fontSize: 11, color: C.text }}>{l.layer}</span>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <span style={{ fontSize: 10, fontFamily: MONO, color: C.textSoft }}>{l.signals} signals</span>
-                    <span style={{ fontSize: 10, fontFamily: MONO, color: l.confidence > 0.8 ? C.green : l.confidence > 0.6 ? C.amber : C.textSoft }}>
-                      {(l.confidence * 100).toFixed(0)}% avg conf
-                    </span>
-                  </div>
-                </div>
-                <ProgressBar value={l.signals} max={80} color={l.confidence > 0.8 ? C.green : l.confidence > 0.6 ? C.accent : C.textDim} height={5} />
-              </div>
-            ))}
+        <Panel title="Predictor Engine Status" icon="⚡" accent={C.purple}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <Stat label="Events Analyzed" value={predictorStatus.statistics.events_analyzed || 0} color={C.accentBright} />
+            <Stat label="Predictions Generated" value={predictorStatus.statistics.predictions_generated || predictions.length} color={C.purple} />
+            <Stat label="Zero-Days Predicted" value={predictorStatus.statistics.zero_days_predicted || 0} color={C.red} />
+            <Stat label="Preemptive Actions" value={predictorStatus.statistics.preemptive_actions_taken || 0} color={C.amber} />
+            <Stat label="Signal Bus Depth" value={predictorStatus.signal_bus_depth || 0} color={C.cyan} />
+            <Stat label="Genomes Tracked" value={predictorStatus.behavioral_genomes_tracked || 0} color={C.green} />
           </div>
           <div style={{ marginTop: 12, padding: "8px 10px", background: C.surface, borderRadius: 6, fontSize: 10, color: C.textSoft }}>
-            <strong style={{ color: C.purple }}>5-Layer Architecture:</strong> Anomaly Fusion → Surface Drift → Entropy Analysis → Behavioral Genome → Strategic Forecast
+            <strong style={{ color: C.purple }}>Live backend status:</strong> this panel now reflects real predictor engine counters instead of simulated per-layer activity.
           </div>
         </Panel>
 
-        <Panel title="Prediction Distribution" icon="📊" accent={C.purple}>
+        <Panel title={categoryData.length ? "Prediction Category Distribution" : "Prediction Distribution"} icon="📊" accent={C.purple}>
           <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={[
+            <BarChart data={categoryData.length ? categoryData : [
               { tier: "Near Certain", count: predictions.filter(p => p.confidence_tier === "near_certain").length, color: C.red },
               { tier: "High", count: predictions.filter(p => p.confidence_tier === "high").length, color: C.amber },
               { tier: "Probable", count: predictions.filter(p => p.confidence_tier === "probable").length, color: C.accentBright },
               { tier: "Emerging", count: predictions.filter(p => p.confidence_tier === "emerging").length, color: C.cyan },
               { tier: "Speculative", count: predictions.filter(p => p.confidence_tier === "speculative").length, color: C.textDim },
             ]} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
-              <XAxis dataKey="tier" tick={{ fill: C.textSoft, fontSize: 9 }} axisLine={false} tickLine={false} />
+              <XAxis dataKey={categoryData.length ? "name" : "tier"} tick={{ fill: C.textSoft, fontSize: 9 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: C.textDim, fontSize: 9, fontFamily: MONO }} axisLine={false} tickLine={false} allowDecimals={false} />
               <Tooltip contentStyle={{ background: C.panel, border: `1px solid ${C.borderLit}`, borderRadius: 6, fontFamily: MONO, fontSize: 11, color: C.text }} />
               <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                {[C.red, C.amber, C.accentBright, C.cyan, C.textDim].map((c, i) => <Cell key={i} fill={c} fillOpacity={0.8} />)}
+                {(categoryData.length ? categoryData.map(() => C.purple) : [C.red, C.amber, C.accentBright, C.cyan, C.textDim]).map((c, i) => <Cell key={i} fill={c} fillOpacity={0.8} />)}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -1125,22 +1138,17 @@ function PredictorTab({ predictions, layerActivity }) {
 
 // ─── MESH TAB ─────────────────────────────────────────────────────────────
 
-function MeshTab({ mesh }) {
-  const nodeTypes = [
-    { type: "Hub Nodes", icon: "◆", count: 4, color: C.accent, desc: "Network • Endpoint • Identity • Data" },
-    { type: "Radial Nodes", icon: "●", count: 12, color: C.cyan, desc: "Signature • Behavioral • Heuristic • ML" },
-    { type: "Spiral Nodes", icon: "◐", count: 8, color: C.purple, desc: "Cross-domain correlation engines" },
-  ];
-
-  const circuits = [
-    "Ingestion Pipeline", "Detection Pipeline", "Correlation Pipeline",
-    "Response Pipeline", "Intelligence Pipeline", "Audit Pipeline",
+function MeshTab({ mesh, iocs }) {
+  const topologyCards = [
+    { type: "Total Nodes", icon: "◆", count: mesh.topology.total_nodes, color: C.accent, desc: "Registered detection nodes" },
+    { type: "Active Nodes", icon: "●", count: mesh.topology.active_nodes, color: C.green, desc: "Nodes currently online" },
+    { type: "Degraded Nodes", icon: "◐", count: mesh.topology.degraded_nodes, color: mesh.topology.degraded_nodes > 0 ? C.amber : C.cyan, desc: "Nodes requiring operator attention" },
   ];
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
-        {nodeTypes.map(n => (
+        {topologyCards.map(n => (
           <Panel key={n.type} title={n.type} icon={n.icon} accent={n.color}>
             <div style={{ textAlign: "center", marginBottom: 8 }}>
               <div style={{ fontSize: 36, fontWeight: 800, fontFamily: MONO, color: n.color }}>{n.count}</div>
@@ -1154,15 +1162,23 @@ function MeshTab({ mesh }) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <Panel title="Tamerian Circuits" icon="⚡" accent={C.green}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            {circuits.map(c => (
-              <div key={c} style={{ padding: "8px 10px", background: C.surface, borderRadius: 6, display: "flex", alignItems: "center", gap: 8 }}>
-                <PulseDot color={C.green} size={6} />
-                <span style={{ fontSize: 11, color: C.text }}>{c}</span>
+            {[
+              { name: "Healthy Circuits", value: mesh.topology.healthy_circuits, color: C.green },
+              { name: "Total Circuits", value: mesh.topology.total_circuits, color: C.text },
+              { name: "Attack Chains", value: mesh.threat_posture.active_attack_chains, color: mesh.threat_posture.active_attack_chains > 0 ? C.red : C.green },
+              { name: "Mesh Heals", value: mesh.statistics.mesh_heals, color: C.cyan },
+            ].map(c => (
+              <div key={c.name} style={{ padding: "8px 10px", background: C.surface, borderRadius: 6, display: "flex", alignItems: "center", gap: 8 }}>
+                <PulseDot color={c.color} size={6} />
+                <span style={{ fontSize: 11, color: C.text }}>{c.name}</span>
+                <span style={{ marginLeft: "auto", fontSize: 11, color: c.color, fontFamily: MONO }}>{c.value}</span>
               </div>
             ))}
           </div>
           <div style={{ marginTop: 12, padding: 8, background: C.greenGlow, borderRadius: 6, border: `1px solid ${C.green}15` }}>
-            <div style={{ fontSize: 10, color: C.green }}>All circuits healthy — 3x redundant pathways, integrity verified</div>
+            <div style={{ fontSize: 10, color: C.green }}>
+              Circuit health now reflects live mesh counters rather than hard-coded topology claims.
+            </div>
           </div>
         </Panel>
 
@@ -1176,17 +1192,20 @@ function MeshTab({ mesh }) {
         </Panel>
       </div>
 
-      <Panel title="Detection Signatures" icon="📝" accent={C.accent}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
-          {["SIG-NET: Port Scan", "SIG-NET: C2 Domain", "SIG-NET: DNS Tunnel", "SIG-NET: Beaconing",
-            "SIG-END: Suspicious Proc", "SIG-END: Ransomware", "SIG-END: Cred Dump", "SIG-END: Persistence",
-            "SIG-IDN: Brute Force", "SIG-IDN: Impossible Travel", "SIG-IDN: Priv Escalation", "SIG-DAT: Data Anomaly"
-          ].map(sig => (
-            <div key={sig} style={{ padding: "6px 8px", background: C.surface, borderRadius: 4, fontSize: 10, fontFamily: MONO, color: C.textSoft, display: "flex", alignItems: "center", gap: 4 }}>
-              <span style={{ color: C.green }}>●</span> {sig}
-            </div>
-          ))}
-        </div>
+      <Panel title="Active IOC Indicators" icon="📝" accent={C.accent}>
+        {iocs.length > 0 ? (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
+            {iocs.slice(0, 12).map((ioc, index) => (
+              <div key={`${ioc.type}-${ioc.value}-${index}`} style={{ padding: "6px 8px", background: C.surface, borderRadius: 4, fontSize: 10, fontFamily: MONO, color: C.textSoft, display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ color: C.green }}>●</span> {ioc.type}: {String(ioc.value).slice(0, 48)}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize: 10, color: C.textDim }}>
+            No live IOC rows are currently available from the mesh backend.
+          </div>
+        )}
       </Panel>
     </div>
   );
@@ -1194,16 +1213,35 @@ function MeshTab({ mesh }) {
 
 // ─── INCIDENTS TAB ─────────────────────────────────────────────────────────
 
-function IncidentsTab({ incidents }) {
+function IncidentsTab({ incidents, onRefresh }) {
   const [selectedId, setSelectedId] = useState(null);
   const [panel, setPanel] = useState(null); // "investigate" | "approve" | "timeline"
-  const [actionStatuses, setActionStatuses] = useState({}); // { "ACT-xxx": "approved"|"rejected" }
+  const [detailById, setDetailById] = useState({});
   const [analystNotes, setAnalystNotes] = useState({});
-  const [statusOverrides, setStatusOverrides] = useState({});
-  const [severityOverrides, setSeverityOverrides] = useState({});
   const [toasts, setToasts] = useState([]);
+  const [busyActionId, setBusyActionId] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
-  const selected = incidents.find(i => i.incident_id === selectedId);
+  const selected = detailById[selectedId] || incidents.find(i => i.incident_id === selectedId);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    let cancelled = false;
+    setDetailLoading(true);
+    qcGet(`/api/incidents/${selectedId}`)
+      .then((data) => {
+        if (!cancelled) setDetailById((prev) => ({ ...prev, [selectedId]: adaptIncidentDetail(data.data || {}) }));
+      })
+      .catch((err) => {
+        if (!cancelled) addToast(`Failed to load incident detail: ${err.message}`, C.red);
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId]);
 
   const addToast = (msg, color = C.green) => {
     const id = Date.now();
@@ -1211,32 +1249,67 @@ function IncidentsTab({ incidents }) {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
   };
 
-  const handleApprove = (actId) => {
-    setActionStatuses(prev => ({ ...prev, [actId]: "approved" }));
-    addToast(`✓ Action ${actId} approved — executing`, C.green);
-  };
-  const handleReject = (actId) => {
-    setActionStatuses(prev => ({ ...prev, [actId]: "rejected" }));
-    addToast(`✗ Action ${actId} rejected`, C.amber);
-  };
-  const handleApproveAll = (actions) => {
-    const updates = {};
-    actions.forEach(a => { if (!actionStatuses[a.id]) updates[a.id] = "approved"; });
-    setActionStatuses(prev => ({ ...prev, ...updates }));
-    addToast(`✓ ${Object.keys(updates).length} actions batch-approved — executing`, C.green);
-  };
-  const handleEscalate = (incId) => {
-    setSeverityOverrides(prev => ({ ...prev, [incId]: "CRITICAL" }));
-    addToast(`▲ ${incId} escalated to CRITICAL`, C.red);
-  };
-  const handleStatusChange = (incId, newStatus) => {
-    setStatusOverrides(prev => ({ ...prev, [incId]: newStatus }));
-    addToast(`◈ ${incId} status → ${newStatus}`, C.cyan);
+  const refreshIncidents = async () => {
+    await onRefresh?.();
+    if (selectedId) {
+      const data = await qcGet(`/api/incidents/${selectedId}`);
+      setDetailById((prev) => ({ ...prev, [selectedId]: adaptIncidentDetail(data.data || {}) }));
+    }
   };
 
-  const getEffectiveSeverity = (inc) => severityOverrides[inc.incident_id] || inc.severity;
-  const getEffectiveStatus = (inc) => statusOverrides[inc.incident_id] || inc.status;
-  const getPendingCount = (inc) => inc.pending_actions.filter(a => !actionStatuses[a.id]).length;
+  const handleApprove = async (actId) => {
+    if (!selectedId) return;
+    setBusyActionId(actId);
+    try {
+      await qcPost(`/api/incidents/${selectedId}/approve/${actId}`, {});
+      addToast(`✓ Action ${actId} approved`, C.green);
+      await refreshIncidents();
+    } catch (err) {
+      addToast(`Approve failed: ${err.message}`, C.red);
+    } finally {
+      setBusyActionId(null);
+    }
+  };
+
+  const handleReject = async (actId) => {
+    if (!selectedId) return;
+    setBusyActionId(actId);
+    try {
+      await qcPost(`/api/incidents/${selectedId}/deny/${actId}`, { reason: "Denied from dashboard action panel" });
+      addToast(`✗ Action ${actId} denied`, C.amber);
+      await refreshIncidents();
+    } catch (err) {
+      addToast(`Deny failed: ${err.message}`, C.red);
+    } finally {
+      setBusyActionId(null);
+    }
+  };
+
+  const handleApproveAll = async (actions) => {
+    const pending = actions.filter((action) => action.status === "pending");
+    if (!selectedId || pending.length === 0) return;
+    setBusyActionId("approve-all");
+    try {
+      await Promise.all(pending.map((action) => qcPost(`/api/incidents/${selectedId}/approve/${action.id}`, {})));
+      addToast(`✓ ${pending.length} actions approved`, C.green);
+      await refreshIncidents();
+    } catch (err) {
+      addToast(`Batch approve failed: ${err.message}`, C.red);
+    } finally {
+      setBusyActionId(null);
+    }
+  };
+
+  const handleEscalate = (incId) => {
+    addToast(`Severity escalation for ${incId} is not exposed by the backend API yet.`, C.amber);
+  };
+  const handleStatusChange = (incId, newStatus) => {
+    addToast(`Status change to ${newStatus} for ${incId} is not exposed by the backend API yet.`, C.amber);
+  };
+
+  const getEffectiveSeverity = (inc) => inc.severity;
+  const getEffectiveStatus = (inc) => inc.status;
+  const getPendingCount = (inc) => (inc.pending_actions || []).filter(a => a.status === "pending").length;
 
   const riskColor = { low: C.green, medium: C.amber, high: C.red };
   const typeColor = { detection: C.red, analysis: C.cyan, containment: C.amber, evidence: C.purple, escalation: C.magenta, enrichment: C.accentBright };
@@ -1342,21 +1415,21 @@ function IncidentsTab({ incidents }) {
                 </div>
                 {/* Analyst Notes */}
                 <div style={{ padding: "10px 12px", background: C.surface, borderRadius: 6 }}>
-                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Analyst Notes</div>
+                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Session Notes</div>
                   <textarea
                     value={analystNotes[selected.incident_id] || ""}
                     onChange={e => setAnalystNotes(prev => ({ ...prev, [selected.incident_id]: e.target.value }))}
-                    placeholder="Add investigation notes, findings, next steps…"
+                    placeholder="Session-local notes for your current review context…"
                     style={{
                       width: "100%", minHeight: 70, padding: "8px 10px", background: C.panel,
                       border: `1px solid ${C.border}`, borderRadius: 4, color: C.text,
                       fontFamily: MONO, fontSize: 11, resize: "vertical", outline: "none",
                     }}
                   />
-                  <button onClick={() => addToast(`📝 Notes saved for ${selected.incident_id}`, C.green)} style={{
+                  <button onClick={() => addToast(`📝 Session note saved for ${selected.incident_id}`, C.green)} style={{
                     marginTop: 6, padding: "5px 14px", background: C.accent, color: "#fff",
                     border: "none", borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: "pointer",
-                  }}>Save Notes</button>
+                  }}>Save Session Note</button>
                 </div>
               </div>
               {/* Right col — IOCs + quick actions */}
@@ -1387,8 +1460,8 @@ function IncidentsTab({ incidents }) {
                     <button onClick={() => handleEscalate(selected.incident_id)} style={{ padding: "6px 10px", background: C.redDim, border: `1px solid ${C.red}40`, borderRadius: 4, fontSize: 10, fontWeight: 600, color: C.red, cursor: "pointer", textAlign: "left" }}>
                       ▲ Escalate Severity
                     </button>
-                    <button onClick={() => { handleStatusChange(selected.incident_id, "resolved"); addToast(`✓ ${selected.incident_id} marked resolved`, C.green); }} style={{ padding: "6px 10px", background: C.greenDim, border: `1px solid ${C.green}40`, borderRadius: 4, fontSize: 10, fontWeight: 600, color: C.green, cursor: "pointer", textAlign: "left" }}>
-                      ✓ Mark Resolved
+                    <button onClick={() => handleStatusChange(selected.incident_id, "resolved")} style={{ padding: "6px 10px", background: C.greenDim, border: `1px solid ${C.green}40`, borderRadius: 4, fontSize: 10, fontWeight: 600, color: C.green, cursor: "pointer", textAlign: "left" }}>
+                      ✓ Request Resolve Status
                     </button>
                   </div>
                 </div>
@@ -1409,21 +1482,22 @@ function IncidentsTab({ incidents }) {
                 <div style={{ fontSize: 10, color: C.textSoft }}>{getPendingCount(selected)} of {selected.pending_actions.length} actions awaiting approval</div>
               </div>
               {getPendingCount(selected) > 0 && (
-                <button onClick={() => handleApproveAll(selected.pending_actions)} style={{
+                <button onClick={() => handleApproveAll(selected.pending_actions)} disabled={busyActionId === "approve-all"} style={{
                   padding: "6px 16px", background: C.green, color: "#fff", border: "none",
                   borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer",
-                }}>✓ Approve All Remaining</button>
+                  opacity: busyActionId === "approve-all" ? 0.6 : 1,
+                }}>{busyActionId === "approve-all" ? "Approving..." : "✓ Approve All Remaining"}</button>
               )}
             </div>
 
             <div style={{ display: "grid", gap: 6 }}>
               {selected.pending_actions.map(act => {
-                const st = actionStatuses[act.id];
+                const st = act.status;
                 return (
                   <div key={act.id} style={{
                     padding: "12px 14px", background: C.surface, borderRadius: 6,
-                    border: `1px solid ${st === "approved" ? C.green + "40" : st === "rejected" ? C.red + "40" : C.border}`,
-                    opacity: st ? 0.7 : 1, transition: "all 0.3s ease",
+                    border: `1px solid ${st === "completed" ? C.green + "40" : st === "denied" ? C.red + "40" : C.border}`,
+                    opacity: st !== "pending" ? 0.75 : 1, transition: "all 0.3s ease",
                   }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                       <div style={{ flex: 1 }}>
@@ -1432,24 +1506,26 @@ function IncidentsTab({ incidents }) {
                           <Badge color={C.cyan}>{act.type}</Badge>
                           <Badge color={riskColor[act.risk]}>{act.risk} risk</Badge>
                           <span style={{ fontSize: 9, color: C.textDim, fontFamily: MONO }}>
-                            {act.id} · by {act.requested_by} · {new Date(act.requested_at).toLocaleTimeString()}
+                            {act.id} · by {act.requested_by} {act.requested_at ? `· ${new Date(act.requested_at).toLocaleTimeString()}` : ""}
                           </span>
                         </div>
                       </div>
                       <div style={{ display: "flex", gap: 6, marginLeft: 12 }}>
-                        {st === "approved" ? (
-                          <Badge color={C.green}>✓ APPROVED — EXECUTING</Badge>
-                        ) : st === "rejected" ? (
-                          <Badge color={C.red}>✗ REJECTED</Badge>
+                        {st === "completed" ? (
+                          <Badge color={C.green}>✓ COMPLETED</Badge>
+                        ) : st === "denied" ? (
+                          <Badge color={C.red}>✗ DENIED</Badge>
                         ) : (
                           <>
-                            <button onClick={() => handleApprove(act.id)} style={{
+                            <button onClick={() => handleApprove(act.id)} disabled={busyActionId === act.id} style={{
                               padding: "5px 14px", background: C.green, color: "#fff", border: "none",
                               borderRadius: 4, fontSize: 10, fontWeight: 700, cursor: "pointer",
-                            }}>✓ Approve</button>
-                            <button onClick={() => handleReject(act.id)} style={{
+                              opacity: busyActionId === act.id ? 0.6 : 1,
+                            }}>{busyActionId === act.id ? "..." : "✓ Approve"}</button>
+                            <button onClick={() => handleReject(act.id)} disabled={busyActionId === act.id} style={{
                               padding: "5px 14px", background: "transparent", color: C.red,
                               border: `1px solid ${C.red}50`, borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: "pointer",
+                              opacity: busyActionId === act.id ? 0.6 : 1,
                             }}>✗ Reject</button>
                           </>
                         )}
@@ -2386,9 +2462,257 @@ const DEVOPS_WORKFLOWS = [
 // ─── QC OS v4.2.1 — API Layer (shared by all QC tabs) ────────────────────
 
 const QC_API = "https://queencalifia-cyberai.onrender.com";
-const qcH = (ak,apiKey) => { const h = {"Content-Type":"application/json"}; if (apiKey) h["X-QC-API-Key"]=apiKey; if (ak) h["X-QC-Admin-Key"]=ak; return h; };
+const loadStoredDashboardAuth = () => {
+  try {
+    return {
+      apiKey: window.sessionStorage?.getItem?.("qc_api_key") || "",
+      adminKey: window.sessionStorage?.getItem?.("qc_admin_key") || "",
+    };
+  } catch {
+    return { apiKey: "", adminKey: "" };
+  }
+};
+const saveStoredDashboardAuth = ({ apiKey = "", adminKey = "" }) => {
+  try {
+    if (apiKey) window.sessionStorage?.setItem?.("qc_api_key", apiKey);
+    else window.sessionStorage?.removeItem?.("qc_api_key");
+    if (adminKey) window.sessionStorage?.setItem?.("qc_admin_key", adminKey);
+    else window.sessionStorage?.removeItem?.("qc_admin_key");
+  } catch {}
+};
+const qcH = (ak,apiKey) => {
+  const stored = loadStoredDashboardAuth();
+  const resolvedApiKey = apiKey || stored.apiKey;
+  const resolvedAdminKey = ak || stored.adminKey;
+  const h = {"Content-Type":"application/json"};
+  if (resolvedApiKey) h["X-QC-API-Key"]=resolvedApiKey;
+  if (resolvedAdminKey) h["X-QC-Admin-Key"]=resolvedAdminKey;
+  return h;
+};
 const qcGet = async (p,ak,apiKey) => { const r=await fetch(`${QC_API}${p}`,{headers:qcH(ak,apiKey)}); const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(d.error||`HTTP ${r.status}`); return d; };
 const qcPost = async (p,b,ak,apiKey) => { const r=await fetch(`${QC_API}${p}`,{method:"POST",headers:qcH(ak,apiKey),body:JSON.stringify(b||{})}); const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(d.error||`HTTP ${r.status}`); return d; };
+
+const EMPTY_MESH = {
+  mesh_id: "unavailable",
+  topology: { total_nodes: 0, active_nodes: 0, degraded_nodes: 0, healthy_circuits: 0, total_circuits: 0 },
+  threat_posture: { active_attack_chains: 0, iocs_active: 0, ips_blocked: 0, blocked_domains: 0 },
+  statistics: { events_ingested: 0, threats_detected: 0, attacks_correlated: 0, mesh_heals: 0, false_positives_suppressed: 0 },
+  uptime_hours: 0,
+  timestamp: null,
+};
+
+const EMPTY_PREDICTOR_STATUS = {
+  statistics: { events_analyzed: 0, predictions_generated: 0, zero_days_predicted: 0, preemptive_actions_taken: 0, accuracy_rate: 0 },
+  active_predictions: { total: 0, by_confidence_tier: {}, by_category: {} },
+  prediction_accuracy: { confirmed: 0, false_positive: 0, inconclusive: 0, pending: 0 },
+  threat_landscape_vectors: 0,
+  behavioral_genomes_tracked: 0,
+  entropy_streams_monitored: 0,
+  signal_bus_depth: 0,
+  timestamp: null,
+};
+
+const EMPTY_TELEMETRY = {
+  events_processed: 0,
+  signals_generated: 0,
+  fingerprints: { total: 0, known_bad: 0, recent_matches: null },
+  dns: { sources_profiled: 0, queries_per_min: null, dga_detected: null, tunneling_alerts: null, exfil_indicators: null },
+  beacons: [],
+  kernel: { syscall_profiles: 0, injection_alerts: 0, credential_alerts: 0, ransomware_patterns: 0, file_io_assets: 0, memory_anomalies: 0, privilege_transitions: 0 },
+  graph: { total_nodes: 0, total_edges: 0, high_risk_assets: [], lateral_movements: 0 },
+  feedback: { total_entries: 0, active_adjustments: 0, suppression_rules: 0, tuned_weights: 0, layer_accuracy: {} },
+  sensors: [],
+  blind_spots: 0,
+  overall_health: "unknown",
+  timestamp: null,
+};
+
+const humanizeMetricKey = (value) =>
+  String(value || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (m) => m.toUpperCase());
+
+const clampPercent = (value) => Math.max(0, Math.min(100, Number(value) || 0));
+
+const adaptMesh = (payload) => payload?.data || EMPTY_MESH;
+
+const adaptPredictions = (payload) =>
+  Array.isArray(payload?.predictions) ? payload.predictions : [];
+
+const adaptPredictorStatus = (payload) => ({
+  ...EMPTY_PREDICTOR_STATUS,
+  ...(payload || {}),
+  statistics: { ...EMPTY_PREDICTOR_STATUS.statistics, ...(payload?.statistics || {}) },
+  active_predictions: {
+    ...EMPTY_PREDICTOR_STATUS.active_predictions,
+    ...(payload?.active_predictions || {}),
+    by_confidence_tier: payload?.active_predictions?.by_confidence_tier || {},
+    by_category: payload?.active_predictions?.by_category || {},
+  },
+  prediction_accuracy: { ...EMPTY_PREDICTOR_STATUS.prediction_accuracy, ...(payload?.prediction_accuracy || {}) },
+});
+
+const adaptLandscape = (payload) =>
+  Object.entries(payload?.vectors || {}).map(([key, value]) => ({
+    vector: humanizeMetricKey(key),
+    risk: clampPercent((Number(value?.risk_multiplier || 0) / 2) * 100),
+    trend: value?.trend || "stable",
+  }));
+
+const createOverviewSnapshot = ({ mesh, predictions, incidents, predictorStatus, telemetry }) => [
+  { metric: "Events", value: mesh.statistics.events_ingested || 0, color: C.accent },
+  { metric: "Threats", value: mesh.statistics.threats_detected || 0, color: C.red },
+  { metric: "Predictions", value: predictorStatus.active_predictions.total || predictions.length, color: C.purple },
+  { metric: "Incidents", value: incidents.length, color: C.amber },
+  { metric: "Signals", value: telemetry.signals_generated || 0, color: C.cyan },
+];
+
+const actionRisk = (actionType) => {
+  if (["restore_from_backup", "patch_system", "kill_process"].includes(actionType)) return "high";
+  if (["disable_account", "isolate_host", "quarantine_file"].includes(actionType)) return "medium";
+  return "low";
+};
+
+const mapIncidentAction = (action) => ({
+  id: action.action_id,
+  action: humanizeMetricKey(action.action_type),
+  type: action.action_type,
+  risk: actionRisk(action.action_type),
+  status: action.status,
+  requested_by: action.approved_by || "system",
+  requested_at: action.executed_at || action.completed_at || null,
+  raw: action,
+});
+
+const adaptIncidentSummary = (incident) => ({
+  incident_id: incident.incident_id,
+  title: incident.title,
+  description: incident.description,
+  severity: incident.severity,
+  category: incident.category,
+  status: incident.status,
+  affected_assets: Array.isArray(incident.affected_assets) ? incident.affected_assets.length : Number(incident.affected_assets || 0),
+  affected_asset_list: Array.isArray(incident.affected_assets) ? incident.affected_assets : [],
+  evidence: Array.from({ length: Number(incident.evidence_collected || 0) }, (_, index) => ({ id: `${incident.incident_id}-e-${index}` })),
+  evidence_collected: Number(incident.evidence_collected || 0),
+  mitre_techniques: incident.mitre_techniques || [],
+  pending_actions: (incident.response_actions || []).filter((action) => action.status === "pending").map(mapIncidentAction),
+  response_actions: (incident.response_actions || []).map(mapIncidentAction),
+  timeline: Array.from({ length: Number(incident.timeline_entries || 0) }, (_, index) => ({ time: incident.updated_at || incident.created_at, event: "Timeline event recorded", type: "analysis", actor: "system", id: `${incident.incident_id}-t-${index}` })),
+  lead_analyst: incident.assigned_to || "unassigned",
+  playbook: humanizeMetricKey(incident.category),
+  created_at: incident.created_at,
+  containment_time_min: incident.containment_time_min || 0,
+  iocs: [],
+});
+
+const adaptIncidentDetail = (incident) => {
+  const base = adaptIncidentSummary(incident);
+  return {
+    ...base,
+    affected_assets: Array.isArray(incident.affected_assets) ? incident.affected_assets.length : base.affected_assets,
+    affected_asset_list: Array.isArray(incident.affected_assets) ? incident.affected_assets : base.affected_asset_list,
+    evidence: (incident.evidence || []).map((item) => ({
+      id: item.id || item.evidence_id,
+      type: item.type || item.evidence_type,
+      desc: item.notes || item.source || item.type || item.evidence_type || "Evidence artifact",
+      size_mb: item.size_bytes ? Number(item.size_bytes) / (1024 * 1024) : 0,
+      chain_of_custody: Array.isArray(item.chain_of_custody) ? item.chain_of_custody.length : 0,
+    })),
+    timeline: (incident.timeline || []).map((entry, index) => ({
+      id: `${incident.incident_id}-timeline-${index}`,
+      time: entry.timestamp,
+      event: entry.action,
+      details: entry.details,
+      actor: entry.actor || "system",
+      type: "analysis",
+    })),
+    iocs: (incident.indicators || []).map((indicator, index) => ({
+      type: "indicator",
+      value: indicator,
+      source: "incident",
+      first_seen: incident.created_at,
+      id: `${incident.incident_id}-ioc-${index}`,
+    })),
+    pending_actions: (incident.response_actions || []).filter((action) => action.status === "pending").map(mapIncidentAction),
+    response_actions: (incident.response_actions || []).map(mapIncidentAction),
+  };
+};
+
+const adaptTelemetry = ({ status, beacons, riskMap, graph, feedback, health }) => {
+  const streams = status?.streams || {};
+  const network = streams.network_flow || {};
+  const temporal = streams.temporal_patterns || {};
+  const kernel = streams.kernel_endpoint || {};
+  const collection = streams.collection_health || {};
+  const healthSensors = Object.values(health?.sensors || {});
+
+  return {
+    ...EMPTY_TELEMETRY,
+    events_processed: status?.statistics?.events_processed || 0,
+    signals_generated: status?.statistics?.signals_generated || 0,
+    fingerprints: {
+      total: network.fingerprints_catalogued || 0,
+      known_bad: network.known_bad_fingerprints || 0,
+      recent_matches: null,
+    },
+    dns: {
+      sources_profiled: network.dns_sources_profiled || 0,
+      queries_per_min: null,
+      dga_detected: null,
+      tunneling_alerts: null,
+      exfil_indicators: null,
+    },
+    beacons: (beacons?.beacons || []).map((item) => ({ ...item, samples: item.sample_count })),
+    kernel: {
+      syscall_profiles: kernel.syscall_profiles || 0,
+      injection_alerts: 0,
+      credential_alerts: 0,
+      ransomware_patterns: 0,
+      file_io_assets: kernel.file_io_assets_tracked || 0,
+      memory_anomalies: 0,
+      privilege_transitions: kernel.privilege_transitions_logged || 0,
+    },
+    graph: {
+      total_nodes: graph?.total_nodes || 0,
+      total_edges: graph?.total_edges || 0,
+      high_risk_assets: (riskMap?.high_risk_assets || []).map((item) => ({
+        asset: item.asset,
+        risk: item.risk,
+        direct_targets: null,
+        blast_radius: null,
+      })),
+      lateral_movements: status?.statistics?.lateral_movements_detected || 0,
+    },
+    feedback: {
+      total_entries: feedback?.total_feedback_entries || 0,
+      active_adjustments: Object.keys(feedback?.threshold_adjustments || {}).length,
+      suppression_rules: (feedback?.active_suppression_rules || []).length,
+      tuned_weights: Object.keys(feedback?.signal_weights || {}).length,
+      layer_accuracy: Object.fromEntries(
+        Object.entries(feedback?.layer_accuracy || {}).map(([key, value]) => [
+          key,
+          {
+            accuracy: value.accuracy_rate || 0,
+            fp_rate: value.fp_rate || 0,
+            total: value.total || 0,
+          },
+        ])
+      ),
+    },
+    sensors: healthSensors.map((sensor) => ({
+      type: sensor.sensor_type || "sensor",
+      count: 1,
+      health: sensor.health || "unknown",
+      coverage_pct: Number(sensor.coverage_pct || collection.coverage_types || 0),
+      avg_latency_ms: Number(sensor.avg_latency_ms || 0),
+      events_per_min: Number(sensor.events_per_min || 0),
+    })),
+    blind_spots: Array.isArray(health?.blind_spots) ? health.blind_spots.length : status?.statistics?.blind_spots_identified || 0,
+    overall_health: health?.overall_health || "unknown",
+    timestamp: status?.timestamp || feedback?.timestamp || graph?.timestamp || riskMap?.timestamp || null,
+  };
+};
 
 const QC_MODES = {cyber:{label:"Cyber Guardian",color:C.green},research:{label:"Research Companion",color:C.amber},lab:{label:"Quant Lab",color:C.purple}};
 const SAMPLE_HOLDINGS = [
@@ -3454,6 +3778,9 @@ export default function QueenCalifiaCommandDashboard() {
   });
   const [wizardMode, setWizardMode] = useState(false);
   const [qcAvatarState, setQcAvatarState] = useState("idle");
+  const [showAuthPanel, setShowAuthPanel] = useState(false);
+  const [authSavedAt, setAuthSavedAt] = useState(0);
+  const [authForm, setAuthForm] = useState(() => loadStoredDashboardAuth());
   const { enabled, toggle, play } = useSound();
   const prevTabRef = useRef("overview");
 
@@ -3472,13 +3799,86 @@ export default function QueenCalifiaCommandDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  const mesh = useMemo(() => generateMeshStatus(), [tick]);
-  const predictions = useMemo(() => generatePredictions(), [tick]);
-  const incidents = useMemo(() => generateIncidents(), [tick]);
-  const timeSeries = useMemo(() => generateTimeSeriesData(), [tick]);
-  const landscape = useMemo(() => generateThreatLandscape(), [tick]);
-  const layerActivity = useMemo(() => generateLayerActivity(), [tick]);
-  const telemetryData = useMemo(() => generateTelemetryData(), [tick]);
+  const [liveData, setLiveData] = useState(() => ({
+    mesh: EMPTY_MESH,
+    predictions: [],
+    predictorStatus: EMPTY_PREDICTOR_STATUS,
+    incidents: [],
+    landscape: [],
+    telemetry: EMPTY_TELEMETRY,
+    iocs: [],
+  }));
+  const [liveDataErrors, setLiveDataErrors] = useState([]);
+
+  const loadLiveData = useCallback(async () => {
+    const results = await Promise.allSettled([
+      qcGet("/api/mesh/status"),
+      qcGet("/api/v1/predictor/predictions"),
+      qcGet("/api/v1/predictor/status"),
+      qcGet("/api/v1/predictor/landscape"),
+      qcGet("/api/incidents"),
+      qcGet("/api/v1/telemetry/advanced/status"),
+      qcGet("/api/v1/telemetry/advanced/beacons"),
+      qcGet("/api/v1/telemetry/advanced/risk-map"),
+      qcGet("/api/v1/telemetry/advanced/graph"),
+      qcGet("/api/v1/telemetry/advanced/feedback"),
+      qcGet("/api/v1/telemetry/advanced/health"),
+      qcGet("/api/iocs"),
+    ]);
+
+    const errors = results
+      .filter((item) => item.status === "rejected")
+      .map((item) => item.reason?.message || "backend data unavailable");
+
+    const [
+      meshRes,
+      predictionsRes,
+      predictorStatusRes,
+      landscapeRes,
+      incidentsRes,
+      telemetryStatusRes,
+      telemetryBeaconsRes,
+      telemetryRiskMapRes,
+      telemetryGraphRes,
+      telemetryFeedbackRes,
+      telemetryHealthRes,
+      iocsRes,
+    ] = results.map((item) => (item.status === "fulfilled" ? item.value : null));
+
+    setLiveData({
+      mesh: adaptMesh(meshRes),
+      predictions: adaptPredictions(predictionsRes),
+      predictorStatus: adaptPredictorStatus(predictorStatusRes),
+      incidents: Array.isArray(incidentsRes?.data) ? incidentsRes.data.map(adaptIncidentSummary) : [],
+      landscape: adaptLandscape(landscapeRes),
+      telemetry: adaptTelemetry({
+        status: telemetryStatusRes,
+        beacons: telemetryBeaconsRes,
+        riskMap: telemetryRiskMapRes,
+        graph: telemetryGraphRes,
+        feedback: telemetryFeedbackRes,
+        health: telemetryHealthRes,
+      }),
+      iocs: Array.isArray(iocsRes?.data) ? iocsRes.data : [],
+    });
+    setLiveDataErrors(errors);
+  }, []);
+
+  useEffect(() => {
+    loadLiveData();
+  }, [tick, loadLiveData]);
+
+  const mesh = liveData.mesh;
+  const predictions = liveData.predictions;
+  const incidents = liveData.incidents;
+  const landscape = liveData.landscape;
+  const predictorStatus = liveData.predictorStatus;
+  const telemetryData = liveData.telemetry;
+  const iocs = liveData.iocs;
+  const snapshotData = useMemo(
+    () => createOverviewSnapshot({ mesh, predictions, incidents, predictorStatus, telemetry: telemetryData }),
+    [mesh, predictions, incidents, predictorStatus, telemetryData]
+  );
 
   const critCount = incidents.filter(i => i.severity === "CRITICAL").length;
   const highPreds = predictions.filter(p => p.confidence > 0.7).length;
@@ -3512,18 +3912,33 @@ export default function QueenCalifiaCommandDashboard() {
     setWizardMode(false);
   }, [play]);
 
+  const authConfigured = Boolean(authForm.apiKey);
+  const saveAuth = useCallback(() => {
+    saveStoredDashboardAuth(authForm);
+    setAuthSavedAt(Date.now());
+    play("button_click");
+  }, [authForm, play]);
+
+  const clearAuth = useCallback(() => {
+    const cleared = { apiKey: "", adminKey: "" };
+    setAuthForm(cleared);
+    saveStoredDashboardAuth(cleared);
+    setAuthSavedAt(Date.now());
+    play("button_click");
+  }, [play]);
+
   const renderActiveTab = () => {
-    if (activeTab === "overview") return <OverviewTab mesh={mesh} predictions={predictions} incidents={incidents} timeSeries={timeSeries} landscape={landscape} />;
-    if (activeTab === "predictor" && expertMode) return <PredictorTab predictions={predictions} layerActivity={layerActivity} />;
+    if (activeTab === "overview") return <OverviewTab mesh={mesh} predictions={predictions} incidents={incidents} snapshotData={snapshotData} landscape={landscape} />;
+    if (activeTab === "predictor" && expertMode) return <PredictorTab predictions={predictions} predictorStatus={predictorStatus} />;
     if (activeTab === "telemetry" && expertMode) return <TelemetryTab telemetry={telemetryData} />;
-    if (activeTab === "mesh" && expertMode) return <MeshTab mesh={mesh} />;
-    if (activeTab === "incidents") return <IncidentsTab incidents={incidents} />;
+    if (activeTab === "mesh" && expertMode) return <MeshTab mesh={mesh} iocs={iocs} />;
+    if (activeTab === "incidents") return <IncidentsTab incidents={incidents} onRefresh={loadLiveData} />;
     if (activeTab === "vulns") return <VulnsTab onAvatarStateChange={setQcAvatarState} onSound={play} />;
     if (activeTab === "qc" && expertMode) return <QCConsoleTab />;
     if (activeTab === "research" && expertMode) return <ResearchLabTab />;
     if (activeTab === "identity" && expertMode) return <IdentityTab />;
     if (activeTab === "devops" && expertMode) return <DevOpsTab />;
-    return <OverviewTab mesh={mesh} predictions={predictions} incidents={incidents} timeSeries={timeSeries} landscape={landscape} />;
+    return <OverviewTab mesh={mesh} predictions={predictions} incidents={incidents} snapshotData={snapshotData} landscape={landscape} />;
   };
 
   // ── Guided Wizard ──────────────────────────────────────────────
@@ -3661,6 +4076,23 @@ export default function QueenCalifiaCommandDashboard() {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button
+            onClick={() => setShowAuthPanel(v => !v)}
+            style={{
+              padding: "6px 12px",
+              background: authConfigured ? `${C.green}12` : C.surface,
+              border: `1px solid ${authConfigured ? C.green + "40" : C.border}`,
+              borderRadius: 999,
+              cursor: "pointer",
+              fontSize: 10,
+              fontWeight: 700,
+              fontFamily: MONO,
+              color: authConfigured ? C.green : C.textDim,
+              letterSpacing: "0.08em",
+            }}
+          >
+            {authConfigured ? "AUTH READY" : "SET AUTH"}
+          </button>
           {/* Wizard launcher */}
           <button onClick={openWizard} style={{
             padding: "6px 14px", background: `linear-gradient(135deg, ${C.green}20, ${C.green}08)`,
@@ -3713,6 +4145,102 @@ export default function QueenCalifiaCommandDashboard() {
         </div>
       </header>
 
+      {showAuthPanel && (
+        <div style={{
+          padding: "12px 24px",
+          borderBottom: `1px solid ${C.border}`,
+          background: `linear-gradient(180deg, ${C.panel} 0%, ${C.bg} 100%)`,
+          position: "relative",
+          zIndex: 2,
+        }}>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "1.4fr 1.4fr auto auto",
+            gap: 10,
+            alignItems: "end",
+          }}>
+            <div>
+              <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, fontFamily: MONO, letterSpacing: "0.08em" }}>X-QC-API-Key</div>
+              <input
+                type="password"
+                value={authForm.apiKey}
+                onChange={(e) => setAuthForm((prev) => ({ ...prev, apiKey: e.target.value }))}
+                placeholder="Reader / analyst / admin API key"
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  background: C.surface,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 8,
+                  color: C.text,
+                  fontFamily: MONO,
+                  fontSize: 12,
+                  outline: "none",
+                }}
+              />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, fontFamily: MONO, letterSpacing: "0.08em" }}>X-QC-Admin-Key</div>
+              <input
+                type="password"
+                value={authForm.adminKey}
+                onChange={(e) => setAuthForm((prev) => ({ ...prev, adminKey: e.target.value }))}
+                placeholder="Only needed for admin-only actions"
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  background: C.surface,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 8,
+                  color: C.text,
+                  fontFamily: MONO,
+                  fontSize: 12,
+                  outline: "none",
+                }}
+              />
+            </div>
+            <button
+              onClick={saveAuth}
+              style={{
+                padding: "10px 14px",
+                background: `${C.green}15`,
+                border: `1px solid ${C.green}50`,
+                borderRadius: 8,
+                color: C.green,
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: "pointer",
+                fontFamily: FONT,
+              }}
+            >
+              Save Keys
+            </button>
+            <button
+              onClick={clearAuth}
+              style={{
+                padding: "10px 14px",
+                background: C.surface,
+                border: `1px solid ${C.border}`,
+                borderRadius: 8,
+                color: C.textSoft,
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: "pointer",
+                fontFamily: FONT,
+              }}
+            >
+              Clear
+            </button>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, marginTop: 8, fontSize: 10, color: C.textDim }}>
+            <span>Production auth is now explicit. Save a real API key here to unlock protected backend routes across the dashboard.</span>
+            <span style={{ fontFamily: MONO, color: authSavedAt ? C.green : C.textDim }}>
+              {authSavedAt ? "SESSION AUTH SAVED" : "NOT SAVED"}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Navigation */}
       <nav style={{
         display: "flex", gap: 2, padding: "0 24px",
@@ -3751,6 +4279,11 @@ export default function QueenCalifiaCommandDashboard() {
 
       {/* Content */}
       <main style={{ padding: 24, position: "relative", zIndex: 1 }}>
+        {liveDataErrors.length > 0 && (
+          <div style={{ marginBottom: 16, padding: "10px 12px", background: C.amberDim, border: `1px solid ${C.amber}35`, borderRadius: 10, fontSize: 11, color: C.text }}>
+            Live dashboard data is partially degraded. The UI is showing only backend-fed values that were available on this refresh; some engines may require auth, runtime input, or additional telemetry before their panels populate.
+          </div>
+        )}
         <AnimatePresence mode="wait">
           <motion.div
             key={`${expertMode ? "expert" : "simple"}:${activeTab}`}
@@ -3771,12 +4304,12 @@ export default function QueenCalifiaCommandDashboard() {
         background: C.panel,
       }}>
         <div style={{ fontSize: 9, color: C.textDim, fontFamily: MONO }}>
-          TAMERIAN MATERIALS / QUEENCALIFIA-CYBERAI v4.2.1 — {expertMode ? "ALL ENGINES ACTIVE" : "SCANNER MODE"}
+          TAMERIAN MATERIALS / QUEENCALIFIA-CYBERAI v4.2.1 — {expertMode ? "LIVE DATA MODE" : "SCANNER MODE"}
         </div>
         <div style={{ display: "flex", gap: 12, fontSize: 9, color: C.textDim, fontFamily: MONO }}>
-          <span>Mesh: <span style={{ color: C.green }}>ONLINE</span></span>
-          {expertMode && <span>Predictor: <span style={{ color: C.purple }}>ACTIVE</span></span>}
-          {expertMode && <span>Telemetry: <span style={{ color: C.cyan }}>6 STREAMS</span></span>}
+          <span>Mesh: <span style={{ color: mesh.topology.total_nodes > 0 ? C.green : C.amber }}>{mesh.topology.total_nodes > 0 ? "LIVE" : "NO DATA"}</span></span>
+          {expertMode && <span>Predictor: <span style={{ color: predictorStatus.timestamp ? C.purple : C.amber }}>{predictorStatus.timestamp ? "LIVE" : "IDLE"}</span></span>}
+          {expertMode && <span>Telemetry: <span style={{ color: telemetryData.timestamp ? C.cyan : C.amber }}>{telemetryData.timestamp ? "LIVE" : "NO DATA"}</span></span>}
           <span>Nodes: <span style={{ color: C.green }}>{mesh.topology.active_nodes}/{mesh.topology.total_nodes}</span></span>
         </div>
       </footer>

@@ -9,6 +9,8 @@ the security gateway root app (which imports from `core.*`) is loaded.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 from functools import wraps
 from typing import Callable
@@ -16,19 +18,55 @@ from typing import Callable
 from flask import jsonify, request
 
 
+def _hash_api_key(value: str, pepper: str) -> str:
+    return hashlib.sha256((value + pepper).encode()).hexdigest()
+
+
+def _structured_key_meta(provided: str):
+    if not provided:
+        return None
+
+    raw = (os.getenv("QC_API_KEYS_JSON", "") or "").strip()
+    if not raw:
+        file_path = (os.getenv("QC_API_KEYS_FILE", "") or "").strip()
+        if file_path and os.path.exists(file_path):
+            try:
+                with open(file_path, "r", encoding="utf-8") as handle:
+                    raw = handle.read()
+            except OSError:
+                raw = ""
+    if not raw:
+        return None
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+    pepper = os.getenv("QC_API_KEY_PEPPER", "")
+    provided_hash = _hash_api_key(provided, pepper)
+    for item in data.get("keys", []) if isinstance(data, dict) else []:
+        if item.get("key_hash") == provided_hash and not bool(item.get("revoked", False)):
+            return item
+    return None
+
+
 def require_api_key(fn: Callable) -> Callable:
-    """If QC_API_KEY is set, require X-QC-API-Key. Bypassed by QC_NO_AUTH=1."""
+    """Require either the structured gateway key model or QC_API_KEY fallback."""
 
     @wraps(fn)
     def wrapper(*args, **kwargs):
         if os.getenv("QC_NO_AUTH", "0") == "1":
             return fn(*args, **kwargs)
 
+        provided = request.headers.get("X-QC-API-Key", "")
+        if _structured_key_meta(provided):
+            return fn(*args, **kwargs)
+
         expected = os.getenv("QC_API_KEY")
         if not expected:
             return fn(*args, **kwargs)
 
-        provided = request.headers.get("X-QC-API-Key", "")
         if provided != expected:
             return jsonify({"error": "unauthorized"}), 401
 
@@ -38,11 +76,16 @@ def require_api_key(fn: Callable) -> Callable:
 
 
 def require_admin(fn: Callable) -> Callable:
-    """If QC_ADMIN_KEY is set, require X-QC-Admin-Key. Bypassed by QC_NO_AUTH=1."""
+    """Require admin permission via structured keys or QC_ADMIN_KEY fallback."""
 
     @wraps(fn)
     def wrapper(*args, **kwargs):
         if os.getenv("QC_NO_AUTH", "0") == "1":
+            return fn(*args, **kwargs)
+
+        provided_api_key = request.headers.get("X-QC-API-Key", "")
+        meta = _structured_key_meta(provided_api_key)
+        if meta and "admin" in list(meta.get("permissions", [])):
             return fn(*args, **kwargs)
 
         admin_key = os.getenv("QC_ADMIN_KEY")
