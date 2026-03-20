@@ -352,6 +352,54 @@ class TestOneClick:
         assert "risk_level" in result
         assert "recommendation" in result
 
+    def test_one_click_exposes_remediation_action_details(self, engine, monkeypatch):
+        class _FakeScanResult:
+            def to_dict(self):
+                return {
+                    "scan_id": "scan-1",
+                    "total_hosts_alive": 1,
+                    "total_findings": 1,
+                    "critical_findings": 0,
+                    "high_findings": 1,
+                    "overall_risk": 6.4,
+                    "quantum_risk_summary": "none",
+                    "hosts": [
+                        {
+                            "ip": "127.0.0.1",
+                            "findings": [
+                                {
+                                    "finding_id": "F-1",
+                                    "title": "Missing Security Header: HSTS",
+                                    "severity": "HIGH",
+                                    "category": "web_security",
+                                    "remediation": "Add Strict-Transport-Security header",
+                                }
+                            ],
+                        }
+                    ],
+                }
+
+        class _FakeScanner:
+            def __init__(self, config):
+                self.config = config
+
+            def scan(self, target, scan_type="full"):
+                return _FakeScanResult()
+
+        monkeypatch.setattr("engines.live_scanner.LiveScanner", _FakeScanner)
+
+        result = engine.one_click_scan_and_fix(
+            target="127.0.0.1",
+            scan_type="quick",
+            auto_approve=False,
+        )
+
+        remediation = result["phases"]["remediation"]
+        assert remediation["total_actions"] >= 1
+        assert len(remediation["priority_actions"]) >= 1
+        assert remediation["priority_actions"][0]["title"]
+        assert remediation["priority_actions"][0]["affected_asset"] == "127.0.0.1"
+
 
 # ─── Data Model Tests ────────────────────────────────────────────────────────
 

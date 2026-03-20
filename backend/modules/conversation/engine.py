@@ -160,6 +160,10 @@ def _detect_intent(message, mode):
     low = message.lower().strip()
     if any(g in low for g in ["hello", "hi", "hey", "good morning", "good evening"]):
         return "greeting"
+    if any(p in low for p in ["what exactly can you do", "what can you do", "your capabilities", "capabilities", "how can you help"]):
+        return "capabilities"
+    if any(p in low for p in ["what do you mean", "clarify", "be more specific", "what does that mean"]):
+        return "clarify"
     if "who are you" in low or "what are you" in low:
         return "identity"
     if "what do you remember" in low or "what do you know about me" in low:
@@ -191,12 +195,46 @@ def _local_reply(message, mode, memories, recent_turns):
     intent = _detect_intent(message, mode)
     focus = _focus(message)
     snippet = _mem_snippet(memories)
+    external_ready = bool(LLM_URL)
 
     if intent == "greeting":
         base = f"I am {name}. I am present, sovereign, and listening."
         if snippet:
             return f"{base} I still remember {snippet}. What shall we focus on?"
         return f"{base} Tell me your name, your goal, or the system you want to understand."
+
+    if intent == "capabilities":
+        if mode == "research":
+            scope = (
+                "I can pull market snapshots, compare macro context, analyze portfolios, run scenario framing, "
+                "and structure research questions around trusted data feeds."
+            )
+        elif mode == "lab":
+            scope = (
+                "I can frame quant experiments, compare signal ideas, discuss regime detection, portfolio optimization, "
+                "risk budgeting, and paper-trading workflows."
+            )
+        else:
+            scope = (
+                "I can run authorized vulnerability workflows, explain findings, generate remediation plans, inspect telemetry, "
+                "review incidents, and help turn security goals into concrete operational steps."
+            )
+
+        honesty = (
+            "Right now my conversation layer is backed by an external model."
+            if external_ready else
+            "Right now my conversation layer is running on the local symbolic core, so I am strongest at grounded workflow guidance and system reasoning rather than rich open-ended dialogue."
+        )
+        return f"{scope} {honesty} Give me a concrete task and I will answer directly or route you to the right live function."
+
+    if intent == "clarify":
+        if mode == "research":
+            example = "For example: analyze NVDA exposure, compare BTC and gold this week, or explain the latest FRED macro signal in plain English."
+        elif mode == "lab":
+            example = "For example: design a signal test, compare allocation methods, or explain a quant model step-by-step."
+        else:
+            example = "For example: run a safe localhost scan, explain a finding, harden a service, or tell you exactly which tab and key to use."
+        return f"I mean I work best when the request is concrete and testable rather than abstract. {example}"
 
     if intent == "identity":
         return (
@@ -265,10 +303,10 @@ def _local_reply(message, mode, memories, recent_turns):
         if prev_focus != focus:
             continuity = f" I also see continuity from your earlier theme around {prev_focus}."
 
-    r = f"I hear you clearly: this is about {focus}. My best move is to turn that into a concrete objective, then test it in a tight loop.{continuity}"
+    r = f"The current topic is {focus}. My best move is to turn that into a concrete objective and then test it in a tight loop.{continuity}"
     if snippet:
         r += f" Keeping your context: {snippet}."
-    return r + " Give me the next layer of detail, and I will move with you."
+    return r + " Tell me the exact outcome you want, and I will make the next step concrete."
 
 
 # ═══════════════════════════════════════════════════════════════

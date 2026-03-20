@@ -1283,11 +1283,30 @@ class EvolutionEngine:
         if all_findings:
             plan = remediator.generate_plan(all_findings, target_host=target)
             plan_dict = plan.to_dict() if hasattr(plan, "to_dict") else plan
+            priority_actions = []
+            for idx, action in enumerate(plan_dict.get("actions", [])):
+                priority_actions.append({
+                    "priority": idx + 1,
+                    "action_id": action.get("action_id"),
+                    "vuln_id": action.get("finding_id") or action.get("action_id"),
+                    "cve_id": "",
+                    "title": action.get("title") or f"Remediation action {idx + 1}",
+                    "severity": str(action.get("risk_level", "low")).upper(),
+                    "cvss_score": None,
+                    "affected_asset": plan_dict.get("target_host") or target,
+                    "remediation": action.get("description") or " ; ".join(action.get("commands", [])[:2]),
+                    "category": action.get("category", "other"),
+                    "commands": action.get("commands", []),
+                    "rollback_commands": action.get("rollback_commands", []),
+                })
 
             report["phases"]["remediation"] = {
                 "plan_id": plan_dict.get("plan_id"),
                 "total_actions": plan_dict.get("total_actions", 0),
+                "target_host": plan_dict.get("target_host") or target,
                 "categories": {},
+                "actions": plan_dict.get("actions", []),
+                "priority_actions": priority_actions,
             }
 
             # Categorize actions

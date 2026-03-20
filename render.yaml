@@ -75,6 +75,14 @@ services:
         sync: false
       - key: QC_MEMORY_EXPORT_TOKEN
         sync: false
+      - key: QC_LLM_URL
+        sync: false
+      - key: QC_LLM_API_KEY
+        sync: false
+      - key: QC_LLM_MODEL
+        sync: false
+      - key: QC_LLM_MAX_TOKENS
+        value: "2048"
       - key: FRED_API_KEY
         sync: false
       - key: NASDAQ_API_KEY

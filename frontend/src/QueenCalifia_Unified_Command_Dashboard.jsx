@@ -1797,7 +1797,7 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
   const fetchRemediation = useCallback(async () => {
     try {
       const r = await apiFetch("/api/vulns/remediation");
-      setRemediation(r?.data || null);
+      setRemediation(normalizeRemediationPlan(r?.data || null, target));
     } catch (e) {
       const msg = String(e?.message || e || "");
       if (isLikelyAuthFailure(msg)) {
@@ -1807,7 +1807,7 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
       setError(msg || "Unable to load remediation plan.");
       setRemediation(null);
     }
-  }, [apiFetch]);
+  }, [apiFetch, target]);
 
   const computedAvatarState = useMemo(() => {
     const phase = String(oneClickPhase || "").toLowerCase();
@@ -1891,9 +1891,14 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
       onAvatarStateChange?.("staff_raised");
       ocLog("🛠️ Executing auto-remediation...", "#f59e0b");
       setOneClickResult(result);
-      try {
-        await fetchRemediation();
-      } catch {}
+      const workflowPlan = normalizeRemediationPlan(result?.phases?.remediation || null, result?.target || "127.0.0.1");
+      if (workflowPlan?.priority_actions?.length) {
+        setRemediation(workflowPlan);
+      } else {
+        try {
+          await fetchRemediation();
+        } catch {}
+      }
       setOneClickPhase("done");
       ocLog("✅ All done — one-click workflow completed.", "#10b981");
       onSound?.((scan.critical || 0) > 0 ? "threat_alert" : "scan_complete");
@@ -2378,6 +2383,53 @@ const qcPost = async (p,b,ak,apiKey) => {
   } catch (err) {
     throw qcRequestError(err);
   }
+};
+
+const normalizeRemediationPlan = (plan, targetFallback = "") => {
+  if (!plan) return null;
+  if (Array.isArray(plan.priority_actions)) {
+    return {
+      ...plan,
+      total_vulnerabilities: Number(plan.total_vulnerabilities ?? plan.total_actions ?? plan.priority_actions.length ?? 0),
+      summary: plan.summary || {
+        critical: plan.priority_actions.filter((a) => a.severity === "CRITICAL").length,
+        high: plan.priority_actions.filter((a) => a.severity === "HIGH").length,
+        medium: plan.priority_actions.filter((a) => a.severity === "MEDIUM").length,
+        low: plan.priority_actions.filter((a) => a.severity === "LOW").length,
+      },
+    };
+  }
+
+  const actions = Array.isArray(plan.actions) ? plan.actions : [];
+  const priority_actions = actions.map((action, index) => ({
+    priority: index + 1,
+    action_id: action.action_id,
+    vuln_id: action.finding_id || action.action_id || `action-${index + 1}`,
+    cve_id: action.cve_id || "",
+    title: action.title || `Remediation action ${index + 1}`,
+    severity: String(action.risk_level || action.severity || "low").toUpperCase(),
+    cvss_score: action.cvss_score ?? null,
+    affected_asset: plan.target_host || targetFallback || action.affected_asset || "",
+    remediation: action.description || action.remediation || (Array.isArray(action.commands) ? action.commands.slice(0, 2).join(" ; ") : ""),
+    category: action.category || "other",
+    commands: Array.isArray(action.commands) ? action.commands : [],
+    rollback_commands: Array.isArray(action.rollback_commands) ? action.rollback_commands : [],
+  }));
+
+  return {
+    plan_id: plan.plan_id || `derived-${Date.now()}`,
+    generated_at: plan.generated_at || new Date().toISOString(),
+    total_vulnerabilities: Number(plan.total_vulnerabilities ?? plan.total_actions ?? priority_actions.length),
+    total_actions: Number(plan.total_actions ?? priority_actions.length),
+    target_host: plan.target_host || targetFallback || "",
+    summary: {
+      critical: priority_actions.filter((a) => a.severity === "CRITICAL").length,
+      high: priority_actions.filter((a) => a.severity === "HIGH").length,
+      medium: priority_actions.filter((a) => a.severity === "MEDIUM").length,
+      low: priority_actions.filter((a) => a.severity === "LOW").length,
+    },
+    priority_actions,
+  };
 };
 
 const EMPTY_MESH = {
