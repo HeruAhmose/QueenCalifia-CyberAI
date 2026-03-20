@@ -4,6 +4,8 @@ import json
 import sys
 import types
 
+from api.gateway import APIKeyStore
+
 
 def _auth_headers() -> dict[str, str]:
     return {
@@ -51,3 +53,22 @@ def test_async_scan_queue_failure_returns_503_without_local_fallback(app_factory
     body = rv.get_json() or {}
     assert rv.status_code == 503
     assert body.get("error") == "celery_unavailable"
+
+
+def test_gateway_bootstraps_legacy_env_keys_in_production(tmp_path, monkeypatch):
+    monkeypatch.setenv("QC_PRODUCTION", "1")
+    monkeypatch.setenv("QC_API_KEY_PEPPER", "pepper-test")
+    monkeypatch.setenv("QC_API_KEY", "legacy-api")
+    monkeypatch.setenv("QC_ADMIN_KEY", "legacy-admin")
+    monkeypatch.delenv("QC_API_KEYS_JSON", raising=False)
+    monkeypatch.delenv("QC_API_KEYS_FILE", raising=False)
+
+    store = APIKeyStore(str(tmp_path / "keys.json"), pepper="pepper-test")
+
+    api_meta = store.validate("legacy-api")
+    admin_meta = store.validate("legacy-admin")
+
+    assert api_meta is not None
+    assert admin_meta is not None
+    assert "execute" in api_meta["permissions"]
+    assert "admin" in admin_meta["permissions"]

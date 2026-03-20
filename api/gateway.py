@@ -603,6 +603,9 @@ class APIKeyStore:
                 self._load_data(json.load(f))
             return
 
+        if self._load_legacy_env_keys():
+            return
+
         # Production-safe default: refuse to start without keys.
         if os.environ.get("QC_PRODUCTION") == "1" and os.environ.get("QC_ALLOW_INSECURE_BOOTSTRAP", "0") != "1":
             raise RuntimeError(
@@ -619,6 +622,36 @@ class APIKeyStore:
         logger.warning("   ADMIN  = %s", admin)
         logger.warning("   ANALYST= %s", analyst)
         logger.warning("   READER = %s", reader)
+
+    def _load_legacy_env_keys(self) -> bool:
+        """Support legacy QC_API_KEY/QC_ADMIN_KEY env bootstrap."""
+        api_key = (os.environ.get("QC_API_KEY", "") or "").strip()
+        admin_key = (os.environ.get("QC_ADMIN_KEY", "") or "").strip()
+        if not api_key and not admin_key:
+            return False
+
+        with self._lock:
+            self._by_hash.clear()
+            if api_key:
+                self._by_hash[self._hash_key(api_key)] = {
+                    "role": "analyst",
+                    "permissions": ["read", "write", "execute"],
+                    "rate_limit": 120,
+                    "created_at": _utcnow(),
+                    "description": "legacy QC_API_KEY",
+                    "revoked": False,
+                }
+            if admin_key:
+                self._by_hash[self._hash_key(admin_key)] = {
+                    "role": "admin",
+                    "permissions": ["read", "write", "execute", "admin"],
+                    "rate_limit": 240,
+                    "created_at": _utcnow(),
+                    "description": "legacy QC_ADMIN_KEY",
+                    "revoked": False,
+                }
+        logger.info("Loaded legacy environment API keys into gateway store")
+        return True
 
     def _load_data(self, data: Dict[str, Any]) -> None:
         keys = data.get("keys") if isinstance(data, dict) else None
