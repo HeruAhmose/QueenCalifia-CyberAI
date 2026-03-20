@@ -3,7 +3,7 @@ services:
     name: queen-califia-cyberai
     runtime: docker
     dockerfilePath: backend/Dockerfile
-    dockerCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
+    dockerCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120
     disk:
       name: qc-data
       mountPath: /var/data
@@ -53,6 +53,10 @@ services:
         value: "1"
       - key: QC_REQUIRE_REDIS
         value: "1"
+      - key: QC_DETECTION_THREADS
+        value: "2"
+      - key: QC_SCAN_THREADS
+        value: "8"
       - key: QC_PQ_BACKEND
         sync: false
       - key: QC_ALLOW_SIMULATED_PQ
@@ -77,12 +81,16 @@ services:
         sync: false
       - key: QC_LLM_URL
         sync: false
+      - key: QC_LLM_PROVIDER
+        sync: false
       - key: QC_LLM_API_KEY
         sync: false
       - key: QC_LLM_MODEL
         sync: false
       - key: QC_LLM_MAX_TOKENS
         value: "2048"
+      - key: QC_LLM_ANTHROPIC_VERSION
+        value: "2023-06-01"
       - key: FRED_API_KEY
         sync: false
       - key: NASDAQ_API_KEY
@@ -95,7 +103,7 @@ services:
     name: queen-califia-cyberai-worker
     runtime: docker
     dockerfilePath: backend/Dockerfile
-    dockerCommand: celery -A celery_app.celery_app worker -l INFO --concurrency 4 -Q scans
+    dockerCommand: celery -A celery_app.celery_app worker -l INFO --concurrency 1 -Q scans
     envVars:
       - key: PYTHON_VERSION
         value: "3.12"
@@ -108,6 +116,8 @@ services:
           property: connectionString
       - key: QC_USE_CELERY
         value: "1"
+      - key: QC_SCAN_THREADS
+        value: "8"
       - key: QC_DENY_PUBLIC_TARGETS
         value: "1"
       - key: QC_SCAN_ALLOWLIST

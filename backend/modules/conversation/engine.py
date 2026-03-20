@@ -2,15 +2,16 @@
 QC OS — Conversation Engine v4.2.1 (self-reliant)
 ===================================================
 Queen Califia's brain. Local symbolic core is the DEFAULT.
-External LLM is OPTIONAL via QC_LLM_URL (any OpenAI-compatible endpoint).
+External LLM is OPTIONAL via QC_LLM_URL, with native Anthropic support and
+OpenAI-compatible endpoint support.
 
-No Anthropic dependency. No external API required.
+No SDK dependency required. No external API required.
 
 FIX from v4.2.0: user turn is saved AFTER context is loaded → no duplication.
 
 Evolution path:
   Stage 1 (current): Local symbolic core with intent detection, memory, persona switching.
-  Stage 2: Plug self-hosted open-weight model (Llama/Mistral/etc) via QC_LLM_URL.
+  Stage 2: Plug self-hosted open-weight models or native Anthropic Claude.
   Stage 3: Fine-tune on domain conversations, eval failures, research notes.
   Stage 4: Specialized heads for cyber, finance, portfolio research.
 """
@@ -22,15 +23,18 @@ import time
 
 from core.database import get_db, utc_now, audit, log_event
 
-# ── Optional external LLM (any OpenAI-compatible endpoint) ────
+# ── Optional external LLM (native Anthropic or OpenAI-compatible) ────
 # Examples:
 #   Local Ollama:  http://localhost:11434/v1/chat/completions
 #   Local vLLM:    http://localhost:8000/v1/chat/completions
+#   Anthropic:     https://api.anthropic.com/v1/messages
 #   Any provider:  https://api.together.xyz/v1/chat/completions
+LLM_PROVIDER = (os.getenv("QC_LLM_PROVIDER", "auto") or "auto").strip().lower()
 LLM_URL = os.getenv("QC_LLM_URL", "")
 LLM_API_KEY = os.getenv("QC_LLM_API_KEY", "")
 LLM_MODEL = os.getenv("QC_LLM_MODEL", "local")
 LLM_MAX_TOKENS = int(os.getenv("QC_LLM_MAX_TOKENS", "2048"))
+LLM_ANTHROPIC_VERSION = os.getenv("QC_LLM_ANTHROPIC_VERSION", "2023-06-01")
 
 PERSONAS = {
     "cyber": {
@@ -195,7 +199,7 @@ def _local_reply(message, mode, memories, recent_turns):
     intent = _detect_intent(message, mode)
     focus = _focus(message)
     snippet = _mem_snippet(memories)
-    external_ready = bool(LLM_URL)
+    external_ready = bool(_resolved_llm_url())
 
     if intent == "greeting":
         base = f"I am {name}. I am present, sovereign, and listening."
@@ -313,14 +317,75 @@ def _local_reply(message, mode, memories, recent_turns):
 #  OPTIONAL EXTERNAL LLM (pluggable, not required)
 # ═══════════════════════════════════════════════════════════════
 
-def _call_external_llm(system, messages):
-    """Call any OpenAI-compatible chat endpoint. Returns (reply, tokens_in, tokens_out)."""
+def _resolved_llm_provider():
+    if LLM_PROVIDER and LLM_PROVIDER != "auto":
+        return LLM_PROVIDER
+
+    low_url = (LLM_URL or "").lower()
+    low_model = (LLM_MODEL or "").lower()
+    if "anthropic.com" in low_url or low_model.startswith("claude"):
+        return "anthropic"
+    return "openai"
+
+
+def _resolved_llm_url():
+    if LLM_URL:
+        return LLM_URL
+    if _resolved_llm_provider() == "anthropic":
+        return "https://api.anthropic.com/v1/messages"
+    return ""
+
+
+def _call_anthropic_llm(system, messages, url):
     import requests as http
+
+    headers = {
+        "Content-Type": "application/json",
+        "anthropic-version": LLM_ANTHROPIC_VERSION,
+    }
+    if LLM_API_KEY:
+        headers["x-api-key"] = LLM_API_KEY
+
+    payload = {
+        "model": LLM_MODEL,
+        "max_tokens": LLM_MAX_TOKENS,
+        "system": system,
+        "messages": [
+            {"role": m["role"], "content": m["content"]}
+            for m in messages
+            if m.get("role") in ("user", "assistant") and m.get("content")
+        ],
+    }
+    try:
+        resp = http.post(url, headers=headers, json=payload, timeout=60)
+        if resp.status_code != 200:
+            return "", 0, 0
+        data = resp.json()
+        content = data.get("content", []) or []
+        reply = "".join(block.get("text", "") for block in content if block.get("type") == "text").strip()
+        usage = data.get("usage", {}) or {}
+        return reply, usage.get("input_tokens", 0), usage.get("output_tokens", 0)
+    except Exception:
+        return "", 0, 0
+
+
+def _call_external_llm(system, messages):
+    """Call the configured external LLM. Returns (reply, tokens_in, tokens_out)."""
+    import requests as http
+
+    url = _resolved_llm_url()
+    if not url:
+        return "", 0, 0
+
+    provider = _resolved_llm_provider()
+    if provider == "anthropic":
+        return _call_anthropic_llm(system, messages, url)
+
     headers = {"Content-Type": "application/json"}
     if LLM_API_KEY:
         headers["Authorization"] = f"Bearer {LLM_API_KEY}"
     try:
-        resp = http.post(LLM_URL, headers=headers, json={
+        resp = http.post(url, headers=headers, json={
             "model": LLM_MODEL, "max_tokens": LLM_MAX_TOKENS,
             "messages": [{"role": "system", "content": system}] + messages,
         }, timeout=60)
@@ -388,7 +453,7 @@ def process_message(db_path, message, user_id, session_id, mode="cyber"):
     engine_used = "local"
     tokens_in = tokens_out = 0
 
-    if LLM_URL:
+    if _resolved_llm_url():
         persona = PERSONAS.get(mode, PERSONAS["cyber"])
         sys_prompt = persona["system"]
         if memories:
@@ -398,10 +463,10 @@ def process_message(db_path, message, user_id, session_id, mode="cyber"):
         hist.append({"role": "user", "content": message})
         reply, tokens_in, tokens_out = _call_external_llm(sys_prompt, hist)
         if reply:
-            engine_used = f"external:{LLM_MODEL}"
+            engine_used = f"{_resolved_llm_provider()}:{LLM_MODEL}"
         else:
             reply = _local_reply(message, mode, memories, recent_turns)
-            engine_used = "local (external failed)"
+            engine_used = f"local ({_resolved_llm_provider()} external failed)"
     else:
         reply = _local_reply(message, mode, memories, recent_turns)
 
