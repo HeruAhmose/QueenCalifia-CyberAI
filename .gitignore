@@ -9,6 +9,7 @@ qc_evolution.db
 keys.json
 audit.log.jsonl
 memory-backups/
+*.db
 *.db-wal
 *.db-shm
 *.sqlite3
