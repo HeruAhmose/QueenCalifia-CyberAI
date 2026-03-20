@@ -21,7 +21,7 @@ function createParticle(w, h) {
   };
 }
 
-export default function CinematicIntro({ onComplete }) {
+export default function CinematicIntro({ onComplete, onAwaken }) {
   const canvasRef = useRef(null);
   const [phase, setPhase] = useState("waiting");
   const [textVisible, setTextVisible] = useState(false);
@@ -115,12 +115,13 @@ export default function CinematicIntro({ onComplete }) {
     playSound("sovereign_awaken");
 
     if (phase === "waiting") {
+      onAwaken?.();
       setPhase("awakening");
     } else if (phase === "revealing") {
       setPhase("ready");
       setTimeout(onComplete, 600);
     }
-  }, [phase, onComplete, enabled, toggle]);
+  }, [enabled, onAwaken, onComplete, phase, toggle]);
 
   const title = "QUEEN CALIFIA";
   const subtitle = "CYBERAI — SOVEREIGN CYBERSECURITY INTELLIGENCE";
@@ -257,6 +258,39 @@ export default function CinematicIntro({ onComplete }) {
         ))}
       </div>
 
+      <div
+        style={{
+          position: "absolute",
+          top: 24,
+          right: 24,
+          zIndex: 22,
+          width: 180,
+          padding: "10px 12px",
+          borderRadius: 12,
+          border: "1px solid rgba(125,211,252,0.2)",
+          background: "linear-gradient(135deg, rgba(8,18,36,0.82), rgba(2,4,9,0.45))",
+          backdropFilter: "blur(14px)",
+          boxShadow: "0 0 30px rgba(6,182,212,0.05)",
+          pointerEvents: "none",
+        }}
+      >
+        <div style={{ color: "#4a6080", fontSize: 9, letterSpacing: "0.22em", textTransform: "uppercase", fontFamily: "'JetBrains Mono', monospace" }}>
+          Transition Matrix
+        </div>
+        <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+          {[
+            ["Phase", phase.toUpperCase()],
+            ["Telemetry", telemetryLines[telemetryIndex]],
+            ["Engine", enabled ? "Sonic Field Armed" : "Awaiting Audio Unlock"],
+          ].map(([label, value]) => (
+            <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+              <span style={{ color: "#7dd3fc", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "'JetBrains Mono', monospace" }}>{label}</span>
+              <span style={{ color: "#d4dff0", fontSize: 10, textAlign: "right", fontFamily: "'JetBrains Mono', monospace" }}>{value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <AnimatePresence>
         {phase === "waiting" && (
           <motion.div key="waiting"
@@ -371,9 +405,10 @@ export default function CinematicIntro({ onComplete }) {
                 <button onClick={(e) => { e.stopPropagation(); handleEnter(); }}
                   style={{
                     padding: "12px 32px", border: "1px solid rgba(212,175,55,0.4)", borderRadius: 8,
-                    background: "transparent", color: "#D4AF37", fontSize: 14, letterSpacing: "0.2em",
+                    background: "linear-gradient(135deg, rgba(212,175,55,0.06), rgba(125,211,252,0.04))", color: "#D4AF37", fontSize: 14, letterSpacing: "0.2em",
                     cursor: "pointer", fontFamily: "'Orbitron', sans-serif",
                     transition: "all 0.3s",
+                    boxShadow: "0 0 24px rgba(212,175,55,0.08)",
                   }}
                   onMouseOver={e => { e.target.style.background = "rgba(212,175,55,0.1)"; e.target.style.borderColor = "#D4AF37"; }}
                   onMouseOut={e => { e.target.style.background = "transparent"; e.target.style.borderColor = "rgba(212,175,55,0.4)"; }}>

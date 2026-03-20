@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Cell, PieChart, Pie } from "recharts";
 import QueenCalifiaAvatar from "./components/QueenCalifiaAvatar.jsx";
+import { useSound } from "./contexts/SoundContext.jsx";
 
 /*
  * QueenCalifia CyberAI — Unified Command Dashboard
@@ -1577,7 +1579,7 @@ function IncidentsTab({ incidents }) {
 
 // ─── VULN TAB ─────────────────────────────────────────────────────────────
 
-function VulnsTab({ onAvatarStateChange }) {
+function VulnsTab({ onAvatarStateChange, onSound }) {
   const [apiKey, setApiKey] = useState(() => localStorage.getItem("qc_api_key") || "");
   const [ack, setAck] = useState(false);
 
@@ -1893,6 +1895,7 @@ function VulnsTab({ onAvatarStateChange }) {
     setOneClickLog([]);
     setOneClickResult(null);
     setError("");
+    onSound?.("scan_start");
     ocLog("⚡ Starting one-click remediation of 127.0.0.1...", "#60a5fa");
     onAvatarStateChange?.("hex_shield");
     try {
@@ -1952,6 +1955,7 @@ function VulnsTab({ onAvatarStateChange }) {
       } catch {}
       setOneClickPhase("done");
       ocLog("✅ All done — one-click workflow completed.", "#10b981");
+      onSound?.((scan.critical || 0) > 0 ? "threat_alert" : "scan_complete");
       onAvatarStateChange?.((scan.critical || 0) > 0 ? "ascended" : "active");
     } catch (e) {
       const msg = String(e?.message || e || "");
@@ -1976,6 +1980,7 @@ function VulnsTab({ onAvatarStateChange }) {
     }
 
     setSubmitting(true);
+    onSound?.("scan_start");
     onAvatarStateChange?.("hex_shield");
     try {
       if (scanType === "web_app") {
@@ -2036,6 +2041,7 @@ function VulnsTab({ onAvatarStateChange }) {
         if (s.ready) {
           setScanResult(s.result || null);
           const critical = (s.result?.critical_count ?? s.result?.summary?.critical ?? 0) || 0;
+          onSound?.(critical > 0 ? "threat_alert" : "scan_complete");
           onAvatarStateChange?.(critical > 0 ? "ascended" : "active");
           await fetchRemediation();
           return;
@@ -2058,7 +2064,7 @@ function VulnsTab({ onAvatarStateChange }) {
     };
     tick();
     return () => { cancelled = true; };
-  }, [apiFetch, fetchRemediation, normalizeStatus, onAvatarStateChange, scanId]);
+  }, [apiFetch, fetchRemediation, normalizeStatus, onAvatarStateChange, onSound, scanId]);
 
   const [scriptFmt, setScriptFmt] = useState("bash"); // bash|powershell|ansible
 
@@ -3448,10 +3454,13 @@ export default function QueenCalifiaCommandDashboard() {
   });
   const [wizardMode, setWizardMode] = useState(false);
   const [qcAvatarState, setQcAvatarState] = useState("idle");
+  const { enabled, toggle, play } = useSound();
+  const prevTabRef = useRef("overview");
 
   const toggleExpert = () => {
     const next = !expertMode;
     setExpertMode(next);
+    play(next ? "prediction_reveal" : "button_click");
     try { window.sessionStorage?.setItem?.("qc_expert", next ? "1" : "0"); } catch {}
     // If leaving expert mode, switch to a basic tab
     if (!next && ["predictor","telemetry","mesh","qc","research","identity","devops"].includes(activeTab)) setActiveTab("overview");
@@ -3477,31 +3486,87 @@ export default function QueenCalifiaCommandDashboard() {
   const BASIC_TABS = ["overview", "vulns", "incidents"];
   const visibleNav = expertMode ? NAV_ITEMS : NAV_ITEMS.filter(n => BASIC_TABS.includes(n.id));
 
+  useEffect(() => {
+    if (prevTabRef.current !== activeTab) {
+      play("tab_switch");
+      prevTabRef.current = activeTab;
+    }
+  }, [activeTab, play]);
+
+  const openWizard = useCallback(() => {
+    play("modal_open");
+    setWizardMode(true);
+  }, [play]);
+
+  const closeWizard = useCallback(() => {
+    play("modal_close");
+    setWizardMode(false);
+  }, [play]);
+
+  const renderActiveTab = () => {
+    if (activeTab === "overview") return <OverviewTab mesh={mesh} predictions={predictions} incidents={incidents} timeSeries={timeSeries} landscape={landscape} />;
+    if (activeTab === "predictor" && expertMode) return <PredictorTab predictions={predictions} layerActivity={layerActivity} />;
+    if (activeTab === "telemetry" && expertMode) return <TelemetryTab telemetry={telemetryData} />;
+    if (activeTab === "mesh" && expertMode) return <MeshTab mesh={mesh} />;
+    if (activeTab === "incidents") return <IncidentsTab incidents={incidents} />;
+    if (activeTab === "vulns") return <VulnsTab onAvatarStateChange={setQcAvatarState} onSound={play} />;
+    if (activeTab === "qc" && expertMode) return <QCConsoleTab />;
+    if (activeTab === "research" && expertMode) return <ResearchLabTab />;
+    if (activeTab === "identity" && expertMode) return <IdentityTab />;
+    if (activeTab === "devops" && expertMode) return <DevOpsTab />;
+    return <OverviewTab mesh={mesh} predictions={predictions} incidents={incidents} timeSeries={timeSeries} landscape={landscape} />;
+  };
+
   // ── Guided Wizard ──────────────────────────────────────────────
-  if (wizardMode) return <GuidedWizard onExit={() => setWizardMode(false)} onAvatarStateChange={setQcAvatarState} />;
+  if (wizardMode) return <GuidedWizard onExit={closeWizard} onAvatarStateChange={setQcAvatarState} />;
 
   return (
     <div style={{
       minHeight: "100vh", background: C.bg, color: C.text, fontFamily: FONT,
       padding: 0, margin: 0,
+      position: "relative",
+      overflow: "hidden",
     }}>
+      <div style={{
+        position: "absolute",
+        inset: 0,
+        pointerEvents: "none",
+        background: "radial-gradient(circle at 20% 0%, rgba(6,182,212,0.07) 0%, transparent 32%), radial-gradient(circle at 80% 100%, rgba(167,139,250,0.08) 0%, transparent 28%), radial-gradient(circle at 50% 20%, rgba(37,99,235,0.06) 0%, transparent 36%)",
+        filter: "blur(8px)",
+      }} />
       {/* Global keyframe animations */}
       <style>{`
         @keyframes qcPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         @keyframes qcPulseRing { 0%, 100% { opacity: 0.4; transform: scale(1); } 50% { opacity: 0; transform: scale(1.8); } }
         @keyframes qcGlow { 0%, 100% { box-shadow: 0 0 8px ${C.accent}20; } 50% { box-shadow: 0 0 16px ${C.accent}30; } }
+        @keyframes qcFlow {
+          0% { transform: translateX(-10%) translateY(0%); opacity: 0.25; }
+          50% { transform: translateX(10%) translateY(-3%); opacity: 0.5; }
+          100% { transform: translateX(-10%) translateY(0%); opacity: 0.25; }
+        }
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: ${C.void}; }
         ::-webkit-scrollbar-thumb { background: ${C.borderLit}; border-radius: 3px; }
         * { box-sizing: border-box; }
       `}</style>
+      <div style={{
+        position: "absolute",
+        inset: "-10% 0 auto",
+        height: 260,
+        background: "linear-gradient(90deg, rgba(37,99,235,0.02), rgba(125,211,252,0.08), rgba(167,139,250,0.06), rgba(37,99,235,0.02))",
+        filter: "blur(28px)",
+        animation: "qcFlow 14s ease-in-out infinite",
+        pointerEvents: "none",
+      }} />
 
       {/* Header */}
       <header style={{
         display: "flex", justifyContent: "space-between", alignItems: "center",
         padding: "12px 24px", borderBottom: `1px solid ${C.border}`,
         background: `linear-gradient(180deg, ${C.panel} 0%, ${C.bg} 100%)`,
+        position: "relative",
+        zIndex: 2,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <QueenCalifiaAvatar
@@ -3522,7 +3587,7 @@ export default function QueenCalifiaCommandDashboard() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           {/* Wizard launcher */}
-          <button onClick={() => setWizardMode(true)} style={{
+          <button onClick={openWizard} style={{
             padding: "6px 14px", background: `linear-gradient(135deg, ${C.green}20, ${C.green}08)`,
             border: `1px solid ${C.green}50`, borderRadius: 6, cursor: "pointer",
             fontSize: 11, fontWeight: 600, color: C.green, fontFamily: FONT,
@@ -3547,6 +3612,26 @@ export default function QueenCalifiaCommandDashboard() {
           {expertMode && highPreds > 0 && (
             <Badge color={C.purple}>🔮 {highPreds} predictions</Badge>
           )}
+          <button
+            onClick={() => {
+              play("button_click");
+              toggle();
+            }}
+            style={{
+              padding: "6px 12px",
+              background: enabled ? `${C.cyan}12` : C.surface,
+              border: `1px solid ${enabled ? C.cyan + "40" : C.border}`,
+              borderRadius: 999,
+              cursor: "pointer",
+              fontSize: 10,
+              fontWeight: 700,
+              fontFamily: MONO,
+              color: enabled ? C.cyan : C.textDim,
+              letterSpacing: "0.08em",
+            }}
+          >
+            {enabled ? "AUDIO ON" : "AUDIO OFF"}
+          </button>
           <span style={{ fontSize: 10, fontFamily: MONO, color: C.textDim }}>
             {new Date().toLocaleTimeString()}
           </span>
@@ -3557,6 +3642,8 @@ export default function QueenCalifiaCommandDashboard() {
       <nav style={{
         display: "flex", gap: 2, padding: "0 24px",
         borderBottom: `1px solid ${C.border}`, background: C.panel,
+        position: "relative",
+        zIndex: 2,
       }}>
         {visibleNav.map(item => (
           <button
@@ -3588,17 +3675,18 @@ export default function QueenCalifiaCommandDashboard() {
       </nav>
 
       {/* Content */}
-      <main style={{ padding: 24 }}>
-        {activeTab === "overview" && <OverviewTab mesh={mesh} predictions={predictions} incidents={incidents} timeSeries={timeSeries} landscape={landscape} />}
-        {activeTab === "predictor" && expertMode && <PredictorTab predictions={predictions} layerActivity={layerActivity} />}
-        {activeTab === "telemetry" && expertMode && <TelemetryTab telemetry={telemetryData} />}
-        {activeTab === "mesh" && expertMode && <MeshTab mesh={mesh} />}
-        {activeTab === "incidents" && <IncidentsTab incidents={incidents} />}
-        {activeTab === "vulns" && <VulnsTab onAvatarStateChange={setQcAvatarState} />}
-        {activeTab === "qc" && expertMode && <QCConsoleTab />}
-        {activeTab === "research" && expertMode && <ResearchLabTab />}
-        {activeTab === "identity" && expertMode && <IdentityTab />}
-        {activeTab === "devops" && expertMode && <DevOpsTab />}
+      <main style={{ padding: 24, position: "relative", zIndex: 1 }}>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`${expertMode ? "expert" : "simple"}:${activeTab}`}
+            initial={{ opacity: 0, y: 10, filter: "blur(8px)" }}
+            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+            exit={{ opacity: 0, y: -8, filter: "blur(8px)" }}
+            transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+          >
+            {renderActiveTab()}
+          </motion.div>
+        </AnimatePresence>
       </main>
 
       {/* Footer */}

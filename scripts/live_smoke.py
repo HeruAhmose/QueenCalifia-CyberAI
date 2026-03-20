@@ -21,6 +21,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from dataclasses import dataclass
 from typing import Any
 from urllib import error, parse, request
@@ -124,6 +125,91 @@ def run_browser_clickthrough(dashboard_url: str) -> Check:
     return Check(name="browser_clickthrough", ok=True, detail="dashboard loaded via intro or direct landing")
 
 
+def run_async_scan_gate(api_url: str, timeout: int) -> list[Check]:
+    checks: list[Check] = []
+    status, queued = fetch_json(
+        f"{api_url}/api/vulns/scan",
+        method="POST",
+        payload={
+            "target": "127.0.0.1",
+            "scan_type": "full",
+            "mode": "async",
+            "acknowledge_authorized": True,
+        },
+        timeout=timeout,
+    )
+    scan_payload = queued.get("data") if isinstance(queued, dict) else None
+    scan_id = None
+    if isinstance(scan_payload, dict):
+        scan_id = scan_payload.get("scan_id") or scan_payload.get("scanId")
+
+    add(
+        checks,
+        "async_scan_queued",
+        status == 202 and bool(scan_id),
+        f"status={status} body={queued}",
+    )
+    if not scan_id:
+        return checks
+
+    deadline = time.monotonic() + max(timeout, 15)
+    last_payload: Any = None
+    poll_count = 0
+    not_found = False
+    while time.monotonic() < deadline:
+        poll_count += 1
+        status, last_payload = fetch_json(f"{api_url}/api/vulns/scan/{parse.quote(scan_id)}", timeout=timeout)
+        if status == 404:
+            not_found = True
+            break
+        payload = last_payload.get("data") if isinstance(last_payload, dict) else None
+        if isinstance(payload, dict) and (payload.get("ready") or payload.get("state") in {"SUCCESS", "completed"}):
+            result = payload.get("result") if isinstance(payload.get("result"), dict) else {}
+            add(
+                checks,
+                "async_scan_completed",
+                True,
+                f"polls={poll_count} payload={last_payload}",
+            )
+            add(
+                checks,
+                "async_scan_id_alignment",
+                result.get("scan_id") == scan_id,
+                f"outer={scan_id} inner={result.get('scan_id')}",
+            )
+            return checks
+        time.sleep(2)
+
+    if not_found:
+        add(
+            checks,
+            "async_scan_completed",
+            False,
+            f"scan returned 404 during polling for {scan_id}",
+        )
+        add(
+            checks,
+            "async_scan_id_alignment",
+            False,
+            f"outer={scan_id} inner=None",
+        )
+        return checks
+
+    add(
+        checks,
+        "async_scan_completed",
+        False,
+        f"scan did not reach terminal state before timeout; last={last_payload}",
+    )
+    add(
+        checks,
+        "async_scan_id_alignment",
+        False,
+        f"outer={scan_id} inner={(last_payload.get('data') or {}).get('result', {}).get('scan_id') if isinstance(last_payload, dict) and isinstance(last_payload.get('data'), dict) else None}",
+    )
+    return checks
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Smoke test a live Queen Califia deployment.")
     parser.add_argument("--dashboard-url", default=DEFAULT_DASHBOARD_URL)
@@ -132,6 +218,7 @@ def main() -> int:
     parser.add_argument("--require-fred", action="store_true", help="Fail if FRED is not configured in production.")
     parser.add_argument("--require-nasdaq", action="store_true", help="Fail if Nasdaq Data Link is not configured in production.")
     parser.add_argument("--browser", action="store_true", help="Also run a Playwright click-through of the live dashboard.")
+    parser.add_argument("--skip-async-scan", action="store_true", help="Skip the real async scan queue/completion gate.")
     args = parser.parse_args()
 
     dashboard_url = args.dashboard_url.rstrip("/")
@@ -219,6 +306,9 @@ def main() -> int:
         status == 400 and scan_guardrail.get("error") == "authorization_ack_required",
         f"status={status} body={scan_guardrail}",
     )
+
+    if not args.skip_async_scan:
+        results.extend(run_async_scan_gate(api_url, timeout=args.timeout))
 
     if args.browser:
         results.append(run_browser_clickthrough(dashboard_url))

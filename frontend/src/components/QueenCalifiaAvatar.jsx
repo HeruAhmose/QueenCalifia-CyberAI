@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useRef } from "react";
+import { useSound } from "../contexts/SoundContext.jsx";
 
 // ── Asset paths (relative to /public/qc-assets/) ──────────────────────────
 const AVATAR_PATHS = {
@@ -195,6 +196,7 @@ export default function QueenCalifiaAvatar({
 }) {
   const prevState = useRef(state);
   const [transitioning, setTransitioning] = useState(false);
+  const { play } = useSound();
 
   // ── Dev mode easter egg ──────────────────────────────────────────────────
   const [devMode, setDevMode]           = useState(false);
@@ -255,11 +257,12 @@ export default function QueenCalifiaAvatar({
   useEffect(() => {
     if (prevState.current !== activeState) {
       setTransitioning(true);
+      play("avatar_transition");
       const t = setTimeout(() => setTransitioning(false), 400);
       prevState.current = activeState;
       return () => clearTimeout(t);
     }
-  }, [activeState]);
+  }, [activeState, play]);
 
   const borderRadius = size < 150 ? size / 4 : size / 5;
 
