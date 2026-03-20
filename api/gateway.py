@@ -1695,7 +1695,30 @@ def create_security_api(
         asset_id = request.args.get("asset_id")
         if asset_id:
             asset_id = InputSanitizer.sanitize_string(asset_id, max_length=128)
-        plan = vuln_engine.generate_remediation_plan(asset_id)
+        plan = None
+
+        # Prefer the latest persisted auto-remediation plan when the caller is
+        # asking for the current one-click/exportable plan rather than an
+        # asset-specific vulnerability summary plan.
+        if not asset_id and remediator is not None:
+            try:
+                persisted = list(getattr(remediator, "plans", {}).values())
+                if persisted:
+                    latest = max(
+                        persisted,
+                        key=lambda p: (
+                            getattr(p, "created_at", "") or "",
+                            getattr(p, "executed_at", "") or "",
+                        ),
+                    )
+                    latest_dict = latest.to_dict() if hasattr(latest, "to_dict") else latest
+                    if isinstance(latest_dict, dict) and latest_dict.get("total_actions", 0):
+                        plan = latest_dict
+            except Exception:
+                logger.exception("Failed to read persisted remediation plan; falling back to vulnerability plan")
+
+        if plan is None:
+            plan = vuln_engine.generate_remediation_plan(asset_id)
         audit.log("remediation_plan_read", _safe_remote_addr(), g.user_role, 200, details={"asset_id": asset_id})
         return jsonify({"success": True, "data": plan})
 
