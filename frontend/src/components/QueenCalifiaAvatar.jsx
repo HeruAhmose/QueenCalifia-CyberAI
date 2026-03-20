@@ -70,6 +70,57 @@ const STATE_META = {
   },
 };
 
+const STATE_VISUALS = {
+  idle: {
+    frameAnimation: "qc-avatar-breathe 5.4s ease-in-out infinite",
+    auraAnimation: "qc-aura-wave 6.6s ease-in-out infinite",
+    orbitDuration: "16s",
+    latticeOpacity: 0.2,
+    sweepOpacity: 0.18,
+    beamCount: 1,
+  },
+  active: {
+    frameAnimation: "qc-avatar-scan 2.1s cubic-bezier(0.16, 1, 0.3, 1) infinite",
+    auraAnimation: "qc-aura-wave 2.6s ease-in-out infinite",
+    orbitDuration: "7s",
+    latticeOpacity: 0.34,
+    sweepOpacity: 0.42,
+    beamCount: 3,
+  },
+  ascended: {
+    frameAnimation: "qc-avatar-ascend 2.8s ease-in-out infinite",
+    auraAnimation: "qc-aura-crown 2.8s ease-in-out infinite",
+    orbitDuration: "4.4s",
+    latticeOpacity: 0.48,
+    sweepOpacity: 0.58,
+    beamCount: 4,
+  },
+  hex_shield: {
+    frameAnimation: "qc-avatar-hex 2.2s ease-in-out infinite",
+    auraAnimation: "qc-aura-shield 2.4s linear infinite",
+    orbitDuration: "5.4s",
+    latticeOpacity: 0.52,
+    sweepOpacity: 0.48,
+    beamCount: 4,
+  },
+  energy_spiral: {
+    frameAnimation: "qc-avatar-spiral 2.4s ease-in-out infinite",
+    auraAnimation: "qc-aura-wave 2.2s ease-in-out infinite",
+    orbitDuration: "4.8s",
+    latticeOpacity: 0.46,
+    sweepOpacity: 0.44,
+    beamCount: 3,
+  },
+  staff_raised: {
+    frameAnimation: "qc-avatar-command 1.9s cubic-bezier(0.16, 1, 0.3, 1) infinite",
+    auraAnimation: "qc-aura-crown 2.1s ease-in-out infinite",
+    orbitDuration: "4.2s",
+    latticeOpacity: 0.42,
+    sweepOpacity: 0.5,
+    beamCount: 5,
+  },
+};
+
 // ── Avatar image with lazy-loading + fallback ──────────────────────────────
 function AvatarImage({ state, size }) {
   const [loaded, setLoaded] = useState(false);
@@ -112,7 +163,15 @@ function AvatarImage({ state, size }) {
 }
 
 // ── Animated glow ring ─────────────────────────────────────────────────────
-function GlowRing({ accent, glow, pulse, size, isAscended }) {
+function GlowRing({ accent, glow, pulse, size, state, visuals, isAscended }) {
+  const outerAnimation = visuals?.frameAnimation || (isAscended ? "qc-ascend 2s ease-in-out infinite" : "qc-pulse 2.5s ease-in-out infinite");
+  const spinDuration = visuals?.orbitDuration || (isAscended ? "3s" : "8s");
+  const ringInset = size < 90 ? -6 : -8;
+  const spinInset = size < 90 ? -12 : -16;
+  const nodeCount = Math.max(4, visuals?.beamCount ? visuals.beamCount + 2 : 4);
+  const stateSweepOpacity = visuals?.sweepOpacity ?? 0.26;
+  const stateLatticeOpacity = visuals?.latticeOpacity ?? 0.24;
+
   return (
     <>
       <style>{`
@@ -134,45 +193,140 @@ function GlowRing({ accent, glow, pulse, size, isAscended }) {
           90%  { opacity: 1; }
           100% { top: 100%; opacity: 0; }
         }
+        @keyframes qc-avatar-breathe {
+          0%, 100% { transform: translateY(0px) scale(1); }
+          50% { transform: translateY(-2px) scale(1.02); }
+        }
+        @keyframes qc-avatar-scan {
+          0%, 100% { transform: translateY(0px) scale(1); }
+          25% { transform: translateY(-2px) scale(1.05); }
+          50% { transform: translateY(1px) scale(1.025); }
+          75% { transform: translateY(-3px) scale(1.055); }
+        }
+        @keyframes qc-avatar-ascend {
+          0%, 100% { transform: translateY(0px) scale(1.02); }
+          50% { transform: translateY(-5px) scale(1.09); }
+        }
+        @keyframes qc-avatar-hex {
+          0%, 100% { transform: scale(1) rotate(0deg); }
+          25% { transform: scale(1.04) rotate(-1deg); }
+          50% { transform: scale(1.07) rotate(0deg); }
+          75% { transform: scale(1.04) rotate(1deg); }
+        }
+        @keyframes qc-avatar-spiral {
+          0%, 100% { transform: scale(1) rotate(0deg); }
+          50% { transform: scale(1.065) rotate(2deg); }
+        }
+        @keyframes qc-avatar-command {
+          0%, 100% { transform: scale(1) translateY(0px); }
+          35% { transform: scale(1.08) translateY(-4px); }
+          70% { transform: scale(1.03) translateY(1px); }
+        }
+        @keyframes qc-aura-wave {
+          0%, 100% { opacity: 0.62; transform: scale(0.96); }
+          50% { opacity: 1; transform: scale(1.16); }
+        }
+        @keyframes qc-aura-crown {
+          0%, 100% { opacity: 0.7; transform: scale(0.94); filter: blur(10px); }
+          50% { opacity: 1; transform: scale(1.22); filter: blur(14px); }
+        }
+        @keyframes qc-aura-shield {
+          0% { transform: rotate(0deg) scale(0.98); opacity: 0.72; }
+          100% { transform: rotate(360deg) scale(1.12); opacity: 1; }
+        }
+        @keyframes qc-lattice-rotate {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes qc-sweep-orbit {
+          0% { transform: rotate(0deg); opacity: 0.18; }
+          50% { opacity: 1; }
+          100% { transform: rotate(360deg); opacity: 0.18; }
+        }
+        @keyframes qc-beam-pulse {
+          0%, 100% { opacity: 0.22; transform: scaleY(0.82); }
+          50% { opacity: 1; transform: scaleY(1.08); }
+        }
+        @keyframes qc-node-orbit {
+          0%, 100% { transform: scale(0.9); opacity: 0.5; }
+          50% { transform: scale(1.35); opacity: 1; }
+        }
         .qc-ring-outer {
-          animation: ${isAscended ? "qc-ascend 2s ease-in-out infinite" : "qc-pulse 2.5s ease-in-out infinite"};
+          animation: ${outerAnimation};
         }
         .qc-ring-spin {
-          animation: qc-rotate ${isAscended ? "3s" : "8s"} linear infinite;
+          animation: qc-rotate ${spinDuration} linear infinite;
         }
         .qc-scanline {
           animation: qc-scanline 3s linear infinite;
         }
       `}</style>
 
+      <div style={{
+        position: "absolute",
+        inset: -26,
+        borderRadius: "50%",
+        background: `radial-gradient(circle, ${pulse} 0%, transparent 68%)`,
+        filter: "blur(12px)",
+        opacity: 0.9,
+        animation: visuals?.auraAnimation || "qc-aura-wave 4.8s ease-in-out infinite",
+        pointerEvents: "none",
+      }} />
+
+      <div style={{
+        position: "absolute",
+        inset: -20,
+        borderRadius: "50%",
+        background: `repeating-conic-gradient(from 0deg, ${accent}00 0deg 18deg, ${accent}55 18deg 26deg, ${accent}00 26deg 60deg)`,
+        opacity: stateLatticeOpacity,
+        mixBlendMode: "screen",
+        animation: `qc-lattice-rotate ${spinDuration} linear infinite`,
+        pointerEvents: "none",
+      }} />
+
+      <div style={{
+        position: "absolute",
+        inset: -24,
+        borderRadius: "50%",
+        background: `conic-gradient(from 180deg, transparent 0deg, ${accent}00 52deg, ${accent}90 92deg, transparent 132deg, ${accent}00 220deg, ${accent}65 280deg, transparent 325deg, ${accent}00 360deg)`,
+        opacity: stateSweepOpacity,
+        filter: "blur(2px)",
+        animation: `qc-sweep-orbit ${spinDuration} linear infinite`,
+        pointerEvents: "none",
+      }} />
+
       {/* Outer pulse ring */}
       <div className="qc-ring-outer" style={{
-        position: "absolute", inset: -8,
+        position: "absolute", inset: ringInset,
         borderRadius: "50%",
         border: `2px solid ${accent}`,
-        boxShadow: `0 0 20px ${glow}, inset 0 0 20px ${pulse}`,
+        boxShadow: `0 0 20px ${glow}, inset 0 0 20px ${pulse}, 0 0 42px ${pulse}`,
         pointerEvents: "none",
       }} />
 
       {/* Spinning dashed ring */}
       <div className="qc-ring-spin" style={{
-        position: "absolute", inset: -16,
+        position: "absolute", inset: spinInset,
         borderRadius: "50%",
         border: `1px dashed ${accent}`,
-        opacity: 0.4,
+        opacity: state === "idle" ? 0.28 : 0.48,
         pointerEvents: "none",
       }} />
 
       {/* Corner accent dots */}
-      {[0, 90, 180, 270].map(deg => (
+      {Array.from({ length: nodeCount }, (_, idx) => Math.round((360 / nodeCount) * idx)).map((deg, idx) => (
         <div key={deg} style={{
           position: "absolute",
-          width: 6, height: 6,
+          width: state === "staff_raised" ? 7 : 6,
+          height: state === "staff_raised" ? 7 : 6,
           borderRadius: "50%",
           background: accent,
           boxShadow: `0 0 8px ${accent}`,
           top: "50%", left: "50%",
           transform: `rotate(${deg}deg) translateY(-${size / 2 + 20}px) translate(-50%, -50%)`,
+          animation: `qc-node-orbit ${Math.max(1.2, 2.4 + idx * 0.16)}s ease-in-out infinite`,
+          animationDelay: `${idx * 120}ms`,
+          opacity: 0.9,
           pointerEvents: "none",
         }} />
       ))}
@@ -252,6 +406,7 @@ export default function QueenCalifiaAvatar({
 
   const activeState = devMode ? ALL_STATES[devStateIdx] : (state || "idle");
   const meta = STATE_META[activeState] || STATE_META.idle;
+  const visuals = STATE_VISUALS[activeState] || STATE_VISUALS.idle;
   const isAscended = activeState === "ascended";
 
   useEffect(() => {
@@ -314,6 +469,7 @@ export default function QueenCalifiaAvatar({
         position: "relative",
         width: size,
         height: size,
+        animation: visuals.frameAnimation,
       }}>
         {/* Background glow */}
         <div style={{
@@ -322,7 +478,27 @@ export default function QueenCalifiaAvatar({
           borderRadius: "50%",
           pointerEvents: "none",
           transition: "background 0.6s ease",
+          animation: visuals.auraAnimation,
         }} />
+
+        {Array.from({ length: visuals.beamCount }, (_, idx) => (
+          <div key={`beam-${idx}`} style={{
+            position: "absolute",
+            top: size * 0.08,
+            bottom: size * 0.08,
+            left: `${22 + idx * (52 / Math.max(1, visuals.beamCount - 1 || 1))}%`,
+            width: Math.max(2, Math.round(size * 0.022)),
+            borderRadius: 999,
+            background: `linear-gradient(180deg, transparent, ${meta.accent}90, transparent)`,
+            boxShadow: `0 0 14px ${meta.glow}`,
+            opacity: visuals.sweepOpacity,
+            mixBlendMode: "screen",
+            transformOrigin: "center",
+            animation: `qc-beam-pulse ${1.1 + idx * 0.18}s ease-in-out infinite`,
+            animationDelay: `${idx * 120}ms`,
+            pointerEvents: "none",
+          }} />
+        ))}
 
         {/* Avatar clip frame */}
         <div style={{
@@ -339,6 +515,15 @@ export default function QueenCalifiaAvatar({
           transitionDuration: transitioning ? "0.15s" : "0.4s",
         }}>
           <AvatarImage state={activeState} size={size} />
+
+          <div style={{
+            position: "absolute",
+            inset: 0,
+            background: `linear-gradient(130deg, ${meta.accent}00 0%, ${meta.accent}18 28%, transparent 42%, transparent 100%)`,
+            opacity: visuals.sweepOpacity,
+            mixBlendMode: "screen",
+            pointerEvents: "none",
+          }} />
 
           {/* Scanline effect */}
           <div className="qc-scanline" style={{
@@ -370,6 +555,8 @@ export default function QueenCalifiaAvatar({
             glow={meta.glow}
             pulse={meta.pulse}
             size={size}
+            state={activeState}
+            visuals={visuals}
             isAscended={isAscended}
           />
         )}

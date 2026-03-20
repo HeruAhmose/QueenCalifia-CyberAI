@@ -3482,6 +3482,15 @@ export default function QueenCalifiaCommandDashboard() {
 
   const critCount = incidents.filter(i => i.severity === "CRITICAL").length;
   const highPreds = predictions.filter(p => p.confidence > 0.7).length;
+  const avatarHeaderMeta = {
+    idle: { label: "Sentinel Mode", accent: C.amber, aura: "rgba(245,158,11,0.16)" },
+    active: { label: "Defense Active", accent: C.cyan, aura: "rgba(6,182,212,0.16)" },
+    ascended: { label: "Ancestors Online", accent: "#FFE178", aura: "rgba(255,225,120,0.18)" },
+    hex_shield: { label: "Hex Shield Active", accent: C.cyan, aura: "rgba(6,182,212,0.18)" },
+    energy_spiral: { label: "Energy Spiral", accent: C.amber, aura: "rgba(245,158,11,0.18)" },
+    staff_raised: { label: "Authority Mode", accent: "#FFE178", aura: "rgba(255,225,120,0.2)" },
+  };
+  const avatarHeaderState = avatarHeaderMeta[qcAvatarState] || avatarHeaderMeta.idle;
 
   const BASIC_TABS = ["overview", "vulns", "incidents"];
   const visibleNav = expertMode ? NAV_ITEMS : NAV_ITEMS.filter(n => BASIC_TABS.includes(n.id));
@@ -3568,14 +3577,80 @@ export default function QueenCalifiaCommandDashboard() {
         position: "relative",
         zIndex: 2,
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <QueenCalifiaAvatar
-            state={qcAvatarState}
-            size={36}
-            showLabel={false}
-            showStatus={false}
-            style={{ cursor: "default" }}
-          />
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <motion.div
+            key={`header-avatar-${qcAvatarState}`}
+            initial={{ opacity: 0.72, scale: 0.92, y: 4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              padding: "8px 12px",
+              borderRadius: 16,
+              border: `1px solid ${avatarHeaderState.accent}35`,
+              background: `linear-gradient(135deg, ${avatarHeaderState.aura}, rgba(10,15,30,0.82))`,
+              boxShadow: `0 0 30px ${avatarHeaderState.accent}14`,
+            }}
+          >
+            <div
+              style={{
+                position: "relative",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                minWidth: 72,
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  inset: -10,
+                  borderRadius: "50%",
+                  background: `radial-gradient(circle, ${avatarHeaderState.aura} 0%, transparent 72%)`,
+                  filter: "blur(8px)",
+                }}
+              />
+              <QueenCalifiaAvatar
+                state={qcAvatarState}
+                size={62}
+                showLabel={false}
+                showStatus={false}
+                style={{ cursor: "default", position: "relative", zIndex: 1 }}
+              />
+            </div>
+            <div style={{ display: "grid", gap: 4 }}>
+              <div
+                style={{
+                  fontSize: 9,
+                  color: avatarHeaderState.accent,
+                  fontFamily: MONO,
+                  letterSpacing: "0.18em",
+                  textTransform: "uppercase",
+                }}
+              >
+                Avatar State
+              </div>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: C.text,
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                }}
+              >
+                {avatarHeaderState.label}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <PulseDot color={avatarHeaderState.accent} size={10} />
+                <span style={{ fontSize: 10, color: C.textSoft, fontFamily: MONO, letterSpacing: "0.08em" }}>
+                  {qcAvatarState.replaceAll("_", " ")}
+                </span>
+              </div>
+            </div>
+          </motion.div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 700, color: C.text, letterSpacing: 0.3 }}>
               QUEEN CALIFIA <span style={{ color: C.accent }}>CYBERAI</span>
