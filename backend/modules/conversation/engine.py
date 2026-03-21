@@ -170,6 +170,20 @@ def _detect_intent(message, mode, recent_turns=None):
         return "greeting"
     if any(p in low for p in ["what exactly can you do", "what can you do", "your capabilities", "capabilities", "how can you help"]):
         return "capabilities"
+    # Follow-ups after capabilities / small talk — avoid the generic "tight loop" template.
+    if any(p in low for p in ["what else", "anything else", "what more", "tell me more", "and else"]):
+        return "capabilities_followup"
+    if any(p in low for p in [
+        "what do you know",
+        "what you know",
+        "want to know what you know",
+        "wan to know what you know",
+        "wanna know what you know",
+        "tell me what you know",
+        "how much do you know",
+        "what are you aware of",
+    ]):
+        return "self_knowledge"
     if any(p in low for p in ["what do you mean", "clarify", "be more specific", "what does that mean"]):
         return "clarify"
     if any(p in low for p in [
@@ -249,6 +263,40 @@ def _local_reply(message, mode, memories, recent_turns):
             "Right now my conversation layer is running on the local symbolic core, so I am strongest at grounded workflow guidance and system reasoning rather than rich open-ended dialogue."
         )
         return f"{scope} {honesty} Give me a concrete task and I will answer directly or route you to the right live function."
+
+    if intent == "capabilities_followup":
+        if mode == "research":
+            more = (
+                "Beyond the first list: I can compare scenarios, stress-test assumptions against macro data, "
+                "and structure diligence questions — still no personalized investment advice."
+            )
+        elif mode == "lab":
+            more = (
+                "Beyond the first list: I can help design ablation tests, discuss overfitting traps, "
+                "and translate model outputs into operational checklists — paper trading only."
+            )
+        else:
+            more = (
+                "Beyond that: I can interpret scan output and remediation exports, suggest hardening checklists, "
+                "map issues to MITRE/naming you use internally, and explain how dashboard tabs (QC Console, "
+                "Vulnerability Scanner, Identity Core, telemetry) connect to the live API — still no fabricated findings."
+            )
+        return f"{more} Pick one line to go deeper on, or name a target/workflow you care about."
+
+    if intent == "self_knowledge":
+        ext = " When an external model is configured, it handles open-ended wording; the platform still enforces safety and honesty about live data."
+        if external_ready:
+            return (
+                "I know what the live platform exposes: your session keys, authorized API responses, scan queue state, "
+                "telemetry summaries, and anything stored in my memory table for you. "
+                "I do not silently know your network beyond that — I only see what you or the system sends through QC."
+                + ext
+            )
+        return (
+            "On the local symbolic core, I reliably know: conversation memory you have saved, recent chat turns, "
+            "and the product surfaces (tabs, scan workflow, keys). "
+            "I do not infer private infrastructure facts you have not supplied."
+        )
 
     if intent == "clarify":
         if mode == "research":
@@ -336,7 +384,41 @@ def _local_reply(message, mode, memories, recent_turns):
             r += f"Your context: {snippet}. "
         return r + "Give me the next layer of detail."
 
-    # General / surface / question
+    if intent.endswith("_surface"):
+        if mode == "cyber":
+            return (
+                "That sits in my cybersecurity lane. I can explain workflows, interpret findings, or route you: "
+                "use **Vulnerability Scanner** / **Quick Scan** for authorized targets, **QC Console** for chat tied to live data, "
+                "and **Identity Core** for persona and learning. What should we do first?"
+            )
+        if mode == "research":
+            return (
+                "That connects to market research mode. Open **Research & Quant** for snapshots and sources, "
+                "keep questions concrete (ticker, timeframe, risk lens). What asset or macro theme?"
+            )
+        return (
+            "That fits quant lab mode. Use **Research & Quant** / forecast tools for structured experiments; "
+            "tell me the hypothesis or constraint you care about."
+        )
+
+    if intent == "question":
+        if mode == "cyber":
+            return (
+                "I can help with authorized scanning workflow, reading remediation output, telemetry/incident context, "
+                "and how to use dashboard tabs with your API keys. Rephrase as one clear goal (for example: "
+                "“walk me through a localhost scan” or “explain this severity”)."
+            )
+        if mode == "research":
+            return (
+                "Ask for a specific research deliverable: snapshot, comparison, or risk framing — with a symbol or "
+                "macro series if relevant. I will stay within trusted-source, non-advice guardrails."
+            )
+        return (
+            "Frame one quant or scenario question (data you have, horizon, constraint). "
+            "I will answer structurally without trading instructions."
+        )
+
+    # General / fallback (avoid echoing garbled stopword-stripped "focus")
     prev_messages = [t["content"] for t in recent_turns if t["role"] == "user"]
     continuity = ""
     if len(prev_messages) >= 2:
@@ -344,7 +426,17 @@ def _local_reply(message, mode, memories, recent_turns):
         if prev_focus != focus:
             continuity = f" I also see continuity from your earlier theme around {prev_focus}."
 
-    r = f"The current topic is {focus}. My best move is to turn that into a concrete objective and then test it in a tight loop.{continuity}"
+    focus_words = focus.split()
+    junk_focus = (
+        len(focus_words) <= 3
+        and len(set(focus_words)) < len(focus_words)
+    ) or (len(focus_words) <= 2 and len(message.strip()) > 12)
+    topic_phrase = "what you raised" if junk_focus else focus
+
+    r = (
+        f"We can work with {topic_phrase} step by step: clarify the outcome, pick the smallest live action "
+        f"(dashboard tab or API call), then verify results.{continuity}"
+    )
     if snippet:
         r += f" Keeping your context: {snippet}."
     return r + " Tell me the exact outcome you want, and I will make the next step concrete."
@@ -490,7 +582,26 @@ def process_message(db_path, message, user_id, session_id, mode="cyber"):
     engine_used = "local"
     tokens_in = tokens_out = 0
 
-    if _resolved_llm_url():
+    # Keep thin meta Q&A on the symbolic core so follow-ups stay consistent even when an
+    # external model is enabled but flaky, rate-limited, or verbose.
+    _intent = _detect_intent(message, mode, recent_turns)
+    _local_first = _intent in {
+        "capabilities",
+        "capabilities_followup",
+        "self_knowledge",
+        "clarify",
+        "identity",
+        "memory_query",
+        "authorization_confirmation",
+        "context_recovery",
+        "greeting",
+        "help",
+        "learning_cycle",
+        "scan_and_learning",
+        "scan_request",
+    }
+
+    if _resolved_llm_url() and not _local_first:
         persona = PERSONAS.get(mode, PERSONAS["cyber"])
         sys_prompt = persona["system"]
         if memories:
@@ -506,6 +617,8 @@ def process_message(db_path, message, user_id, session_id, mode="cyber"):
             engine_used = f"local ({_resolved_llm_provider()} external failed)"
     else:
         reply = _local_reply(message, mode, memories, recent_turns)
+        if _resolved_llm_url() and _local_first:
+            engine_used = "local (meta-routing)"
 
     latency_ms = int((time.time() - start) * 1000)
 

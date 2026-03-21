@@ -8,6 +8,28 @@ def test_detects_capabilities_question():
     assert _detect_intent("what exactly can you do?", "cyber") == "capabilities"
 
 
+def test_detects_capabilities_followup():
+    assert _detect_intent("what else?", "cyber") == "capabilities_followup"
+
+
+def test_detects_self_knowledge_typo_wan():
+    assert _detect_intent("i wan to know what you know", "cyber") == "self_knowledge"
+
+
+def test_capabilities_followup_is_substantive():
+    reply = _local_reply("what else", "cyber", memories=[], recent_turns=[])
+    low = reply.lower()
+    assert "beyond" in low
+    assert "tight loop" not in low
+    assert "current topic is" not in low
+
+
+def test_self_knowledge_no_garbled_focus():
+    reply = _local_reply("i wan to know what you know", "cyber", memories=[], recent_turns=[])
+    assert "wan know" not in reply.lower()
+    assert "session keys" in reply.lower() or "symbolic core" in reply.lower()
+
+
 def test_detects_clarify_question():
     assert _detect_intent("what do you mean", "cyber") == "clarify"
 
