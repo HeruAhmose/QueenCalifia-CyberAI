@@ -5,9 +5,11 @@ import { SoundProvider } from "./contexts/SoundContext.jsx";
 
 const loadDashboard = () => import("./QueenCalifia_Unified_Command_Dashboard.jsx");
 const loadLegacy = () => import("./AppLegacy.jsx");
+const loadTrainingConsole = () => import("./panels/QCTrainingConsole.jsx");
 
 const QueenCalifiaUnifiedCommandDashboard = lazy(loadDashboard);
 const AppLegacy = lazy(loadLegacy);
+const QCTrainingConsole = lazy(loadTrainingConsole);
 
 function ShellLoading({ label = "Linking sovereign systems..." }) {
   return (
@@ -82,10 +84,22 @@ function ShellLoading({ label = "Linking sovereign systems..." }) {
  */
 export default function App() {
   const useLegacy = import.meta?.env?.VITE_QC_USE_LEGACY_DASHBOARD === "1";
+  const trainingConsole =
+    typeof window !== "undefined" &&
+    (new URLSearchParams(window.location.search).get("qc_training") === "1" ||
+      import.meta?.env?.VITE_QC_TRAINING_CONSOLE === "1");
   const [introComplete, setIntroComplete] = useState(false);
   const primeDashboard = useCallback(() => {
     void loadDashboard();
   }, []);
+
+  if (trainingConsole) {
+    return (
+      <Suspense fallback={<ShellLoading label="Loading training command center..." />}>
+        <QCTrainingConsole />
+      </Suspense>
+    );
+  }
 
   if (useLegacy) {
     return (

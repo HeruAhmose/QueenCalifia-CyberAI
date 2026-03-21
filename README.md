@@ -207,6 +207,19 @@ Before running batch adversarial drills (e.g. a `qc_training_accelerator.py`-sty
 
 Optional: set `QC_ADVANCED_TRAINING=1` on the server to record that the environment is designated for training drills (surfaced in readiness JSON).
 
+### Sovereign training harness (`scripts/qc_sovereign_training.py`)
+
+End-to-end QA against the **live** backend (chat, market, forecast, workflows, adversarial checks). Uses **stdlib only**; set `QC_API_KEY` so requests send **`X-QC-API-Key`** (same as the dashboard). The script also hits **`GET /api/training/readiness`** during the infrastructure phase.
+
+```bash
+# From repo root
+set QC_API_KEY=...   # PowerShell: $env:QC_API_KEY="..."
+python scripts/qc_sovereign_training.py --phase infrastructure
+python scripts/qc_sovereign_training.py --phase all
+```
+
+**Training Command Center (UI):** open the dashboard with query `?qc_training=1` or set `VITE_QC_TRAINING_CONSOLE=1` when building — loads `frontend/src/panels/QCTrainingConsole.jsx` (architecture docs + TRAINING_REPORT.json viewer). No API keys in the browser.
+
 **Do not** call Anthropic directly from the browser with a secret key — use server-side scripts or a backend proxy. Conversation meta-intents may bypass the external LLM by design; use open-ended scenarios to exercise Claude.
 
 ## Deploy
