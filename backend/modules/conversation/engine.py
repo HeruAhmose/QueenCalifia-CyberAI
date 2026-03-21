@@ -160,14 +160,25 @@ def _focus(text, max_words=10):
     return " ".join(words[:max_words]) if words else "your current situation"
 
 
-def _detect_intent(message, mode):
+def _detect_intent(message, mode, recent_turns=None):
+    recent_turns = recent_turns or []
     low = message.lower().strip()
+    assistant_history = " ".join(
+        t.get("content", "").lower() for t in recent_turns if t.get("role") == "assistant"
+    )
     if any(g in low for g in ["hello", "hi", "hey", "good morning", "good evening"]):
         return "greeting"
     if any(p in low for p in ["what exactly can you do", "what can you do", "your capabilities", "capabilities", "how can you help"]):
         return "capabilities"
     if any(p in low for p in ["what do you mean", "clarify", "be more specific", "what does that mean"]):
         return "clarify"
+    if any(p in low for p in [
+        "i have authority", "i have authorization", "i am authorized", "i'm authorized",
+        "yes i am authorized", "yes i'm authorized", "i have permission", "i am permitted",
+    ]):
+        return "authorization_confirmation"
+    if any(p in low for p in ["you forgot", "u forgot", "you forgot the context", "remember the context"]):
+        return "context_recovery"
     if "who are you" in low or "what are you" in low:
         return "identity"
     if "what do you remember" in low or "what do you know about me" in low:
@@ -180,6 +191,8 @@ def _detect_intent(message, mode):
         return "learning_cycle"
     if "scan" in low or "vulnerab" in low or "remediat" in low or "deep scan" in low:
         return "scan_request"
+    if "authorized target" in assistant_history and any(p in low for p in ["yes", "authorized", "authority", "permission"]):
+        return "authorization_confirmation"
 
     persona = PERSONAS.get(mode, PERSONAS["cyber"])
     tokens = set(_tokenize(message))
@@ -196,10 +209,16 @@ def _detect_intent(message, mode):
 def _local_reply(message, mode, memories, recent_turns):
     """Generate response using local symbolic intelligence. Zero external deps."""
     name = "Queen Califia"
-    intent = _detect_intent(message, mode)
+    intent = _detect_intent(message, mode, recent_turns)
     focus = _focus(message)
     snippet = _mem_snippet(memories)
     external_ready = bool(_resolved_llm_url())
+    user_history = [t.get("content", "").lower() for t in recent_turns if t.get("role") == "user"]
+    assistant_history = [t.get("content", "").lower() for t in recent_turns if t.get("role") == "assistant"]
+    recent_scan_context = any(
+        any(term in content for term in ["scan", "localhost", "local host", "127.0.0.1", "authorized target"])
+        for content in (user_history[-3:] + assistant_history[-3:])
+    )
 
     if intent == "greeting":
         base = f"I am {name}. I am present, sovereign, and listening."
@@ -239,6 +258,24 @@ def _local_reply(message, mode, memories, recent_turns):
         else:
             example = "For example: run a safe localhost scan, explain a finding, harden a service, or tell you exactly which tab and key to use."
         return f"I mean I work best when the request is concrete and testable rather than abstract. {example}"
+
+    if intent == "authorization_confirmation":
+        return (
+            "Understood. I cannot launch the scanner from this chat pane directly, but you are cleared to use the live workflow. "
+            "For a safe local run, set the target to `127.0.0.1`, confirm authorization in `Quick Scan` or `Vulnerability Scanner`, "
+            "then choose `Launch Scan` or `One-Click Remediate`. If you want, I can walk you through those exact clicks step by step."
+        )
+
+    if intent == "context_recovery":
+        if recent_scan_context:
+            return (
+                "I did not forget the scan context: for a safe local workflow use `127.0.0.1`. "
+                "This chat can guide and interpret, but the actual live scan runs from `Quick Scan` or `Vulnerability Scanner` after you confirm authorization. "
+                "If you want the shortest path: open `Quick Scan`, pick `This Machine`, keep `Full`, check authorization, and run it."
+            )
+        return (
+            "I am still tracking the thread. Restate the exact target or outcome you want and I will answer directly instead of abstractly."
+        )
 
     if intent == "identity":
         return (

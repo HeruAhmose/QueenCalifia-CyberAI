@@ -12,11 +12,20 @@ const SoundContext = createContext({
 });
 
 export function SoundProvider({ children }) {
-  const [enabled, setEnabled] = useState(false);
+  const [enabled, setEnabled] = useState(() => {
+    try {
+      return window.localStorage?.getItem("qc_audio_enabled") === "1";
+    } catch {
+      return false;
+    }
+  });
 
   const toggle = useCallback(() => {
     setEnabled(prev => {
       const next = !prev;
+      try {
+        window.localStorage?.setItem("qc_audio_enabled", next ? "1" : "0");
+      } catch {}
       if (next) {
         setMasterVolume(0.3);
         startAmbient();

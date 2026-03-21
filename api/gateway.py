@@ -1704,16 +1704,31 @@ def create_security_api(
             try:
                 persisted = list(getattr(remediator, "plans", {}).values())
                 if persisted:
-                    latest = max(
-                        persisted,
-                        key=lambda p: (
-                            getattr(p, "created_at", "") or "",
-                            getattr(p, "executed_at", "") or "",
-                        ),
-                    )
-                    latest_dict = latest.to_dict() if hasattr(latest, "to_dict") else latest
-                    if isinstance(latest_dict, dict) and latest_dict.get("total_actions", 0):
-                        plan = latest_dict
+
+                    def _remediation_plan_score(p):
+                        """Prefer plans with actions, then newest timestamp (ISO sortable)."""
+                        try:
+                            d = p.to_dict() if hasattr(p, "to_dict") else p
+                        except Exception:
+                            return (0, "")
+                        if not isinstance(d, dict):
+                            return (0, "")
+                        actions = d.get("actions") or []
+                        n = int(d.get("total_actions") or len(actions) or 0)
+                        ts = d.get("created_at") or d.get("executed_at") or ""
+                        return (n, ts)
+
+                    best = max(persisted, key=_remediation_plan_score)
+                    latest_dict = best.to_dict() if hasattr(best, "to_dict") else best
+                    if isinstance(latest_dict, dict):
+                        act_count = int(
+                            latest_dict.get("total_actions")
+                            or len(latest_dict.get("actions") or [])
+                            or 0
+                        )
+                        # Only override vuln_engine when we have a real auto-remediation payload.
+                        if act_count > 0:
+                            plan = latest_dict
             except Exception:
                 logger.exception("Failed to read persisted remediation plan; falling back to vulnerability plan")
 

@@ -33,6 +33,44 @@ def test_clarify_reply_gives_examples_instead_of_parroting():
     assert "what do mean" not in low
 
 
+def test_detects_authorization_confirmation():
+    assert _detect_intent("i have authority", "cyber") == "authorization_confirmation"
+
+
+def test_authorization_confirmation_routes_to_live_localhost_workflow():
+    reply = _local_reply(
+        "i have authority",
+        "cyber",
+        memories=[],
+        recent_turns=[
+            {
+                "role": "assistant",
+                "content": "To run a real vulnerability workflow, I need an authorized target. For localhost use `127.0.0.1`.",
+            }
+        ],
+    )
+    low = reply.lower()
+    assert "127.0.0.1" in low
+    assert "quick scan" in low or "vulnerability scanner" in low
+    assert "current topic is authority" not in low
+
+
+def test_context_recovery_keeps_scan_thread_direct():
+    reply = _local_reply(
+        "u forgot",
+        "cyber",
+        memories=[],
+        recent_turns=[
+            {"role": "user", "content": "run vulnerability scan on local host"},
+            {"role": "assistant", "content": "For localhost use `127.0.0.1` and confirm authorization."},
+        ],
+    )
+    low = reply.lower()
+    assert "127.0.0.1" in low
+    assert "quick scan" in low
+    assert "current topic is u forgot" not in low
+
+
 def test_provider_auto_detects_anthropic(monkeypatch):
     monkeypatch.setattr(conversation_engine, "LLM_PROVIDER", "auto")
     monkeypatch.setattr(conversation_engine, "LLM_URL", "https://api.anthropic.com/v1/messages")

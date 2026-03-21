@@ -2387,20 +2387,37 @@ const qcPost = async (p,b,ak,apiKey) => {
 
 const normalizeRemediationPlan = (plan, targetFallback = "") => {
   if (!plan) return null;
-  if (Array.isArray(plan.priority_actions)) {
+  const rawPriority = plan.priority_actions;
+  const rawActions = plan.actions;
+  const hasPriority = Array.isArray(rawPriority) && rawPriority.length > 0;
+  const hasActions = Array.isArray(rawActions) && rawActions.length > 0;
+
+  // VulnEngine returns priority_actions (may be []). AutoRemediation returns actions[] only.
+  if (hasPriority) {
+    const pa = rawPriority;
+    const sevOf = (a) => String(a?.severity ?? "").toUpperCase();
+    const summaryFromActions = {
+      critical: pa.filter((a) => sevOf(a) === "CRITICAL").length,
+      high: pa.filter((a) => sevOf(a) === "HIGH").length,
+      medium: pa.filter((a) => sevOf(a) === "MEDIUM").length,
+      low: pa.filter((a) => sevOf(a) === "LOW").length,
+    };
+    const totalVen = Math.max(
+      pa.length,
+      Number(plan.total_vulnerabilities) || 0,
+      Number(plan.total_actions) || 0
+    );
     return {
       ...plan,
-      total_vulnerabilities: Number(plan.total_vulnerabilities ?? plan.total_actions ?? plan.priority_actions.length ?? 0),
-      summary: plan.summary || {
-        critical: plan.priority_actions.filter((a) => a.severity === "CRITICAL").length,
-        high: plan.priority_actions.filter((a) => a.severity === "HIGH").length,
-        medium: plan.priority_actions.filter((a) => a.severity === "MEDIUM").length,
-        low: plan.priority_actions.filter((a) => a.severity === "LOW").length,
-      },
+      priority_actions: pa,
+      total_vulnerabilities: totalVen,
+      total_actions: Number(plan.total_actions) || pa.length,
+      // Always derive counts from rows so we never show stale zeros from the API.
+      summary: summaryFromActions,
     };
   }
 
-  const actions = Array.isArray(plan.actions) ? plan.actions : [];
+  const actions = hasActions ? rawActions : [];
   const priority_actions = actions.map((action, index) => ({
     priority: index + 1,
     action_id: action.action_id,
@@ -3387,7 +3404,7 @@ function DevOpsTab() {
 
 // ─── GUIDED WIZARD (3-step: target → scan → export) ─────────────────────────
 
-function GuidedWizard({ onExit, onAvatarStateChange }) {
+function GuidedWizard({ onExit, onAvatarStateChange, onSound }) {
   const [step, setStep] = useState(1); // 1=target, 2=scanning, 3=results
   const [target, setTarget] = useState("192.168.1.0/24");
   const [scanType, setScanType] = useState("full");
@@ -3426,6 +3443,7 @@ function GuidedWizard({ onExit, onAvatarStateChange }) {
     if (!ack) { setError("You must confirm you are authorized to scan this target."); return; }
     setScanning(true); setError(""); setStep(2); setProgress(0);
     setRemediationPlan(null);
+    onSound?.("scan_start");
 
     // Simulate progress while waiting for API
     const progressInterval = setInterval(() => {
@@ -3465,6 +3483,12 @@ function GuidedWizard({ onExit, onAvatarStateChange }) {
           if (planResp.ok) setRemediationPlan(normalizeRemediationPlan(planJson?.data || null, data?.target || target));
         } catch {}
       }
+      const critical =
+        data?.phases?.scan?.critical ??
+        data?.critical_count ??
+        data?.summary?.critical ??
+        0;
+      onSound?.(critical > 0 ? "threat_alert" : "scan_complete");
       setTimeout(() => setStep(3), 500);
     } catch (e) {
       clearInterval(progressInterval);
@@ -3784,6 +3808,7 @@ function GuidedWizard({ onExit, onAvatarStateChange }) {
                       <option value="ansible">Ansible YAML</option>
                     </select>
                     <button onClick={() => {
+                      onSound?.("button_click");
                       const ext = scriptFmt === "powershell" ? "ps1" : scriptFmt === "ansible" ? "yml" : "sh";
                       const content = remediationToScript(remediationPlan, scriptFmt);
                       const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
@@ -4046,7 +4071,7 @@ export default function QueenCalifiaCommandDashboard() {
   };
 
   // ── Guided Wizard ──────────────────────────────────────────────
-  if (wizardMode) return <GuidedWizard onExit={closeWizard} onAvatarStateChange={setQcAvatarState} />;
+  if (wizardMode) return <GuidedWizard onExit={closeWizard} onAvatarStateChange={setQcAvatarState} onSound={play} />;
 
   return (
     <div style={{
