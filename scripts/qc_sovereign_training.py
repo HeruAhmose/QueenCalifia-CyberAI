@@ -921,9 +921,17 @@ Environment:
             f"{_C.GOLD}status={status} (gateway/upstream busy — retry in a minute){_C.RESET}"
         )
     elif status == 0:
-        print(f"{_C.RED}Connection failed — is the service running?{_C.RESET}")
-        print(f"  {_C.DIM}URL: {QC_BASE_URL}{_C.RESET}")
-        print(f"  {_C.DIM}Try: QC_BASE_URL=http://localhost:5000 python scripts/qc_sovereign_training.py{_C.RESET}")
+        detail = (data or {}).get("error", "unknown network error")
+        print(f"{_C.RED}Connection failed (no HTTP response){_C.RESET}")
+        print(f"  {_C.DIM}URL: {QC_BASE_URL}/healthz{_C.RESET}")
+        print(f"  {_C.DIM}Detail: {detail}{_C.RESET}")
+        print(
+            f"  {_C.DIM}Checks: Render dashboard (service up?), Wi‑Fi/VPN/firewall, DNS. "
+            f"PowerShell: irm {QC_BASE_URL}/healthz{_C.RESET}"
+        )
+        print(
+            f"  {_C.DIM}Local backend: QC_BASE_URL=http://127.0.0.1:5000 python scripts/qc_sovereign_training.py{_C.RESET}"
+        )
         sys.exit(1)
     else:
         print(f"{_C.GOLD}status={status} — proceeding anyway{_C.RESET}")
