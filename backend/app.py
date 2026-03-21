@@ -74,11 +74,13 @@ try:
     from modules.market.routes import market_bp
     from modules.forecast.routes import forecast_bp
     from modules.identity.routes import identity_bp
+    from modules.training.routes import training_bp
 
     app.register_blueprint(conversation_bp, url_prefix="/api/chat")
     app.register_blueprint(market_bp, url_prefix="/api/market")
     app.register_blueprint(forecast_bp, url_prefix="/api/forecast")
     app.register_blueprint(identity_bp, url_prefix="/api/identity")
+    app.register_blueprint(training_bp, url_prefix="/api/training")
 except Exception:
     import traceback
     qc_mount_debug["errors"].append(traceback.format_exc())
@@ -99,7 +101,13 @@ def qc_public_config():
             "identity_core",
             "vulnerability_scanning",
             "evolution_memory",
+            "advanced_training_readiness",
         ],
+        "training": {
+            "capabilities_catalog_url": "/api/training/capabilities-catalog",
+            "readiness_url": "/api/training/readiness",
+            "readiness_auth": "Same as chat: X-QC-API-Key (or QC_NO_AUTH=1 for dev).",
+        },
         "welcome_message": (
             f"{settings.name} online. Cyber, research, quant, and identity systems are ready. "
             "Choose a mode and give me a concrete objective."
@@ -114,10 +122,12 @@ def qc_debug_mount():
     has_market_sources = any(r[0] == "/api/market/sources" for r in rules)
     has_identity_state = any(r[0] == "/api/identity/state" for r in rules)
     has_vuln_scan = any(r[0] == "/api/vulns/scan" for r in rules)
+    has_training = any(r[0].startswith("/api/training/") for r in rules)
     return {
         "has_market_sources": has_market_sources,
         "has_identity_state": has_identity_state,
         "has_vuln_scan": has_vuln_scan,
+        "has_training_api": has_training,
         "errors": app.config.get("qc_mount_debug", {}).get("errors", []),
     }, 200
 

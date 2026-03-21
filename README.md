@@ -194,6 +194,21 @@ Notes:
 - **Live smoke (production):** set `QC_PLAYWRIGHT_LIVE=1` (defaults dashboard to `https://queencalifia-cyberai.web.app` and API to `https://queencalifia-cyberai.onrender.com`), or set `QC_DASHBOARD_URL` / `QC_API_URL` explicitly. Set `QC_API_KEY` (and optional `QC_ADMIN_KEY`) so tests can fill the dashboard auth panel (`data-testid="qc-auth-*"`) and attach `X-QC-API-Key` to API checks — **never commit keys.** Use `--override-ini="addopts=-q"` when invoking `pytest -m playwright` so the default `not playwright` filter is cleared.
 - Run: `pytest tests/test_playwright_smoke.py -m playwright` (targets must respond on `/healthz` and the dashboard URL).
 
+## Advanced training module (readiness)
+
+Before running batch adversarial drills (e.g. a `qc_training_accelerator.py`-style harness), **verify QC end-to-end**:
+
+| Endpoint | Auth | Purpose |
+|----------|------|---------|
+| `GET /api/training/capabilities-catalog` | None | Stable list of ability areas + probe hints for your training UI/script |
+| `GET /api/training/readiness` | `X-QC-API-Key` (same as `/api/chat/`) | Pass/fail checks for blueprints, core routes, DB path, `QC_REDIS_URL`, LLM env, market keys, etc. |
+
+`GET /api/config` also returns `training.capabilities_catalog_url` and `training.readiness_url` for the dashboard.
+
+Optional: set `QC_ADVANCED_TRAINING=1` on the server to record that the environment is designated for training drills (surfaced in readiness JSON).
+
+**Do not** call Anthropic directly from the browser with a secret key — use server-side scripts or a backend proxy. Conversation meta-intents may bypass the external LLM by design; use open-ended scenarios to exercise Claude.
+
 ## Deploy
 
 ```bash
