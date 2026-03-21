@@ -17,11 +17,14 @@ Evolution path:
 """
 from __future__ import annotations
 
+import logging
 import os
 import re
 import time
 
 from core.database import get_db, utc_now, audit, log_event
+
+logger = logging.getLogger("queencalifia.conversation")
 
 # ── Optional external LLM (native Anthropic or OpenAI-compatible) ────
 # Examples:
@@ -684,6 +687,13 @@ def _call_external_llm(system, messages):
             "messages": [{"role": "system", "content": system}] + messages,
         }, timeout=60)
         if resp.status_code != 200:
+            logger.warning(
+                "OpenAI-compatible LLM HTTP %s url=%s model=%s body_preview=%r",
+                resp.status_code,
+                url,
+                LLM_MODEL,
+                (resp.text or "")[:400],
+            )
             return "", 0, 0
         data = resp.json()
         # OpenAI format
@@ -693,7 +703,8 @@ def _call_external_llm(system, messages):
             u = data.get("usage", {})
             return reply, u.get("prompt_tokens", 0), u.get("completion_tokens", 0)
         return "", 0, 0
-    except Exception:
+    except Exception as exc:
+        logger.warning("OpenAI-compatible LLM request failed: %s", exc)
         return "", 0, 0
 
 
