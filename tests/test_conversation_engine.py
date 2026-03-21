@@ -30,6 +30,35 @@ def test_self_knowledge_no_garbled_focus():
     assert "session keys" in reply.lower() or "symbolic core" in reply.lower()
 
 
+def test_financial_capabilities_uses_cross_intent_not_generic_cyber():
+    assert _detect_intent("cool any financial capabilities", "cyber") == "financial_cross_capabilities"
+    reply = _local_reply("cool any financial capabilities", "cyber", memories=[], recent_turns=[])
+    assert "research & quant" in reply.lower()
+    assert "external model" not in reply.lower()
+
+
+def test_common_vulnerabilities_is_education_not_scan_lecture():
+    msg = "what are some common vulnerabilities?"
+    assert _detect_intent(msg, "cyber") == "vuln_education"
+    reply = _local_reply(msg, "cyber", memories=[], recent_turns=[])
+    assert "owasp" in reply.lower()
+    assert "authorized scan" in reply.lower()
+    assert "need an authorized target" not in reply.lower()
+
+
+def test_user_frustration_apologizes():
+    reply = _local_reply("you are not making any sense", "cyber", memories=[], recent_turns=[])
+    assert "right to call that out" in reply.lower() or "call that out" in reply.lower()
+
+
+def test_vuln_followup_after_education():
+    turns = [
+        {"role": "user", "content": "what are some common vulnerabilities?"},
+        {"role": "assistant", "content": "OWASP Top 10 ..."},
+    ]
+    assert _detect_intent("OK but what is it?", "cyber", recent_turns=turns) == "vuln_education_followup"
+
+
 def test_detects_clarify_question():
     assert _detect_intent("what do you mean", "cyber") == "clarify"
 

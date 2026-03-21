@@ -160,14 +160,73 @@ def _focus(text, max_words=10):
     return " ".join(words[:max_words]) if words else "your current situation"
 
 
+def _recent_turns_blob(recent_turns, limit=8) -> str:
+    tail = recent_turns[-limit:] if recent_turns else []
+    return " ".join(t.get("content", "").lower() for t in tail)
+
+
+def _recent_vuln_education_context(recent_turns) -> bool:
+    blob = _recent_turns_blob(recent_turns)
+    return any(
+        x in blob
+        for x in [
+            "vulnerab",
+            "cve",
+            "owasp",
+            "common vuln",
+            "injection",
+            "xss",
+            "misconfig",
+            "exploit",
+        ]
+    )
+
+
 def _detect_intent(message, mode, recent_turns=None):
     recent_turns = recent_turns or []
     low = message.lower().strip()
     assistant_history = " ".join(
         t.get("content", "").lower() for t in recent_turns if t.get("role") == "assistant"
     )
+    if any(
+        p in low
+        for p in [
+            "not making sense",
+            "n't make sense",
+            "doesn't make sense",
+            "does not make sense",
+            "you are not making",
+            "you're not making",
+            "this makes no sense",
+            "that makes no sense",
+            "you misunderstood",
+            "you're wrong about",
+        ]
+    ):
+        return "user_frustration"
     if any(g in low for g in ["hello", "hi", "hey", "good morning", "good evening"]):
         return "greeting"
+    if any(p in low for p in ["no finances", "no finance", "not finance", "skip finance", "don't care about finance"]):
+        return "financial_opt_out"
+    # Before generic "capabilities" — phrases like "financial capabilities" contain the word "capabilities".
+    if mode == "cyber" and any(
+        p in low for p in ["financial", "finances", "finance", "stock", "stocks", "portfolio", "equities", "nasdaq", "fred", "macro"]
+    ):
+        if any(
+            p in low
+            for p in [
+                "capabilit",
+                "what can",
+                "can you",
+                "do you have",
+                "any financial",
+                "financial any",
+                "market data",
+                "research tab",
+                "cool any",
+            ]
+        ) or ("financial" in low and "capabilit" in low):
+            return "financial_cross_capabilities"
     if any(p in low for p in ["what exactly can you do", "what can you do", "your capabilities", "capabilities", "how can you help"]):
         return "capabilities"
     # Follow-ups after capabilities / small talk — avoid the generic "tight loop" template.
@@ -203,7 +262,52 @@ def _detect_intent(message, mode, recent_turns=None):
         if "scan" in low or "vulnerab" in low or "remediat" in low:
             return "scan_and_learning"
         return "learning_cycle"
-    if "scan" in low or "vulnerab" in low or "remediat" in low or "deep scan" in low:
+    # Educational / conceptual vuln questions — not the same as requesting a live scan.
+    _wants_live_scan = any(
+        p in low
+        for p in [
+            "run a scan",
+            "run scan",
+            "launch scan",
+            "scan my",
+            "scan this",
+            "scan our",
+            "scan the ",
+            "scan me ",
+            "start scan",
+            "queue scan",
+            "deep scan",
+        ]
+    )
+    _vuln_educational = any(
+        p in low
+        for p in [
+            "what are",
+            "what is",
+            "what's ",
+            "common vulnerabilities",
+            "common vulnerability",
+            "types of vulnerability",
+            "type of vulnerability",
+            "kinds of vulnerability",
+            "examples of vulnerability",
+            "list of vulnerability",
+            "explain vulnerability",
+            "tell me about vulnerability",
+            "most common",
+            "typical vulnerability",
+        ]
+    )
+    if (
+        ("vulnerab" in low or "cve" in low or "owasp" in low)
+        and _vuln_educational
+        and not _wants_live_scan
+    ):
+        return "vuln_education"
+    if low.endswith("?") and len(low) < 55 and _recent_vuln_education_context(recent_turns):
+        if any(p in low for p in ["what is it", "what's it", "what it is", "ok but", "okay but", "which one", "like what", "what do you mean by"]):
+            return "vuln_education_followup"
+    if "scan" in low or ("vulnerab" in low and _wants_live_scan) or "remediat" in low or "deep scan" in low:
         return "scan_request"
     if "authorized target" in assistant_history and any(p in low for p in ["yes", "authorized", "authority", "permission"]):
         return "authorization_confirmation"
@@ -239,6 +343,45 @@ def _local_reply(message, mode, memories, recent_turns):
         if snippet:
             return f"{base} I still remember {snippet}. What shall we focus on?"
         return f"{base} Tell me your name, your goal, or the system you want to understand."
+
+    if intent == "user_frustration":
+        return (
+            "You are right to call that out — I zigged when you needed a straight answer. "
+            "In **cyber mode** I should answer security questions directly, and only steer you to scans when you actually want to run one. "
+            "For **markets and macro**, open **Research & Quant** (still no personalized investment advice). "
+            "Say one sentence: e.g. “explain OWASP categories” or “walk localhost scan” — I will stay on that thread."
+        )
+
+    if intent == "financial_opt_out":
+        return (
+            "Got it — we will stay on cybersecurity and platform ops, not markets. "
+            "What do you want next: vulnerability concepts, an authorized scan workflow, or reading telemetry/incidents?"
+        )
+
+    if intent == "financial_cross_capabilities":
+        return (
+            "Even while you are in **cyber mode**, the platform has **Research & Quant**: market snapshots, trusted sources "
+            "(e.g. FRED, Nasdaq when configured), and scenario-style framing — not buy/sell advice. "
+            "Open that tab for live data; here in chat I can summarize how those pieces fit QC. "
+            "Want a one-line overview of that tab, or stay purely on security?"
+        )
+
+    if intent == "vuln_education":
+        return (
+            "A **vulnerability** is a weakness that could be exploited to hurt confidentiality, integrity, or availability. "
+            "People often group them with the **OWASP Top 10** themes: broken access control, cryptographic failures, injection, "
+            "insecure design, security misconfiguration, vulnerable/outdated components, authentication failures, "
+            "software/data integrity failures, logging/monitoring failures, and SSRF — plus classics like XSS when discussing web apps. "
+            "I can unpack any one category in plain language. "
+            "For **your** environment, only an **authorized scan** against a target you control produces real findings — I will not invent scan output."
+        )
+
+    if intent == "vuln_education_followup":
+        return (
+            "If you mean “what **is** a vulnerability” in one line: it is a flaw in design, implementation, or configuration "
+            "that an attacker could abuse. If you mean “what is **it**” referring to the OWASP list: tell me which item "
+            "(e.g. injection vs broken access control) and I will define it with a short example — still educational, not a substitute for a scan."
+        )
 
     if intent == "capabilities":
         if mode == "research":
@@ -402,6 +545,11 @@ def _local_reply(message, mode, memories, recent_turns):
         )
 
     if intent == "question":
+        if _recent_vuln_education_context(recent_turns) and mode in ("research", "lab"):
+            return (
+                "You have been asking about vulnerabilities — even in research/quant mode I can keep that thread. "
+                "Say whether you want OWASP/category definitions or how to run an **authorized** scan from **Vulnerability Scanner**."
+            )
         if mode == "cyber":
             return (
                 "I can help with authorized scanning workflow, reading remediation output, telemetry/incident context, "
@@ -423,14 +571,31 @@ def _local_reply(message, mode, memories, recent_turns):
     continuity = ""
     if len(prev_messages) >= 2:
         prev_focus = _focus(prev_messages[-2])
-        if prev_focus != focus:
+        prev_raw = (prev_messages[-2] or "").strip().lower()
+        # Skip shallow follow-ups as "themes" (e.g. "what else") — they produce confusing continuity.
+        shallow_prev = prev_raw in {"what else", "ok", "okay", "yes", "no", "thanks", "cool"} or len(prev_raw) < 10
+        if prev_focus != focus and not shallow_prev and len(prev_focus.split()) >= 2:
             continuity = f" I also see continuity from your earlier theme around {prev_focus}."
 
     focus_words = focus.split()
+    ml = message.lower()
     junk_focus = (
         len(focus_words) <= 3
         and len(set(focus_words)) < len(focus_words)
     ) or (len(focus_words) <= 2 and len(message.strip()) > 12)
+    if any(
+        p in ml
+        for p in [
+            "making sense",
+            "doesn't make",
+            "does not make",
+            "not making",
+            "no sense",
+            "no finances",
+            "not making any",
+        ]
+    ):
+        junk_focus = True
     topic_phrase = "what you raised" if junk_focus else focus
 
     r = (
@@ -599,6 +764,11 @@ def process_message(db_path, message, user_id, session_id, mode="cyber"):
         "learning_cycle",
         "scan_and_learning",
         "scan_request",
+        "user_frustration",
+        "financial_opt_out",
+        "financial_cross_capabilities",
+        "vuln_education",
+        "vuln_education_followup",
     }
 
     if _resolved_llm_url() and not _local_first:
