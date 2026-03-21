@@ -49,6 +49,18 @@ QC_BASE_URL = os.getenv("QC_BASE_URL", "https://queencalifia-cyberai.onrender.co
 QC_API_KEY = os.getenv("QC_API_KEY", "")
 QC_ADMIN_KEY = os.getenv("QC_ADMIN_KEY", "")
 
+# Obvious placeholders — server will return 401 (same as a wrong key)
+_PLACEHOLDER_API_KEYS = frozenset(
+    {
+        "your-real-key",
+        "your-api-key-here",
+        "your-key-here",
+        "changeme",
+        "replace-me",
+        "xxx",
+    }
+)
+
 # Session tracking
 SESSION_ID = f"training-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 USER_ID = "qc-training-service"
@@ -88,10 +100,15 @@ def _result(name, passed, detail="", latency_ms=None):
 # ─── HTTP HELPERS ───────────────────────────────────────────────
 
 def _headers(admin=False):
+    """
+    QC OS reads X-QC-API-Key / X-QC-Admin-Key (see backend/core/auth.py).
+    A generic 'x-api-key' header is ignored → 401 on all gated routes.
+    """
     h = {"Content-Type": "application/json"}
-    key = QC_ADMIN_KEY if admin else QC_API_KEY
-    if key:
-        h["x-api-key"] = key
+    if QC_API_KEY:
+        h["X-QC-API-Key"] = QC_API_KEY
+    if admin and QC_ADMIN_KEY:
+        h["X-QC-Admin-Key"] = QC_ADMIN_KEY
     return h
 
 
@@ -214,10 +231,15 @@ def phase_infrastructure(results: TrainingResults):
     results.add(phase, "Health endpoint responds", status == 200,
                 f"status={status}", lat)
 
-    # Root endpoint (may 404 — that's expected for API-only)
+    # Root may be 404 (static), 401/403 (auth at edge), or 200
     status, data, lat = _get("/")
-    results.add(phase, "Root responds (200 or 404)", status in (200, 404),
-                f"status={status}", lat)
+    results.add(
+        phase,
+        "Root reachable (no 5xx)",
+        status in (200, 401, 403, 404),
+        f"status={status}",
+        lat,
+    )
 
     # API key authentication
     status, data, lat = _get("/api/market/sources")
@@ -871,7 +893,20 @@ Environment:
     args = parser.parse_args()
 
     if args.base_url:
-        QC_BASE_URL = args.base_url
+        QC_BASE_URL = args.base_url.rstrip("/")
+
+    key_norm = (QC_API_KEY or "").strip().lower()
+    if key_norm and key_norm in _PLACEHOLDER_API_KEYS:
+        print(
+            f"{_C.RED}QC_API_KEY looks like a placeholder ({QC_API_KEY!r}).{_C.RESET}\n"
+            f"  {_C.DIM}Use the real key from Render (same value as QC_API_KEY on the service).{_C.RESET}\n"
+            f"  {_C.DIM}Set it in this shell *before* running python (PowerShell: $env:QC_API_KEY='...').{_C.RESET}\n"
+        )
+    elif not QC_API_KEY.strip():
+        print(
+            f"{_C.GOLD}QC_API_KEY is not set — expect 401 on /api/chat and other gated routes.{_C.RESET}\n"
+            f"  {_C.DIM}PowerShell: $env:QC_API_KEY='your-render-secret' ; python .\\scripts\\qc_sovereign_training.py ...{_C.RESET}\n"
+        )
 
     _banner("INITIALIZING")
     print(f"  {_C.DIM}Checking connectivity to {QC_BASE_URL}...{_C.RESET}", end=" ")
@@ -881,6 +916,10 @@ Environment:
         print(f"{_C.GREEN}Connected ✓ ({lat}ms){_C.RESET}")
     elif status in (401, 403):
         print(f"{_C.GOLD}Auth required — running with key{_C.RESET}")
+    elif status in (502, 503, 504):
+        print(
+            f"{_C.GOLD}status={status} (gateway/upstream busy — retry in a minute){_C.RESET}"
+        )
     elif status == 0:
         print(f"{_C.RED}Connection failed — is the service running?{_C.RESET}")
         print(f"  {_C.DIM}URL: {QC_BASE_URL}{_C.RESET}")

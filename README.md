@@ -212,11 +212,14 @@ Optional: set `QC_ADVANCED_TRAINING=1` on the server to record that the environm
 End-to-end QA against the **live** backend (chat, market, forecast, workflows, adversarial checks). Uses **stdlib only**; set `QC_API_KEY` so requests send **`X-QC-API-Key`** (same as the dashboard). The script also hits **`GET /api/training/readiness`** during the infrastructure phase.
 
 ```bash
-# From repo root
-set QC_API_KEY=...   # PowerShell: $env:QC_API_KEY="..."
-python scripts/qc_sovereign_training.py --phase infrastructure
-python scripts/qc_sovereign_training.py --phase all
+# From repo root — set the key first, then run (same shell).
+# PowerShell (real Render secret, not the literal "your-real-key"):
+$env:QC_API_KEY = "<paste-from-render>"
+python .\scripts\qc_sovereign_training.py --phase infrastructure
+python .\scripts\qc_sovereign_training.py --phase all
 ```
+
+The harness sends **`X-QC-API-Key`** (must match the server’s `QC_API_KEY`). **`502`/`503`** on Render are usually transient—wait and retry.
 
 **Training Command Center (UI):** open the dashboard with query `?qc_training=1` or set `VITE_QC_TRAINING_CONSOLE=1` when building — loads `frontend/src/panels/QCTrainingConsole.jsx` (architecture docs + TRAINING_REPORT.json viewer). No API keys in the browser.
 
