@@ -4335,6 +4335,7 @@ export default function QueenCalifiaCommandDashboard() {
             <div>
               <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, fontFamily: MONO, letterSpacing: "0.08em" }}>X-QC-API-Key</div>
               <input
+                data-testid="qc-auth-api-key"
                 type="password"
                 value={authForm.apiKey}
                 onChange={(e) => setAuthForm((prev) => ({ ...prev, apiKey: e.target.value }))}
@@ -4355,6 +4356,7 @@ export default function QueenCalifiaCommandDashboard() {
             <div>
               <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, fontFamily: MONO, letterSpacing: "0.08em" }}>X-QC-Admin-Key</div>
               <input
+                data-testid="qc-auth-admin-key"
                 type="password"
                 value={authForm.adminKey}
                 onChange={(e) => setAuthForm((prev) => ({ ...prev, adminKey: e.target.value }))}
@@ -4373,6 +4375,7 @@ export default function QueenCalifiaCommandDashboard() {
               />
             </div>
             <button
+              data-testid="qc-auth-save"
               onClick={saveAuth}
               style={{
                 padding: "10px 14px",

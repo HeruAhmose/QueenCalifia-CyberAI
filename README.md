@@ -187,7 +187,9 @@ python -m pytest -q
 Notes:
 
 - The repository includes the `sovereignty/` package restored from internal repository history.
-- Playwright smoke tests are optional and require a running app plus Playwright installed.
+- Playwright smoke tests are optional and require Playwright installed (`pip install playwright`, `playwright install chromium`).
+- **Live smoke (production):** set `QC_PLAYWRIGHT_LIVE=1` (defaults dashboard to `https://queencalifia-cyberai.web.app` and API to `https://queencalifia-cyberai.onrender.com`), or set `QC_DASHBOARD_URL` / `QC_API_URL` explicitly. Set `QC_API_KEY` (and optional `QC_ADMIN_KEY`) so tests can fill the dashboard auth panel (`data-testid="qc-auth-*"`) and attach `X-QC-API-Key` to API checks — **never commit keys.**
+- Run: `pytest tests/test_playwright_smoke.py -m playwright` (targets must respond on `/healthz` and the dashboard URL).
 
 ## Deploy
 
