@@ -49,9 +49,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 def _parse_origins(origins_str: str) -> list[str]:
     if not origins_str:
+        # Defaults when QC_CORS_ORIGINS is unset (local dev): include Firebase URLs so
+        # browser fetches from hosted dashboards are not blocked by CORS.
         return [
             "https://queencalifia.tamerian.com",
+            "https://queencalifia-cyberai.web.app",
+            "https://queencalifia-cyberai.firebaseapp.com",
             "http://localhost:3000",
+            "http://localhost:5173",
+            "http://localhost:4173",
             "http://localhost:5000",
         ]
     return [o.strip() for o in origins_str.split(",") if o.strip()]

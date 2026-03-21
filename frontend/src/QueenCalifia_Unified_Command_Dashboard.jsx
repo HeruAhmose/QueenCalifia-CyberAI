@@ -2329,7 +2329,11 @@ const DEVOPS_WORKFLOWS = [
 
 // ─── QC OS v4.2.1 — API Layer (shared by all QC tabs) ────────────────────
 
-const QC_API = "https://queencalifia-cyberai.onrender.com";
+const QC_API = String(
+  import.meta.env?.VITE_QC_API_URL ||
+    import.meta.env?.VITE_API_URL ||
+    "https://queencalifia-cyberai.onrender.com",
+).replace(/\/$/, "");
 const loadStoredDashboardAuth = () => {
   try {
     return {
@@ -2360,7 +2364,10 @@ const qcH = (ak,apiKey) => {
 const qcRequestError = (err) => {
   const msg = String(err?.message || err || "");
   if (/failed to fetch/i.test(msg)) {
-    return new Error("Failed to fetch live backend data. Check the saved QC keys, backend availability, and network/CORS settings.");
+    return new Error(
+      "Failed to fetch live backend data. Open DevTools → Network: if the request never completes, the API may be waking up (Render), blocked (VPN/adblock), or the wrong URL. " +
+        `This build calls ${QC_API} (set VITE_API_URL / VITE_QC_API_URL at build time). Confirm QC_CORS_ORIGINS on the API includes your dashboard origin. Re-save API keys after reload.`,
+    );
   }
   return err instanceof Error ? err : new Error(msg || "Backend request failed.");
 };

@@ -987,7 +987,14 @@ def create_security_api(
     @app.after_request
     def _force_cors(response):
         origin = request.headers.get("Origin", "")
-        if origin.endswith(".web.app") or "localhost" in origin:
+        # Match Firebase Hosting (.web.app, preview channels) and default firebaseapp.com domain.
+        allow = (
+            origin.endswith(".web.app")
+            or origin.endswith(".firebaseapp.com")
+            or "localhost" in origin
+            or "127.0.0.1" in origin
+        )
+        if allow:
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
             response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,X-QC-API-Key,X-QC-Admin-Key"
