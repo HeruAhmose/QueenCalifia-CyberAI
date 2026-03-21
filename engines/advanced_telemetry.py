@@ -76,6 +76,31 @@ def _utcnow_iso() -> str:
     return _utcnow_dt().isoformat()
 
 
+def _as_utc_aware(dt: datetime) -> datetime:
+    """Normalize datetimes for arithmetic with _utcnow_dt() (timezone-aware UTC)."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _parse_event_timestamp_utc(event_time_str: str) -> Optional[datetime]:
+    """Parse ISO timestamps from events; naive values are treated as UTC."""
+    s = (event_time_str or "").strip()
+    if not s:
+        return None
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    try:
+        event_time = datetime.fromisoformat(s)
+    except ValueError:
+        return None
+    if event_time.tzinfo is None:
+        event_time = event_time.replace(tzinfo=timezone.utc)
+    else:
+        event_time = event_time.astimezone(timezone.utc)
+    return event_time
+
+
 # ─── Enumerations ──────────────────────────────────────────────────────────
 
 class TelemetryStream(Enum):
@@ -1892,7 +1917,7 @@ class AdvancedTelemetry:
             sensor = self.sensors[sensor_id]
 
             # Calculate events per minute (rolling window)
-            time_delta = (now - sensor.last_event_at).total_seconds()
+            time_delta = (now - _as_utc_aware(sensor.last_event_at)).total_seconds()
             if time_delta > 0 and time_delta < 300:
                 sensor.events_per_minute = 60.0 / time_delta
             sensor.last_event_at = now
@@ -1906,9 +1931,9 @@ class AdvancedTelemetry:
             event_time_str = event.get("event_timestamp", "")
             if event_time_str:
                 try:
-                    event_time = datetime.fromisoformat(
-                        event_time_str.replace("Z", "+00:00").replace("+00:00", "")
-                    )
+                    event_time = _parse_event_timestamp_utc(event_time_str)
+                    if event_time is None:
+                        raise ValueError("unparseable event_timestamp")
                     lag_ms = (now - event_time).total_seconds() * 1000
                     sensor.latency_ms = lag_ms
                     self.ingestion_lag.append({
@@ -1939,7 +1964,7 @@ class AdvancedTelemetry:
 
         with self._lock:
             for sensor_id, sensor in self.sensors.items():
-                staleness = (now - sensor.last_event_at).total_seconds()
+                staleness = (now - _as_utc_aware(sensor.last_event_at)).total_seconds()
 
                 # Classify health
                 if staleness > 600:  # 10 min

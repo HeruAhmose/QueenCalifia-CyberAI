@@ -180,15 +180,18 @@ npm run dev
 # Frontend production build
 cd frontend && npm run build && cd ..
 
-# Backend test suite
+# Backend test suite (default: unit/integration only — Playwright is excluded; see pytest.ini)
 python -m pytest -q
+
+# Optional: browser smoke against live or local dashboard + API (requires Playwright + reachable URLs)
+# python -m pytest tests/test_playwright_smoke.py -m playwright --override-ini="addopts=-q"
 ```
 
 Notes:
 
 - The repository includes the `sovereignty/` package restored from internal repository history.
-- Playwright smoke tests are optional and require Playwright installed (`pip install playwright`, `playwright install chromium`).
-- **Live smoke (production):** set `QC_PLAYWRIGHT_LIVE=1` (defaults dashboard to `https://queencalifia-cyberai.web.app` and API to `https://queencalifia-cyberai.onrender.com`), or set `QC_DASHBOARD_URL` / `QC_API_URL` explicitly. Set `QC_API_KEY` (and optional `QC_ADMIN_KEY`) so tests can fill the dashboard auth panel (`data-testid="qc-auth-*"`) and attach `X-QC-API-Key` to API checks — **never commit keys.**
+- Playwright smoke tests are optional and require Playwright installed (`pip install playwright`, `playwright install chromium`). They are **not** run by default (`-m "not playwright"` in `pytest.ini`).
+- **Live smoke (production):** set `QC_PLAYWRIGHT_LIVE=1` (defaults dashboard to `https://queencalifia-cyberai.web.app` and API to `https://queencalifia-cyberai.onrender.com`), or set `QC_DASHBOARD_URL` / `QC_API_URL` explicitly. Set `QC_API_KEY` (and optional `QC_ADMIN_KEY`) so tests can fill the dashboard auth panel (`data-testid="qc-auth-*"`) and attach `X-QC-API-Key` to API checks — **never commit keys.** Use `--override-ini="addopts=-q"` when invoking `pytest -m playwright` so the default `not playwright` filter is cleared.
 - Run: `pytest tests/test_playwright_smoke.py -m playwright` (targets must respond on `/healthz` and the dashboard URL).
 
 ## Deploy

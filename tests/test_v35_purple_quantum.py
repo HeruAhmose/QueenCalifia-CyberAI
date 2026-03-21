@@ -514,18 +514,26 @@ class TestContinuousValidation:
 
 class TestThreatIntelFeeds:
 
-    def test_register_feed(self):
-        from engines.threat_intel_auto import ThreatIntelEngine, ThreatFeed, FeedFormat
-        engine = ThreatIntelEngine()
+    @pytest.fixture
+    def engine(self, tmp_path):
+        from engines.threat_intel_auto import ThreatIntelEngine
+
+        return ThreatIntelEngine(
+            str(tmp_path / "ti.sqlite"),
+            load_default_feeds=False,
+            auto_start=False,
+        )
+
+    def test_register_feed(self, engine):
+        from engines.threat_intel_auto import ThreatFeed, FeedFormat
         engine.register_feed(ThreatFeed(
             feed_id="f1", name="Test Feed", source_url="https://example.com/feed",
             feed_format=FeedFormat.STIX_TAXII, update_interval_sec=60,
         ))
         assert engine.feed_count == 1
 
-    def test_feed_due_for_sync(self):
-        from engines.threat_intel_auto import ThreatIntelEngine, ThreatFeed, FeedFormat
-        engine = ThreatIntelEngine()
+    def test_feed_due_for_sync(self, engine):
+        from engines.threat_intel_auto import ThreatFeed, FeedFormat
         engine.register_feed(ThreatFeed(
             feed_id="f1", name="T", source_url="x", feed_format=FeedFormat.CSV,
             update_interval_sec=1, last_sync=time.time() - 10,
@@ -533,9 +541,8 @@ class TestThreatIntelFeeds:
         due = engine.get_feeds_due_for_sync()
         assert len(due) == 1
 
-    def test_record_sync(self):
-        from engines.threat_intel_auto import ThreatIntelEngine, ThreatFeed, FeedFormat
-        engine = ThreatIntelEngine()
+    def test_record_sync(self, engine):
+        from engines.threat_intel_auto import ThreatFeed, FeedFormat
         engine.register_feed(ThreatFeed(feed_id="f1", name="T", source_url="x", feed_format=FeedFormat.JSON))
         engine.record_sync("f1", success=True, iocs_ingested=42)
         assert engine.get_feed("f1").ioc_count == 42
@@ -543,9 +550,18 @@ class TestThreatIntelFeeds:
 
 class TestThreatIntelIndicators:
 
-    def test_ingest_and_search(self):
-        from engines.threat_intel_auto import ThreatIntelEngine, ThreatIndicator
-        engine = ThreatIntelEngine()
+    @pytest.fixture
+    def engine(self, tmp_path):
+        from engines.threat_intel_auto import ThreatIntelEngine
+
+        return ThreatIntelEngine(
+            str(tmp_path / "ti.sqlite"),
+            load_default_feeds=False,
+            auto_start=False,
+        )
+
+    def test_ingest_and_search(self, engine):
+        from engines.threat_intel_auto import ThreatIndicator
         engine.ingest_indicator(ThreatIndicator(
             indicator_id="i1", value="evil.com", indicator_type="domain",
             confidence=0.9, sources=["feed1"],
@@ -554,9 +570,8 @@ class TestThreatIntelIndicators:
         results = engine.search_indicators("evil")
         assert len(results) == 1
 
-    def test_bulk_ingest(self):
-        from engines.threat_intel_auto import ThreatIntelEngine, ThreatIndicator
-        engine = ThreatIntelEngine()
+    def test_bulk_ingest(self, engine):
+        from engines.threat_intel_auto import ThreatIndicator
         indicators = [
             ThreatIndicator(indicator_id=f"i{i}", value=f"{i}.2.3.4",
                             indicator_type="ip", confidence=0.8)
@@ -576,9 +591,8 @@ class TestThreatIntelIndicators:
         assert ind.confidence < 0.5
         assert not ind.active  # Should be expired after 30 days decay
 
-    def test_high_confidence_filter(self):
-        from engines.threat_intel_auto import ThreatIntelEngine, ThreatIndicator
-        engine = ThreatIntelEngine()
+    def test_high_confidence_filter(self, engine):
+        from engines.threat_intel_auto import ThreatIndicator
         engine.ingest_indicator(ThreatIndicator(indicator_id="hi", value="hi", indicator_type="ip", confidence=0.95))
         engine.ingest_indicator(ThreatIndicator(indicator_id="lo", value="lo", indicator_type="ip", confidence=0.2))
         high = engine.get_high_confidence_indicators(0.7)
@@ -587,9 +601,18 @@ class TestThreatIntelIndicators:
 
 class TestCVETracking:
 
-    def test_ingest_and_priority(self):
-        from engines.threat_intel_auto import ThreatIntelEngine, CVERecord
-        engine = ThreatIntelEngine()
+    @pytest.fixture
+    def engine(self, tmp_path):
+        from engines.threat_intel_auto import ThreatIntelEngine
+
+        return ThreatIntelEngine(
+            str(tmp_path / "ti.sqlite"),
+            load_default_feeds=False,
+            auto_start=False,
+        )
+
+    def test_ingest_and_priority(self, engine):
+        from engines.threat_intel_auto import CVERecord
         engine.ingest_cve(CVERecord(
             cve_id="CVE-2024-1234", description="Critical RCE",
             cvss_score=9.8, exploit_available=True, in_the_wild=True,
@@ -598,9 +621,8 @@ class TestCVETracking:
         assert len(critical) == 1
         assert critical[0].priority_score > 80
 
-    def test_exploitable_filter(self):
-        from engines.threat_intel_auto import ThreatIntelEngine, CVERecord
-        engine = ThreatIntelEngine()
+    def test_exploitable_filter(self, engine):
+        from engines.threat_intel_auto import CVERecord
         engine.ingest_cve(CVERecord(cve_id="CVE-1", description="T", cvss_score=5.0, exploit_available=True))
         engine.ingest_cve(CVERecord(cve_id="CVE-2", description="T", cvss_score=5.0))
         assert len(engine.get_exploitable_cves()) == 1
@@ -608,9 +630,18 @@ class TestCVETracking:
 
 class TestThreatAttribution:
 
-    def test_register_and_search(self):
-        from engines.threat_intel_auto import ThreatIntelEngine, ThreatActorProfile
-        engine = ThreatIntelEngine()
+    @pytest.fixture
+    def engine(self, tmp_path):
+        from engines.threat_intel_auto import ThreatIntelEngine
+
+        return ThreatIntelEngine(
+            str(tmp_path / "ti.sqlite"),
+            load_default_feeds=False,
+            auto_start=False,
+        )
+
+    def test_register_and_search(self, engine):
+        from engines.threat_intel_auto import ThreatActorProfile
         engine.register_actor(ThreatActorProfile(
             actor_id="apt29", name="APT29", aliases=["Cozy Bear"],
             nation_state="Russia", known_techniques=["T1566.001"],
@@ -618,9 +649,8 @@ class TestThreatAttribution:
         results = engine.search_actors("cozy")
         assert len(results) == 1
 
-    def test_stats(self):
-        from engines.threat_intel_auto import ThreatIntelEngine, ThreatFeed, FeedFormat, ThreatIndicator
-        engine = ThreatIntelEngine()
+    def test_stats(self, engine):
+        from engines.threat_intel_auto import ThreatFeed, FeedFormat, ThreatIndicator
         engine.register_feed(ThreatFeed(feed_id="f1", name="T", source_url="x", feed_format=FeedFormat.JSON))
         engine.ingest_indicator(ThreatIndicator(indicator_id="i1", value="t", indicator_type="ip"))
         stats = engine.get_stats()
