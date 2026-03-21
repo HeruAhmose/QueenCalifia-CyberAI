@@ -35,7 +35,16 @@ services:
       - key: QC_AUTO_LEARNING_ENABLED
         value: "1"
       - key: QC_AUTO_LEARNING_INTERVAL_MINUTES
-        value: "180"
+        value: "30"
+      - key: QC_AUTONOMY_ENABLED
+        value: "1"
+      - key: QC_AUTONOMY_POLL_SECONDS
+        value: "90"
+      - key: QC_AUTONOMY_LEASE_SECONDS
+        value: "120"
+      # Safe self-scan only (127.0.0.1). Set 0 to disable. Unset in production defaults to 600s in code.
+      - key: QC_AUTONOMY_LOCALHOST_SCAN_SECONDS
+        value: "600"
       - key: QC_API_KEYS_FILE
         value: /var/data/keys.json
       - key: QC_AUDIT_LOG_FILE

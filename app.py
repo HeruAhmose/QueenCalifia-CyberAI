@@ -12,6 +12,9 @@ Environment:
 - QC_API_KEYS_FILE (JSON) or QC_API_KEYS_JSON (JSON string)
 - QC_API_KEY_PEPPER (recommended) and QC_AUDIT_HMAC_KEY (recommended)
 - QC_SCAN_ALLOWLIST (comma-separated CIDRs, e.g. "10.0.0.0/8,192.168.0.0/16")
+- QC_THREAT_INTEL_AUTO_SYNC / QC_PRODUCTION — threat-feed sync defaults on in production when unset
+- QC_AUTONOMY_* — background identity learning + optional 127.0.0.1 quick scans (core/autonomy_loop.py)
+- QC_AUTO_LEARNING_INTERVAL_MINUTES — throttle for biomimetic identity cycle
 """
 
 from __future__ import annotations
@@ -35,6 +38,7 @@ from engines.evolution_engine import EvolutionEngine
 from engines.zero_day_predictor import ZeroDayPredictor
 from engines.advanced_telemetry import AdvancedTelemetry
 from engines.threat_intel_auto import ThreatIntelEngine
+from core.autonomy_loop import start_autonomy_loop
 
 configure_logging()
 logger = logging.getLogger("queencalifia")
@@ -250,6 +254,14 @@ def build_system(no_auth: bool, origins: str) -> dict:
         remediator=remediator,
         evolution_engine=evolution_engine,
         threat_intel=threat_intel,
+    )
+
+    # Background identity learning + optional safe localhost scans for evolution
+    # (thread + SQLite lease; see core/autonomy_loop.py).
+    start_autonomy_loop(
+        db_path=os.environ.get("QC_DB_PATH", "data/queen.db"),
+        vuln_engine=vuln_engine,
+        evolution_engine=evolution_engine,
     )
 
     return {

@@ -218,7 +218,14 @@ class ThreatIntelEngine:
             self._register_default_feeds()
 
         if auto_start is None:
-            auto_start = os.environ.get("QC_THREAT_INTEL_AUTO_SYNC", "0") == "1"
+            sync_flag = os.environ.get("QC_THREAT_INTEL_AUTO_SYNC", "").strip().lower()
+            if sync_flag in ("1", "true", "yes", "on"):
+                auto_start = True
+            elif sync_flag in ("0", "false", "no", "off"):
+                auto_start = False
+            else:
+                # Production default: keep feeds syncing unless explicitly disabled.
+                auto_start = os.environ.get("QC_PRODUCTION", "").strip() == "1"
         self._auto_start = bool(auto_start)
         if self._auto_start:
             self.start_scheduler()
@@ -785,6 +792,10 @@ class ThreatIntelEngine:
                     context={"feed": feed.name},
                 )
             )
+        if not indicators:
+            return {"indicators": 0, "cves": 0, "actors": 0}
+        ingested = self.bulk_ingest(indicators)
+        return {"indicators": ingested, "cves": 0, "actors": 0}
 
     def probe_health(self) -> Dict[str, Any]:
         with self._connect() as conn:
@@ -812,7 +823,6 @@ class ThreatIntelEngine:
                 "strategy": "reload_threat_intel_state",
                 "feeds": len(self._feeds),
             }
-        return {"indicators": self.bulk_ingest(indicators), "cves": 0, "actors": 0}
 
     def _parse_cisa_kev(self, feed: ThreatFeed, payload: dict[str, Any]) -> Dict[str, int]:
         cves = 0
