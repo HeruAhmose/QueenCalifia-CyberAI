@@ -64,6 +64,21 @@ Version 4.3 | Tamerian Materials | Proprietary
 - Memory snapshots use `QC_MEMORY_BACKUP_DIR=/var/data/memory-backups`.
 - Identity Core persistence is centralized through `backend/modules/identity/store.py`, which maps the v4.3 build-plan storage contract onto the stabilized runtime schema.
 
+## Command-line interface (`cli.py`)
+
+From the **repository root** (so `engines/` resolves):
+
+```bash
+python cli.py status
+python cli.py scan 127.0.0.1 --quick
+python cli.py evolution status
+python cli.py quantum
+```
+
+- **Windows:** If the banner throws encoding errors, the CLI sets UTF-8 on the console when possible. You can also set `QC_CLI_ASCII=1` for a minimal banner, or use a UTF-8 terminal.
+- **Quantum (`cli.py quantum`):** Without `liboqs-python`, key bootstrap is skipped and the command still prints an honest readiness assessment (use Docker/Render with oqs, or `QC_ALLOW_SIMULATED_PQ=1` for local demo only).
+- Scan policy matches the live engine: use `QC_SCAN_ALLOWLIST` and only scan targets you are authorized to test.
+
 ## License And Provenance
 
 - This repository is now governed by the proprietary `LICENSE` in the repo root, not Apache 2.0.

@@ -21,6 +21,8 @@ Environment:
     QC_SCAN_THREADS     Max parallel threads (default: 50)
     QC_SCAN_MODE        full|quick|stealth (default: full)
     NVD_API_KEY         NVD API key for CVE enrichment
+    QC_CLI_ASCII        Set to 1 to skip Unicode banner (minimal ASCII title)
+    QC_ALLOW_SIMULATED_PQ  Set to 1 for local quantum keygen demo without liboqs (non-production)
 """
 
 import os
@@ -30,6 +32,30 @@ import time
 import signal
 import argparse
 from datetime import datetime, timezone
+
+
+def _configure_cli_stdio():
+    """
+    Prevent UnicodeEncodeError on Windows (cp1252) and similar consoles when
+    printing box-drawing characters and emoji in the banner.
+    """
+    if os.environ.get("QC_CLI_ASCII", "").strip().lower() in ("1", "true", "yes", "on"):
+        return
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            ctypes.windll.kernel32.SetConsoleOutputCP(65001)
+        except Exception:
+            pass
+
 
 # ─── Colors ──────────────────────────────────────────────────────────────────
 
@@ -62,7 +88,7 @@ def severity_color(sev):
 
 
 def print_banner():
-    print(f"""
+    text = f"""
 {C.CYAN}{C.BOLD}
     ╔═══════════════════════════════════════════════════════════╗
     ║                                                           ║
@@ -79,7 +105,14 @@ def print_banner():
     ║   🔴 Red Team Simulation       📡 Threat Intel            ║
     ║                                                           ║
     ╚═══════════════════════════════════════════════════════════╝
-{C.RESET}""")
+{C.RESET}"""
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        print(
+            "\n  Queen Califia CyberAI CLI v4.0 | Defense-Grade Security\n"
+            "  (Set UTF-8 console, or QC_CLI_ASCII=1 for minimal output.)\n"
+        )
 
 
 def print_section(title, icon="═"):
@@ -396,23 +429,38 @@ def cmd_status(args):
         predictor = ZeroDayPredictor()
         p = predictor.get_status()
         print(f"  {C.CYAN}Zero-Day Predictor{C.RESET}")
-        print(f"    Layers:      {p.get('analysis_layers', '?')}")
-        print(f"    Active:      {p.get('active_predictions', 0)} predictions")
-        print(f"    Accuracy:    {p.get('prediction_accuracy', 0)*100:.0f}%")
+        print(f"    Status:      {p.get('status', '?')}")
+        ap = p.get("active_predictions") or {}
+        active_total = ap.get("total", 0) if isinstance(ap, dict) else ap
+        print(f"    Active:      {active_total} predictions")
+        pa = p.get("prediction_accuracy") or {}
+        if isinstance(pa, dict):
+            print(
+                f"    Outcomes:    confirmed={pa.get('confirmed', 0)} "
+                f"false_positive={pa.get('false_positive', 0)} "
+                f"pending={pa.get('pending', 0)}"
+            )
+        print(f"    Signal bus:  {p.get('signal_bus_depth', 0)}")
         print()
     except Exception as e:
-        print(f"  {C.DIM}Zero-Day Predictor: not initialized{C.RESET}\n")
+        print(f"  {C.DIM}Zero-Day Predictor: {e}{C.RESET}\n")
 
     # Telemetry
     try:
         telemetry = AdvancedTelemetry()
         t = telemetry.get_status()
+        stats = t.get("statistics") or {}
+        events = stats.get("events_processed") or stats.get("events_ingested", 0)
         print(f"  {C.CYAN}Advanced Telemetry{C.RESET}")
-        print(f"    Streams:     {t.get('active_streams', '?')}")
-        print(f"    Events:      {t.get('events_processed', 0)}")
+        print(f"    Status:      {t.get('status', '?')}")
+        print(f"    Signal bus:  {t.get('signal_bus_depth', 0)}")
+        print(f"    Events:      {events}")
+        ch = (t.get("streams") or {}).get("collection_health") or {}
+        if ch:
+            print(f"    Sensors:     {ch.get('sensors_registered', 0)}")
         print()
     except Exception as e:
-        print(f"  {C.DIM}Advanced Telemetry: not initialized{C.RESET}\n")
+        print(f"  {C.DIM}Advanced Telemetry: {e}{C.RESET}\n")
 
 
 def cmd_baselines(args):
@@ -616,12 +664,20 @@ def cmd_quantum(args):
 
     print_section("⚛️  QUANTUM READINESS ASSESSMENT")
 
-    # Initialize vault with bootstrap keys for full assessment
+    # Optional vault bootstrap (requires oqs or QC_ALLOW_SIMULATED_PQ=1)
     entropy = EntropyPool()
     keygen = LatticeKeyGenerator(entropy)
-    vault = QuantumKeyVault(keygen)
-    vault.generate_and_store(LatticeAlgorithm.KYBER_768, purpose="kem")
-    vault.generate_and_store(LatticeAlgorithm.DILITHIUM_3, purpose="signing")
+    vault = None
+    try:
+        vault = QuantumKeyVault(keygen)
+        vault.generate_and_store(LatticeAlgorithm.KYBER_768, purpose="kem")
+        vault.generate_and_store(LatticeAlgorithm.DILITHIUM_3, purpose="signing")
+    except RuntimeError as exc:
+        print(f"  {C.YELLOW}Sample key bootstrap skipped:{C.RESET} {exc}")
+        print(
+            f"  {C.DIM}Install liboqs / set QC_ALLOW_SIMULATED_PQ=1 for local demo keys, "
+            f"or use the Docker/Render image with oqs.{C.RESET}\n"
+        )
 
     report = assess_quantum_readiness(vault=vault, hybrid_enabled=True)
 
@@ -643,11 +699,20 @@ def cmd_quantum(args):
 
     if args.keygen:
         print_section("🔑 GENERATING POST-QUANTUM KEYPAIR")
-        key_id = vault.generate_and_store(LatticeAlgorithm.KYBER_1024, purpose="kem")
-        print(f"  Key ID:     {C.CYAN}{key_id}{C.RESET}")
-        print(f"  Algorithm:  Kyber-1024 (NIST PQC Standard)")
-        print(f"  Vault Keys: {vault.key_count} total")
-        print(f"  Status:     {C.GREEN}✓ Stored in vault{C.RESET}")
+        if vault is None:
+            try:
+                vault = QuantumKeyVault(keygen)
+            except Exception as exc:
+                print(f"  {C.RED}Cannot create vault: {exc}{C.RESET}")
+                return
+        try:
+            key_id = vault.generate_and_store(LatticeAlgorithm.KYBER_1024, purpose="kem")
+            print(f"  Key ID:     {C.CYAN}{key_id}{C.RESET}")
+            print(f"  Algorithm:  Kyber-1024 (NIST PQC Standard)")
+            print(f"  Vault Keys: {vault.key_count} total")
+            print(f"  Status:     {C.GREEN}✓ Stored in vault{C.RESET}")
+        except RuntimeError as exc:
+            print(f"  {C.RED}Keygen failed:{C.RESET} {exc}")
 
 
 def cmd_evolution(args):
@@ -712,6 +777,8 @@ def cmd_evolution(args):
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 def main():
+    _configure_cli_stdio()
+
     parser = argparse.ArgumentParser(
         description="🛡 Queen Califia CyberAI — Predictive Threat Intelligence",
         formatter_class=argparse.RawDescriptionHelpFormatter,
