@@ -51,6 +51,7 @@ services:
         value: /var/data/audit.log.jsonl
       - key: QC_AUDIT_CHAIN_DB
         value: /var/data/queen.db
+      # Exact Origins the browser sends (scheme+host). Add preview channels / custom domains here.
       - key: QC_CORS_ORIGINS
         value: https://queencalifia-cyberai.web.app,https://queencalifia-cyberai.firebaseapp.com
       - key: QC_REDIS_URL

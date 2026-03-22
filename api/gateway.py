@@ -73,6 +73,29 @@ from core.metrics import (
 logger = logging.getLogger("queencalifia.api")
 
 
+def _browser_cors_origin_allowed(origin: str) -> bool:
+    """
+    Whether to echo Access-Control-Allow-Origin for this browser Origin.
+
+    Honors QC_CORS_ORIGINS (comma-separated exact origins from Render/env).
+    Also allows Firebase Hosting (*.web.app, *.firebaseapp.com) and local dev.
+    """
+    origin = (origin or "").strip()
+    if not origin:
+        return False
+    raw = (os.environ.get("QC_CORS_ORIGINS", "") or "").strip()
+    if raw:
+        allowed_exact = {x.strip() for x in raw.split(",") if x.strip()}
+        if origin in allowed_exact:
+            return True
+    return (
+        origin.endswith(".web.app")
+        or origin.endswith(".firebaseapp.com")
+        or "localhost" in origin
+        or "127.0.0.1" in origin
+    )
+
+
 # ─── Security Configuration ──────────────────────────────────────────────────
 
 @dataclass(frozen=True)
@@ -987,14 +1010,7 @@ def create_security_api(
     @app.after_request
     def _force_cors(response):
         origin = request.headers.get("Origin", "")
-        # Match Firebase Hosting (.web.app, preview channels) and default firebaseapp.com domain.
-        allow = (
-            origin.endswith(".web.app")
-            or origin.endswith(".firebaseapp.com")
-            or "localhost" in origin
-            or "127.0.0.1" in origin
-        )
-        if allow:
+        if _browser_cors_origin_allowed(origin):
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
             response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,X-QC-API-Key,X-QC-Admin-Key"
@@ -1006,10 +1022,11 @@ def create_security_api(
         origin = request.headers.get("Origin", "")
         resp = app.make_response("")
         resp.status_code = 204
-        resp.headers["Access-Control-Allow-Origin"] = origin
-        resp.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
-        resp.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,X-QC-API-Key,X-QC-Admin-Key"
-        resp.headers["Access-Control-Max-Age"] = "3600"
+        if _browser_cors_origin_allowed(origin):
+            resp.headers["Access-Control-Allow-Origin"] = origin
+            resp.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
+            resp.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,X-QC-API-Key,X-QC-Admin-Key"
+            resp.headers["Access-Control-Max-Age"] = "3600"
         return resp
 
     @app.before_request

@@ -247,6 +247,7 @@ Render requirements before redeploy:
 - Set `NASDAQ_API_KEY` if you want Nasdaq Data Link coverage to show as configured
 - `render.yaml` now enables the shared Redis/Celery async scan path and marks Redis as required in `/readyz`
 - If a Blueprint update does not auto-create the worker or Key Value instance in your workspace, create them once in Render with the same names and env wiring shown in `render.yaml`
+- **`QC_CORS_ORIGINS`:** comma-separated **exact** dashboard origins (`https://…web.app`, preview channels, custom domains). If the dashboard shows *Failed to fetch live backend data*, see **`docs/DASHBOARD_NETWORK.md`**.
 
 ## Post-Deploy Smoke Check
 
