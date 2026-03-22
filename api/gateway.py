@@ -96,6 +96,26 @@ def _browser_cors_origin_allowed(origin: str) -> bool:
     )
 
 
+def _flask_cors_origin_values(config: SecurityConfig) -> List[Any]:
+    """
+    Origins passed to flask-cors must cover the same cases as _browser_cors_origin_allowed.
+
+    When QC_CORS_ORIGINS is set, config.allowed_origins is *only* those literals; without
+    regex fallbacks, Firebase preview sites (…--channel.web.app) and local dashboards
+    fail the library's preflight check and the browser shows only \"Failed to fetch\".
+    """
+    values: List[Any] = list(config.allowed_origins)
+    # Firebase Hosting: prod + preview channels for this default project id
+    values.append(re.compile(r"^https://queencalifia-cyberai(?:--[a-z0-9-]+)?\.web\.app$", re.I))
+    values.append(re.compile(r"^https://queencalifia-cyberai\.firebaseapp\.com$", re.I))
+    # Vite / CRA hitting a hosted API
+    values.append(re.compile(r"^http://localhost(?::\d+)?$", re.I))
+    values.append(re.compile(r"^http://127\.0\.0\.1(?::\d+)?$", re.I))
+    if "https://queencalifia.tamerian.com" not in values:
+        values.append("https://queencalifia.tamerian.com")
+    return values
+
+
 # ─── Security Configuration ──────────────────────────────────────────────────
 
 @dataclass(frozen=True)
@@ -1012,7 +1032,7 @@ def create_security_api(
 
     CORS(
         app,
-        origins=config.allowed_origins,
+        origins=_flask_cors_origin_values(config),
         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=[config.api_key_header, "X-QC-Admin-Key", "Content-Type", "Authorization"],
         supports_credentials=True,

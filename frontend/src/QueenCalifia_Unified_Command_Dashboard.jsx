@@ -2500,8 +2500,8 @@ const qcRequestError = (err) => {
       originHint = "";
     }
     return new Error(
-      "Failed to fetch live backend data. Open DevTools → Network: if the request hangs, the API may be cold-starting (Render can take 30–90s on first hit), or the request is blocked (VPN/adblock), or the API URL is wrong. " +
-        `This build calls ${QC_API} (set VITE_API_URL / VITE_QC_API_URL at build time).${originHint} Re-save API keys after reload.`,
+      "Failed to fetch live backend data. Open DevTools → Network (pending = cold start / blocked) and Console (CORS errors = wrong Origin on API). " +
+        `This build calls ${QC_API} (set VITE_API_URL / VITE_QC_API_URL at build time).${originHint} Custom domains must be listed in QC_CORS_ORIGINS on the API. Re-save API keys after reload.`,
     );
   }
   return err instanceof Error ? err : new Error(msg || "Backend request failed.");

@@ -52,9 +52,9 @@ services:
         value: /var/data/audit.log.jsonl
       - key: QC_AUDIT_CHAIN_DB
         value: /var/data/queen.db
-      # Exact Origins the browser sends (scheme+host). Add preview channels / custom domains here.
+      # Exact Origins (scheme+host). API also allows QC Firebase preview *.web.app + localhost via regex in gateway.
       - key: QC_CORS_ORIGINS
-        value: https://queencalifia-cyberai.web.app,https://queencalifia-cyberai.firebaseapp.com
+        value: https://queencalifia-cyberai.web.app,https://queencalifia-cyberai.firebaseapp.com,https://queencalifia.tamerian.com
       - key: QC_REDIS_URL
         fromService:
           type: keyvalue
