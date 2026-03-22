@@ -2,7 +2,11 @@
 
 ## 1. One clone only
 
-Use **one** repo folder (e.g. `C:\Users\Student\Downloads\QueenCalifia-CyberAI`) and always `git pull` there. If `scripts\qc_perpetual_learner.py` is missing, you are in an old clone or behind `main`:
+Use **one** repo folder that has **`git remote`** → `HeruAhmose/QueenCalifia-CyberAI` (e.g. `C:\Users\Student\Downloads\QueenCalifia-CyberAI`).  
+
+If you keep assets under **`C:\Users\Student\Downloads\QCMAIN`**, that tree may **not** be one git repo — see **[`QCMAIN_WORKSPACE.md`](QCMAIN_WORKSPACE.md)**.
+
+If `scripts\qc_perpetual_learner.py` is missing, you are in the wrong folder or behind `main`:
 
 ```powershell
 cd <your-repo-root>
