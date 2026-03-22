@@ -1685,7 +1685,7 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
 
   const apiFetch = useCallback(async (path, init = {}) => {
     try {
-      const res = await fetch(`${QC_API}${path}`, { ...init, headers: { ...(init.headers || {}), ...headers } });
+      const res = await qcFetchWithRetry(`${QC_API}${path}`, { ...init, headers: { ...(init.headers || {}), ...headers } });
       const text = await res.text();
       let json = null;
       try { json = text ? JSON.parse(text) : null; } catch { json = null; }
@@ -1705,19 +1705,37 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
 
   const normalizeStatus = useCallback((payload) => {
     // Celery path:
-    //   { scan_id, state, ready, result? }
+    //   { scan_id, state, ready, result?, error? }
     // Local job store:
-    //   { scan_id, status, result? }
-    if (!payload) return { state: "unknown", ready: false, result: null };
+    //   { scan_id, status, result?, error? }
+    if (!payload) return { state: "unknown", ready: false, result: null, failed: false, error: null };
 
     if (payload.result) {
-      return { state: payload.state || payload.status || "completed", ready: true, result: payload.result };
+      return {
+        state: payload.state || payload.status || "completed",
+        ready: true,
+        result: payload.result,
+        failed: false,
+        error: null,
+      };
     }
 
-    const state = payload.state || payload.status || "unknown";
-    const ready = payload.ready === true || state === "completed" || state === "SUCCESS";
+    const state = (payload.state || payload.status || "unknown").toString();
+    const stUp = state.toUpperCase();
+    const failStates = ["FAILURE", "FAILED", "REVOKED", "REJECTED"];
+    const failed = Boolean(payload.error) || failStates.includes(stUp);
+    const ready =
+      payload.ready === true ||
+      stUp === "completed" ||
+      stUp === "SUCCESS" ||
+      failed;
     const result = payload.result || payload?.data?.result || null;
-    return { state, ready, result };
+    const errorMsg = payload.error
+      ? String(payload.error)
+      : failed && !result
+        ? `Scan ended with status ${state}`
+        : null;
+    return { state, ready, result, failed, error: errorMsg };
   }, []);
 
   const downloadText = useCallback((filename, content) => {
@@ -1797,7 +1815,8 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
   const fetchRemediation = useCallback(async () => {
     try {
       const r = await apiFetch("/api/vulns/remediation");
-      setRemediation(normalizeRemediationPlan(r?.data || null, target));
+      const fallback = scanType === "web_app" ? webUrl : target;
+      setRemediation(normalizeRemediationPlan(r?.data || null, fallback));
     } catch (e) {
       const msg = String(e?.message || e || "");
       if (isLikelyAuthFailure(msg)) {
@@ -1807,7 +1826,7 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
       setError(msg || "Unable to load remediation plan.");
       setRemediation(null);
     }
-  }, [apiFetch, target]);
+  }, [apiFetch, target, webUrl, scanType]);
 
   const computedAvatarState = useMemo(() => {
     const phase = String(oneClickPhase || "").toLowerCase();
@@ -1831,22 +1850,82 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
   }, [computedAvatarState, onAvatarStateChange]);
 
   const oneClickRemediate = async () => {
+    if (!ack) {
+      setError("You must confirm you are authorized to scan this target.");
+      return;
+    }
+    const effectiveTarget = (scanType === "web_app" ? webUrl : target).trim();
+    if (!effectiveTarget) {
+      setError(scanType === "web_app" ? "Enter a web URL to scan." : "Enter a network target (IP, CIDR, or hostname).");
+      return;
+    }
+
     setOneClickRunning(true);
     setOneClickPhase("scanning");
     setOneClickLog([]);
     setOneClickResult(null);
     setError("");
     onSound?.("scan_start");
-    ocLog("⚡ Starting one-click remediation of 127.0.0.1...", "#60a5fa");
+    ocLog(
+      scanType === "web_app"
+        ? `⚡ Starting one-click web assessment: ${effectiveTarget}...`
+        : `⚡ Starting one-click remediation: ${effectiveTarget}...`,
+      "#60a5fa"
+    );
     onAvatarStateChange?.("hex_shield");
     try {
-      ocLog("🔍 Launching full scan of localhost...");
-      const workflowResp = await fetch(`${QC_API}/api/v1/one-click/scan-and-fix`, {
+      if (scanType === "web_app") {
+        ocLog("🔍 Running OWASP-style header assessment on URL...", "#60a5fa");
+        const r = await apiFetch("/api/vulns/webapp", {
+          method: "POST",
+          body: JSON.stringify({ url: effectiveTarget, acknowledge_authorized: true }),
+        });
+        const data = r?.data || null;
+        const findings = Array.isArray(data?.findings) ? data.findings : [];
+        const countSev = (s) => findings.filter((f) => String(f?.severity || "").toUpperCase() === s).length;
+        const normalizedScan = {
+          scan_id: data?.scan_id || null,
+          target: data?.target_url || effectiveTarget,
+          scan_type: "web_app",
+          critical_count: countSev("CRITICAL"),
+          high_count: countSev("HIGH"),
+          medium_count: countSev("MEDIUM"),
+          low_count: countSev("LOW"),
+          vulnerabilities_found: findings.length,
+          findings,
+          summary: {
+            critical: countSev("CRITICAL"),
+            high: countSev("HIGH"),
+            medium: countSev("MEDIUM"),
+            low: countSev("LOW"),
+          },
+        };
+        if (normalizedScan.scan_id) {
+          setScanId(normalizedScan.scan_id);
+          ocLog("✓ Web scan complete — ID: " + normalizedScan.scan_id, "#10b981");
+        }
+        setScanStatus({ state: "completed", ready: true, result: normalizedScan });
+        setScanResult(data ? { ...data, ...normalizedScan } : normalizedScan);
+        ocLog(`  ↳ Findings: ${findings.length}`, "#8a9dbd");
+        setOneClickPhase("remediating");
+        onAvatarStateChange?.("staff_raised");
+        ocLog("🛠️ Loading remediation guidance...", "#f59e0b");
+        setOneClickResult({ operation_id: `webapp-${normalizedScan.scan_id || "local"}`, target: effectiveTarget, phases: { scan: normalizedScan } });
+        await fetchRemediation();
+        setOneClickPhase("done");
+        ocLog("✅ All done — web assessment and remediation loaded.", "#10b981");
+        onSound?.(normalizedScan.critical_count > 0 ? "threat_alert" : "scan_complete");
+        onAvatarStateChange?.(normalizedScan.critical_count > 0 ? "ascended" : "active");
+        return;
+      }
+
+      ocLog(`🔍 Launching live scan (${scanType})...`, "#60a5fa");
+      const workflowResp = await qcFetchWithRetry(`${QC_API}/api/v1/one-click/scan-and-fix`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) },
         body: JSON.stringify({
-          target: "127.0.0.1",
-          scan_type: "full",
+          target: effectiveTarget,
+          scan_type: scanType,
           auto_approve: true,
           acknowledge_authorized: true,
         }),
@@ -1861,8 +1940,8 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
       const scan = result?.phases?.scan || {};
       const normalizedScan = {
         scan_id: scan.scan_id || result?.operation_id || null,
-        target: result?.target || "127.0.0.1",
-        scan_type: "full",
+        target: result?.target || effectiveTarget,
+        scan_type: scanType,
         critical_count: scan.critical || 0,
         high_count: scan.high || 0,
         medium_count: scan.medium || 0,
@@ -1891,7 +1970,7 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
       onAvatarStateChange?.("staff_raised");
       ocLog("🛠️ Executing auto-remediation...", "#f59e0b");
       setOneClickResult(result);
-      const workflowPlan = normalizeRemediationPlan(result?.phases?.remediation || null, result?.target || "127.0.0.1");
+      const workflowPlan = normalizeRemediationPlan(result?.phases?.remediation || null, result?.target || effectiveTarget);
       if (workflowPlan?.priority_actions?.length) {
         setRemediation(workflowPlan);
       } else {
@@ -1904,7 +1983,7 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
       onSound?.((scan.critical || 0) > 0 ? "threat_alert" : "scan_complete");
       onAvatarStateChange?.((scan.critical || 0) > 0 ? "ascended" : "active");
     } catch (e) {
-      const msg = String(e?.message || e || "");
+      const msg = String(qcRequestError(e)?.message || e?.message || e || "");
       setOneClickPhase("error");
       setError(msg);
       ocLog("❌ " + msg, "#ef4444");
@@ -1974,15 +2053,33 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
     if (!scanId) return;
     let cancelled = false;
     let notFoundStreak = 0;
+    let pollCount = 0;
+    const pendingSince = Date.now();
     const tick = async () => {
       try {
         const r = await apiFetch(`/api/vulns/scan/${encodeURIComponent(scanId)}`, { method: "GET" });
         const s = normalizeStatus(r?.data || null);
         if (cancelled) return;
         notFoundStreak = 0;
-        setError("");
+        pollCount += 1;
         setScanStatus(s);
-        if (s.ready) {
+        const stUp = String(s.state || "").toUpperCase();
+        if (s.ready && s.failed) {
+          setError(s.error || `Scan failed (${s.state})`);
+          setScanResult(null);
+          onAvatarStateChange?.("idle");
+          return;
+        }
+        if (stUp !== "PENDING") {
+          setError((prev) => (typeof prev === "string" && /still PENDING/i.test(prev) ? "" : prev));
+        }
+        if (!s.ready && stUp === "PENDING" && pollCount >= 12 && Date.now() - pendingSince > 25000) {
+          setError(
+            "Scan is still PENDING — no Celery worker may be running this job. On the API set QC_USE_CELERY=0 to use in-process scans, or deploy a worker: celery -A celery_app.celery_app worker -Q scans (same QC_REDIS_URL)."
+          );
+        }
+        if (s.ready && !s.failed) {
+          setError("");
           setScanResult(s.result || null);
           const critical = (s.result?.critical_count ?? s.result?.summary?.critical ?? 0) || 0;
           onSound?.(critical > 0 ? "threat_alert" : "scan_complete");
@@ -2019,7 +2116,7 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
           <div>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#d4dff0", letterSpacing: 0.3 }}>⚡ One-Click Remediate</div>
-            <div style={{ fontSize: 11, color: "#8a9dbd", marginTop: 3 }}>Scans 127.0.0.1 and auto-applies all fixes — no prompts</div>
+            <div style={{ fontSize: 11, color: "#8a9dbd", marginTop: 3 }}>Uses the target below (network or Web App URL). Hosted API scans run on the server — use a reachable IP/URL. Auto-approve applies fixes where the engine supports it.</div>
           </div>
           <button
             onClick={oneClickRemediate}
@@ -2112,7 +2209,7 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
           </div>
 
           <div style={{ fontSize: 10, color: C.textDim }}>
-            Guardrails: backend denies public targets by default; allowlist is set server-side via <span style={{ fontFamily: MONO }}>QC_SCAN_ALLOWLIST</span>. Scanning networks you don't own or aren't explicitly authorized to test is not supported.
+            Guardrails: backend denies public targets by default; allowlist is set server-side via <span style={{ fontFamily: MONO }}>QC_SCAN_ALLOWLIST</span>. Async scans need either <span style={{ fontFamily: MONO }}>QC_USE_CELERY=0</span> (in-process queue) or a Celery worker on the <span style={{ fontFamily: MONO }}>scans</span> queue — Redis alone does not run scans. Scanning networks you don&apos;t own or aren&apos;t explicitly authorized to test is not supported.
           </div>
 
           {!!error && (
@@ -2124,7 +2221,7 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
           {scanId && (
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <Badge color={C.accent}>scan_id: <span style={{ fontFamily: MONO }}>{scanId}</span></Badge>
-              <Badge color={C.textDim}>state: <span style={{ fontFamily: MONO }}>{scanStatus?.state || "unknown"}</span></Badge>
+              <Badge color={C.textDim}>state: <span style={{ fontFamily: MONO }}>{scanStatus?.state || scanStatus?.status || "unknown"}</span></Badge>
               {!!scanStatus?.ready && <Badge color={C.green}>READY</Badge>}
             </div>
           )}
@@ -2364,17 +2461,25 @@ const qcH = (ak,apiKey) => {
 const qcRequestError = (err) => {
   const msg = String(err?.message || err || "");
   if (/failed to fetch/i.test(msg)) {
+    let originHint = "";
+    try {
+      if (typeof window !== "undefined" && window.location?.origin) {
+        originHint = ` Your dashboard Origin is ${window.location.origin} — add that exact value (comma-separated) to QC_CORS_ORIGINS on the API if the console shows a CORS error.`;
+      }
+    } catch {
+      originHint = "";
+    }
     return new Error(
-      "Failed to fetch live backend data. Open DevTools → Network: if the request never completes, the API may be waking up (Render), blocked (VPN/adblock), or the wrong URL. " +
-        `This build calls ${QC_API} (set VITE_API_URL / VITE_QC_API_URL at build time). Confirm QC_CORS_ORIGINS on the API includes your dashboard origin. Re-save API keys after reload.`,
+      "Failed to fetch live backend data. Open DevTools → Network: if the request hangs, the API may be cold-starting (Render can take 30–90s on first hit), or the request is blocked (VPN/adblock), or the API URL is wrong. " +
+        `This build calls ${QC_API} (set VITE_API_URL / VITE_QC_API_URL at build time).${originHint} Re-save API keys after reload.`,
     );
   }
   return err instanceof Error ? err : new Error(msg || "Backend request failed.");
 };
 
 /** Render cold start / transient proxy errors — retry a few times with backoff */
-const QC_FETCH_RETRIES = Math.max(1, Math.min(6, Number(import.meta.env?.VITE_QC_FETCH_RETRIES || 3)));
-const QC_FETCH_RETRY_BASE_MS = Math.max(200, Math.min(5000, Number(import.meta.env?.VITE_QC_FETCH_RETRY_MS || 900)));
+const QC_FETCH_RETRIES = Math.max(1, Math.min(8, Number(import.meta.env?.VITE_QC_FETCH_RETRIES || 4)));
+const QC_FETCH_RETRY_BASE_MS = Math.max(200, Math.min(8000, Number(import.meta.env?.VITE_QC_FETCH_RETRY_MS || 1100)));
 
 const _qcSleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const _qcNetworkish = (err) => {
@@ -3499,7 +3604,7 @@ function GuidedWizard({ onExit, onAvatarStateChange, onSound }) {
       const headers = { "Content-Type": "application/json" };
       if (apiKey.trim()) headers["X-QC-API-Key"] = apiKey.trim();
 
-      const res = await fetch(`${QC_API}/api/v1/one-click/scan-and-fix`, {
+      const res = await qcFetchWithRetry(`${QC_API}/api/v1/one-click/scan-and-fix`, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -3523,7 +3628,7 @@ function GuidedWizard({ onExit, onAvatarStateChange, onSound }) {
         setRemediationPlan(workflowPlan);
       } else {
         try {
-          const planResp = await fetch(`${QC_API}/api/vulns/remediation`, { headers });
+          const planResp = await qcFetchWithRetry(`${QC_API}/api/vulns/remediation`, { headers });
           const planJson = await planResp.json().catch(() => ({}));
           if (planResp.ok) setRemediationPlan(normalizeRemediationPlan(planJson?.data || null, data?.target || target));
         } catch {}
@@ -3537,7 +3642,7 @@ function GuidedWizard({ onExit, onAvatarStateChange, onSound }) {
       setTimeout(() => setStep(3), 500);
     } catch (e) {
       clearInterval(progressInterval);
-      const msg = String(e?.message || e || "");
+      const msg = String(qcRequestError(e)?.message || e?.message || e || "");
       setError(msg);
       setStep(1);
     } finally {

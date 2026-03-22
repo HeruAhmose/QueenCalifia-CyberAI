@@ -942,6 +942,18 @@ def require_permission(permission: str) -> Callable:
     return deco
 
 
+def _vuln_async_queue_uses_celery() -> bool:
+    """
+    Opt-in Celery for async vulnerability scans.
+
+    Having QC_REDIS_URL alone is not enough: without a worker consuming the
+    ``scans`` queue, tasks remain PENDING forever. Default is off so
+    API+Redis-only deployments use the in-process ScanJobManager + SQLite job
+    store (see vuln_engine.submit_scan).
+    """
+    return os.environ.get("QC_USE_CELERY", "0").strip() == "1"
+
+
 # ─── API Factory ─────────────────────────────────────────────────────────────
 
 def create_security_api(
@@ -1626,8 +1638,7 @@ def create_security_api(
             return jsonify({"success": True, "data": scan.to_dict()})
 
         # Distributed queue (Celery+Redis) for horizontal scale
-        redis_url = os.environ.get("QC_REDIS_URL", "").strip()
-        use_celery = os.environ.get("QC_USE_CELERY", "1" if redis_url else "0") == "1"
+        use_celery = _vuln_async_queue_uses_celery()
         allow_local_fallback = os.environ.get("QC_ALLOW_LOCAL_SCAN_FALLBACK", "0") == "1"
         if use_celery:
             try:
@@ -1667,8 +1678,7 @@ def create_security_api(
     def scan_status(scan_id: str):
         scan_id = InputSanitizer.sanitize_string(scan_id, max_length=128)
 
-        redis_url = os.environ.get("QC_REDIS_URL", "").strip()
-        use_celery = os.environ.get("QC_USE_CELERY", "1" if redis_url else "0") == "1"
+        use_celery = _vuln_async_queue_uses_celery()
         allow_local_fallback = os.environ.get("QC_ALLOW_LOCAL_SCAN_FALLBACK", "0") == "1"
         if use_celery:
             try:

@@ -34,14 +34,28 @@ Common on **Render** when the web service **sleeps** (free/hobby) or is **restar
 Mitigations:
 
 1. **Paid / always-on** instance on Render (or an external uptime ping every few minutes — use responsibly).
-2. **Dashboard retries:** `qcGet` / `qcPost` retry transient failures automatically (default **3** attempts, backoff from **~900ms**). Tune at build time:
-   - `VITE_QC_FETCH_RETRIES` — number of attempts (1–6, default 3)
-   - `VITE_QC_FETCH_RETRY_MS` — base delay in ms before backoff multiplier (default 900)
+2. **Dashboard retries:** `qcGet` / `qcPost` and the **Vulnerability** tab’s `apiFetch` use `qcFetchWithRetry` (defaults **4** attempts, base **~1100ms**; production `.env.production` may set **5** / **1400ms**). Tune at build time:
+   - `VITE_QC_FETCH_RETRIES` — number of attempts (1–8)
+   - `VITE_QC_FETCH_RETRY_MS` — base delay in ms before backoff multiplier (200–8000)
 3. **Gunicorn timeout:** `render.yaml` uses `--timeout 120` so long cold LLM/chat calls are less likely to be killed mid-request.
 4. **Rate limits:** burst traffic can yield **429**; space out tab refreshes and heavy parallel panels.
+
+## Vulnerability scan stuck on `PENDING` (UUID `scan_id`)
+
+The dashboard’s async scanner polls `GET /api/vulns/scan/<id>`. **`PENDING`** with a **UUID** task id means the API **queued a Celery job** but **no worker** is consuming the **`scans`** queue (or Redis/broker is miswired).
+
+**Fix (pick one):**
+
+1. **Single API service (e.g. Render web only):** set **`QC_USE_CELERY=0`** on the API. Scans then use the **in-process** queue + SQLite job store (`ScanJobManager`); `scan_id` is shorter (hex), not a UUID.
+2. **Scaled / worker topology:** deploy the **Celery worker** with the same **`QC_REDIS_URL`** and **`QC_USE_CELERY=1`**, command like:  
+   `celery -A celery_app.celery_app worker -l INFO --concurrency 1 -Q scans`  
+   (matches `render.yaml` worker service.)
+
+Do **not** assume Redis alone runs scans — Redis is also used for rate limits and budgeting.
 
 ## Related code
 
 - Dashboard API base: `frontend/src/QueenCalifia_Unified_Command_Dashboard.jsx` (`QC_API`, `qcGet` / `qcPost`, `qcFetchWithRetry`).  
 - Shared helper: `frontend/src/lib/api.js` (`VITE_API_URL` / `VITE_QC_API_URL` — keep in sync with dashboard).  
-- CORS: `api/gateway.py` (`_browser_cors_origin_allowed`), Flask CORS on `/api/*` in `backend/app.py`.
+- CORS: `api/gateway.py` (`_browser_cors_origin_allowed`), Flask CORS on `/api/*` in `backend/app.py`.  
+- Async scan routing: `api/gateway.py` (`_vuln_async_queue_uses_celery`, `POST /api/vulns/scan`).

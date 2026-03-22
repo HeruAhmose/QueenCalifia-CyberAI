@@ -119,6 +119,15 @@ def test_compliance_checks_use_real_evidence(tmp_path):
     assert all(status == "passed" for status in asset.compliance_status.values())
 
 
+def test_webapp_scan_populates_remediation_inventory(tmp_path):
+    engine = VulnerabilityEngine({"db_path": str(tmp_path / "vuln_web.db")})
+    r = engine.scan_web_application("https://example.com")
+    assert r.get("findings")
+    plan = engine.generate_remediation_plan()
+    assert int(plan.get("total_vulnerabilities") or 0) >= 1
+    assert len(plan.get("priority_actions") or []) >= 1
+
+
 def test_missing_compliance_evidence_is_honest(tmp_path):
     engine = VulnerabilityEngine({"db_path": str(tmp_path / "queen.db")})
     asset = Asset(asset_id="asset-2", ip_address="10.0.0.6", asset_type=AssetType.SERVER)
