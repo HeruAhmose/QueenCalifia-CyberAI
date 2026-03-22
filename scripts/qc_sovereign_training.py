@@ -994,6 +994,20 @@ Environment:
                         help="Don't save JSON report")
     parser.add_argument("--base-url", default=None,
                         help="Override QC_BASE_URL")
+    parser.add_argument(
+        "--health-timeout",
+        type=int,
+        default=int(os.environ.get("QC_TRAINING_HEALTH_TIMEOUT", "60")),
+        metavar="SEC",
+        help="Seconds to wait for /healthz on startup (default 60; Render cold start often needs 30–90s)",
+    )
+    parser.add_argument(
+        "--health-retries",
+        type=int,
+        default=int(os.environ.get("QC_TRAINING_HEALTH_RETRIES", "3")),
+        metavar="N",
+        help="Retry /healthz this many times if the connection times out (default 3)",
+    )
 
     args = parser.parse_args()
 
@@ -1014,31 +1028,56 @@ Environment:
         )
 
     _banner("INITIALIZING")
-    print(f"  {_C.DIM}Checking connectivity to {QC_BASE_URL}...{_C.RESET}", end=" ")
+    ht = max(5, min(180, int(args.health_timeout)))
+    hr = max(1, min(10, int(args.health_retries)))
+    print(
+        f"  {_C.DIM}Checking connectivity to {QC_BASE_URL} "
+        f"(timeout={ht}s, retries={hr})...{_C.RESET}",
+        end=" ",
+        flush=True,
+    )
 
-    status, data, lat = _get("/healthz", timeout=15)
-    if status == 200:
-        print(f"{_C.GREEN}Connected ✓ ({lat}ms){_C.RESET}")
-    elif status in (401, 403):
-        print(f"{_C.GOLD}Auth required — running with key{_C.RESET}")
-    elif status in (502, 503, 504):
-        print(
-            f"{_C.GOLD}status={status} (gateway/upstream busy — retry in a minute){_C.RESET}"
-        )
-    elif status == 0:
-        detail = (data or {}).get("error", "unknown network error")
-        print(f"{_C.RED}Connection failed (no HTTP response){_C.RESET}")
-        print(f"  {_C.DIM}URL: {QC_BASE_URL}/healthz{_C.RESET}")
-        print(f"  {_C.DIM}Detail: {detail}{_C.RESET}")
-        print(
-            f"  {_C.DIM}Checks: Render dashboard (service up?), Wi‑Fi/VPN/firewall, DNS. "
-            f"PowerShell: irm {QC_BASE_URL}/healthz{_C.RESET}"
-        )
-        print(
-            f"  {_C.DIM}Local backend: QC_BASE_URL=http://127.0.0.1:5000 python scripts/qc_sovereign_training.py{_C.RESET}"
-        )
-        sys.exit(1)
-    else:
+    status, data, lat = 0, {}, 0
+    for attempt in range(hr):
+        status, data, lat = _get("/healthz", timeout=ht)
+        if status == 200:
+            print(f"{_C.GREEN}Connected ✓ ({lat}ms){_C.RESET}")
+            break
+        if status in (401, 403):
+            print(f"{_C.GOLD}Auth required — running with key{_C.RESET}")
+            break
+        if status in (502, 503, 504):
+            print(
+                f"{_C.GOLD}status={status} (gateway/upstream busy — retry in a minute){_C.RESET}"
+            )
+            break
+        if status == 0:
+            detail = (data or {}).get("error", "unknown network error")
+            if attempt + 1 < hr:
+                print(
+                    f"\n  {_C.GOLD}Attempt {attempt + 1}/{hr}: no response ({detail}). "
+                    f"Retrying in 5s...{_C.RESET}",
+                    flush=True,
+                )
+                time.sleep(5)
+                print(f"  {_C.DIM}Checking connectivity...{_C.RESET}", end=" ", flush=True)
+                continue
+            print(f"{_C.RED}Connection failed (no HTTP response){_C.RESET}")
+            print(f"  {_C.DIM}URL: {QC_BASE_URL}/healthz{_C.RESET}")
+            print(f"  {_C.DIM}Detail: {detail}{_C.RESET}")
+            print(
+                f"  {_C.DIM}Tip: Render cold start can exceed 15s — use "
+                f"--health-timeout 90 or wake the service in a browser first.{_C.RESET}"
+            )
+            print(
+                f"  {_C.DIM}Checks: Render dashboard (service up?), Wi‑Fi/VPN/firewall, DNS. "
+                f"PowerShell: irm {QC_BASE_URL}/healthz -TimeoutSec 90{_C.RESET}"
+            )
+            print(
+                f"  {_C.DIM}Local backend: QC_BASE_URL=http://127.0.0.1:5000 python scripts/qc_sovereign_training.py{_C.RESET}"
+            )
+            sys.exit(1)
         print(f"{_C.GOLD}status={status} — proceeding anyway{_C.RESET}")
+        break
 
     run(phase_name=args.phase, depth=args.depth, save_report=not args.no_report)
