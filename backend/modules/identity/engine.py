@@ -301,30 +301,46 @@ def run_learning_cycle_if_due(db_path) -> dict:
 
     This keeps memory/reflection generation moving forward during normal product
     use without exposing public traffic to direct state rewrites.
+
+    Uses a SQLite BEGIN IMMEDIATE + ``identity_cycle_gate`` row so concurrent
+    callers (e.g. several ``GET /api/identity/state`` requests) cannot all pass
+    the throttle before ``audit_log`` commits — that race produced duplicate
+    weekly self-notes in production.
     """
+    from datetime import datetime, timezone, timedelta
+
     enabled = os.environ.get("QC_AUTO_LEARNING_ENABLED", "1") == "1"
     if not enabled:
         return {"ok": True, "skipped": True, "reason": "disabled"}
 
     interval_minutes = max(15, int(os.environ.get("QC_AUTO_LEARNING_INTERVAL_MINUTES", "180")))
+    now_utc = datetime.now(timezone.utc)
+    now_str = utc_now()
+
     with get_db(db_path) as c:
-        last = c.execute(
-            """SELECT created_at FROM audit_log
-               WHERE event_type IN ('learning_cycle', 'learning_cycle_auto')
-               ORDER BY id DESC LIMIT 1"""
-        ).fetchone()
-
-    if last and last["created_at"]:
-        try:
-            last_run = last["created_at"]
-            # Normalize trailing Z timestamps for fromisoformat.
-            from datetime import datetime, timezone, timedelta
-
-            last_dt = datetime.fromisoformat(str(last_run).replace("Z", "+00:00"))
-            if datetime.now(timezone.utc) - last_dt < timedelta(minutes=interval_minutes):
-                return {"ok": True, "skipped": True, "reason": "interval_not_elapsed"}
-        except Exception:
-            pass
+        c.execute("BEGIN IMMEDIATE")
+        c.execute(
+            """
+            CREATE TABLE IF NOT EXISTS identity_cycle_gate (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                last_auto_at TEXT NOT NULL
+            )
+            """
+        )
+        row = c.execute("SELECT last_auto_at FROM identity_cycle_gate WHERE id = 1").fetchone()
+        if row and row["last_auto_at"]:
+            try:
+                prev = datetime.fromisoformat(str(row["last_auto_at"]).replace("Z", "+00:00"))
+                if now_utc - prev < timedelta(minutes=interval_minutes):
+                    c.commit()
+                    return {"ok": True, "skipped": True, "reason": "interval_not_elapsed"}
+            except Exception:
+                pass
+        c.execute(
+            "INSERT OR REPLACE INTO identity_cycle_gate (id, last_auto_at) VALUES (1, ?)",
+            (now_str,),
+        )
+        c.commit()
 
     result = run_learning_cycle(db_path)
     audit(db_path, "learning_cycle_auto", "system", None, {"interval_minutes": interval_minutes})
