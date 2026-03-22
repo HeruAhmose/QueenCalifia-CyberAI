@@ -217,9 +217,12 @@ End-to-end QA against the **live** backend (chat, market, forecast, workflows, a
 $env:QC_API_KEY = "<paste-from-render>"
 python .\scripts\qc_sovereign_training.py --phase infrastructure
 python .\scripts\qc_sovereign_training.py --phase all
+python .\scripts\qc_sovereign_training.py --phase advanced
 ```
 
 The harness sends **`X-QC-API-Key`** (must match the server’s `QC_API_KEY`). **`502`/`503`** on Render are usually transient—wait and retry.
+
+**Perpetual learner (`scripts/qc_perpetual_learner.py`):** long-running, **randomized** high-concurrency harness (ThreadPoolExecutor) that continuously hits health, identity, market, mesh, evolution, predictor, threat-intel, and **short “whisper”** chat turns — plus optional light POSTs (events, forecast, telemetry). Use for **always-on stimulation**; use `qc_sovereign_training.py` for structured pass/fail QA. Example: `python scripts/qc_perpetual_learner.py --workers 16` (set `QC_API_KEY`; Ctrl+C to stop). Add `--heavy` only on environments where vuln/one-click load is acceptable.
 
 **Training Command Center (UI):** open the dashboard with query `?qc_training=1` or set `VITE_QC_TRAINING_CONSOLE=1` when building — loads `frontend/src/panels/QCTrainingConsole.jsx` (architecture docs + TRAINING_REPORT.json viewer). No API keys in the browser.
 

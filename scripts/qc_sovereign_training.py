@@ -38,11 +38,27 @@ import sys
 import time
 import argparse
 import statistics
+import io
 from datetime import datetime
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 from urllib.parse import urlencode
+
+
+def _configure_stdio_utf8() -> None:
+    """Avoid UnicodeEncodeError on Windows cp1252 consoles (banners use box-drawing chars)."""
+    if sys.platform != "win32":
+        return
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        else:
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 # ─── CONFIG ─────────────────────────────────────────────────────
 
@@ -65,6 +81,9 @@ _PLACEHOLDER_API_KEYS = frozenset(
 # Session tracking
 SESSION_ID = f"training-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 USER_ID = "qc-training-service"
+
+# Set by run() — phases read for "deep" intensity (more samples, extra probes)
+_DEPTH = "standard"
 
 
 # ─── COLORS ─────────────────────────────────────────────────────
@@ -210,6 +229,7 @@ class TrainingResults:
                 "timestamp": datetime.now().isoformat(),
                 "base_url": QC_BASE_URL,
                 "session_id": SESSION_ID,
+                "depth": _DEPTH,
                 "total_tests": total,
                 "total_passed": total_passed,
                 "pass_rate": round(total_passed / total * 100, 1) if total else 0,
@@ -407,12 +427,37 @@ def phase_functions(results: TrainingResults):
             passed = status in (200, 400, 401, 403)
         results.add(phase, name, passed, f"status={status}", lat)
 
+    if _DEPTH == "deep":
+        deep_snaps = [
+            (_snap("stock", "MSFT"), "Market snapshot (stock MSFT, deep)"),
+            (_snap("stock", "GOOGL"), "Market snapshot (stock GOOGL, deep)"),
+            (_snap("crypto", "SOL-USD"), "Market snapshot (crypto SOL-USD, deep)"),
+        ]
+        for path, name in deep_snaps:
+            status, data, lat = _get(path)
+            passed = status in (200, 400, 401, 403)
+            results.add(phase, name, passed, f"status={status}", lat)
+
     # ── Chat endpoint (all three modes)
     for mode in ["cyber", "research", "lab"]:
         status, data, lat = _chat(f"Test message for {mode} mode validation.", mode=mode)
         has_reply = bool(data.get("reply"))
         results.add(phase, f"Chat engine ({mode} mode)", status == 200 and has_reply,
                     f"status={status}, reply={'yes' if has_reply else 'empty'}", lat)
+
+    if _DEPTH == "deep":
+        for mode in ["cyber", "research", "lab"]:
+            status, data, lat = _chat(
+                "Deep validation: summarize your operational mandate in one sentence.", mode=mode
+            )
+            has_reply = bool(data.get("reply"))
+            results.add(
+                phase,
+                f"Chat engine deep probe ({mode})",
+                status == 200 and len((data.get("reply") or "")) > 20,
+                f"status={status}, len={len(data.get('reply') or '')}",
+                lat,
+            )
 
     # ── Memory endpoint
     status, data, lat = _get("/api/chat/memories")
@@ -673,34 +718,40 @@ def phase_production(results: TrainingResults):
     _section("PHASE 5 — Production Stress & Performance")
     phase = "production"
 
+    n_samples = 10 if _DEPTH == "deep" else 5
+    sleep_between = 0.35 if _DEPTH == "deep" else 0.5
+
     # ── 5a. Response latency benchmarks
     latencies = []
-    for i in range(5):
+    for i in range(n_samples):
         status, data, lat = _chat(f"Quick test {i}: What is the current threat level?", mode="cyber")
         latencies.append(lat)
-        time.sleep(0.5)
+        time.sleep(sleep_between)
 
     avg_lat = int(statistics.mean(latencies))
-    p95_lat = int(sorted(latencies)[int(len(latencies) * 0.95)])
-    results.add(phase, f"Avg response latency (<5s)", avg_lat < 5000,
-                f"avg={avg_lat}ms, p95={p95_lat}ms", avg_lat)
+    p95_idx = min(len(latencies) - 1, max(0, int(len(latencies) * 0.95) - 1))
+    p95_lat = int(sorted(latencies)[p95_idx])
+    results.add(phase, f"Avg response latency (<5s) [{n_samples} samples]", avg_lat < 5000,
+                f"avg={avg_lat}ms, p95={p95_lat}ms depth={_DEPTH}", avg_lat)
 
     # ── 5b. Large input handling
-    events = [f"Event {i}: anomaly at 10.0.0.{i%255} port {1024+i}" for i in range(50)]
-    long_input = "Analyze these 50 network events and identify patterns:\n" + "\n".join(events)
+    n_events = 80 if _DEPTH == "deep" else 50
+    events = [f"Event {i}: anomaly at 10.0.0.{i%255} port {1024+i}" for i in range(n_events)]
+    long_input = f"Analyze these {n_events} network events and identify patterns:\n" + "\n".join(events)
     status, data, lat = _chat(long_input, mode="cyber")
-    results.add(phase, "Large input handling (50 events)", status == 200,
+    results.add(phase, f"Large input handling ({n_events} events)", status == 200,
                 f"status={status}", lat)
 
     # ── 5c. Rapid succession (burst)
+    burst_n = 6 if _DEPTH == "deep" else 3
     burst_ok = 0
-    for i in range(3):
+    for i in range(burst_n):
         status, data, lat = _chat(f"Burst test {i}", mode="cyber")
         if status == 200:
             burst_ok += 1
-        time.sleep(0.3)
-    results.add(phase, "Burst tolerance (3 rapid requests)", burst_ok == 3,
-                f"{burst_ok}/3 succeeded")
+        time.sleep(0.2 if _DEPTH == "deep" else 0.3)
+    results.add(phase, f"Burst tolerance ({burst_n} rapid requests)", burst_ok == burst_n,
+                f"{burst_ok}/{burst_n} succeeded")
 
     # ── 5d. Mode switch under load
     for mode in ["cyber", "research", "lab", "cyber"]:
@@ -780,12 +831,41 @@ def phase_competitive(results: TrainingResults):
                 f"{'Source provenance clear' if has_provenance else 'Missing provenance detail'}",
                 lat, data.get("reply", ""))
 
+    if _DEPTH == "deep":
+        status, data, lat = _chat(
+            "Outline a step-by-step incident response playbook for ransomware with containment first.",
+            mode="cyber",
+        )
+        reply = (data.get("reply") or "").lower()
+        playbook = any(
+            w in reply
+            for w in ["contain", "isolate", "erad", "recover", "lessons", "communicat", "evidence"]
+        )
+        results.add(
+            phase,
+            "Operational playbook depth (deep)",
+            status == 200 and playbook,
+            "structured IR language" if playbook else "weak structure",
+            lat,
+            data.get("reply", ""),
+        )
+
     results.phase_summary(phase)
 
 
 # ═══════════════════════════════════════════════════════════════
 #  MAIN RUNNER
 # ═══════════════════════════════════════════════════════════════
+
+PHASE_ORDER = [
+    "infrastructure",
+    "identity",
+    "functions",
+    "workflows",
+    "adversarial",
+    "production",
+    "competitive",
+]
 
 PHASES = {
     "infrastructure": phase_infrastructure,
@@ -799,23 +879,36 @@ PHASES = {
 
 
 def run(phase_name="all", depth="standard", save_report=True):
+    global _DEPTH
     results = TrainingResults()
+
+    if phase_name == "advanced":
+        _DEPTH = "deep"
+        sequence = PHASE_ORDER
+        display_phase = "advanced (full suite, depth=deep)"
+    elif phase_name == "all":
+        _DEPTH = depth
+        sequence = PHASE_ORDER
+        display_phase = phase_name
+    elif phase_name in PHASES:
+        _DEPTH = depth
+        sequence = [phase_name]
+        display_phase = phase_name
+    else:
+        print(f"{_C.RED}Unknown phase: {phase_name}{_C.RESET}")
+        print(f"Available: {', '.join(PHASES.keys())}, all, advanced")
+        return
+
     _banner("QC SOVEREIGN TRAINING SERVICE v3")
     print(f"  {_C.DIM}Target:{_C.RESET}     {QC_BASE_URL}")
     print(f"  {_C.DIM}Session:{_C.RESET}    {SESSION_ID}")
-    print(f"  {_C.DIM}Phase:{_C.RESET}      {phase_name}")
+    print(f"  {_C.DIM}Phase:{_C.RESET}      {display_phase}")
+    print(f"  {_C.DIM}Depth:{_C.RESET}      {_DEPTH}")
     print(f"  {_C.DIM}Auth:{_C.RESET}       {'API key set' if QC_API_KEY else 'No API key'}")
     print(f"  {_C.DIM}Admin:{_C.RESET}      {'Admin key set' if QC_ADMIN_KEY else 'No admin key'}")
 
-    if phase_name == "all":
-        for name, fn in PHASES.items():
-            fn(results)
-    elif phase_name in PHASES:
-        PHASES[phase_name](results)
-    else:
-        print(f"{_C.RED}Unknown phase: {phase_name}{_C.RESET}")
-        print(f"Available: {', '.join(PHASES.keys())}, all")
-        return
+    for key in sequence:
+        PHASES[key](results)
 
     # ── Final Summary
     _banner("TRAINING COMPLETE")
@@ -855,6 +948,7 @@ def run(phase_name="all", depth="standard", save_report=True):
 # ─── CLI ────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    _configure_stdio_utf8()
     parser = argparse.ArgumentParser(
         description="QC Sovereign Training Service — Production training & QA for Queen Califia CyberAI",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -868,6 +962,7 @@ Phases:
   production       Latency benchmarks, burst tolerance, degradation
   competitive      Self-positioning, cross-domain depth, output quality
   all              Run every phase in sequence
+  advanced         All phases with depth=deep (intensive competitive + extra probes)
 
 Examples:
   # Quick health check
@@ -878,6 +973,9 @@ Examples:
 
   # Full training run
   python scripts/qc_sovereign_training.py --phase all
+
+  # Intensive full suite (same phases as "all", depth forced to deep)
+  python scripts/qc_sovereign_training.py --phase advanced
 
   # Target a specific backend URL
   QC_BASE_URL=http://localhost:5000 python scripts/qc_sovereign_training.py --phase all
