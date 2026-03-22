@@ -55,6 +55,7 @@ def _parse_origins(origins_str: str) -> list[str]:
             "https://queencalifia.tamerian.com",
             "https://queencalifia-cyberai.web.app",
             "https://queencalifia-cyberai.firebaseapp.com",
+            "http://queencalifia-cyberai:10000",
             "http://localhost:3000",
             "http://localhost:5173",
             "http://localhost:4173",

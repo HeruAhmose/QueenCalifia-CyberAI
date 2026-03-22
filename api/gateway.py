@@ -88,6 +88,9 @@ def _browser_cors_origin_allowed(origin: str) -> bool:
         allowed_exact = {x.strip() for x in raw.split(",") if x.strip()}
         if origin in allowed_exact:
             return True
+    if re.match(r"^https?://queencalifia-cyberai(?::\d+)?$", origin, re.I):
+        # Docker Compose / K8s service name + port (e.g. backend Dockerfile on :10000)
+        return True
     return (
         origin.endswith(".web.app")
         or origin.endswith(".firebaseapp.com")
@@ -111,6 +114,8 @@ def _flask_cors_origin_values(config: SecurityConfig) -> List[Any]:
     # Vite / CRA hitting a hosted API
     values.append(re.compile(r"^http://localhost(?::\d+)?$", re.I))
     values.append(re.compile(r"^http://127\.0\.0\.1(?::\d+)?$", re.I))
+    # Service hostname (compose/K8s) — matches e.g. http://queencalifia-cyberai:10000
+    values.append(re.compile(r"^https?://queencalifia-cyberai(?::\d+)?$", re.I))
     if "https://queencalifia.tamerian.com" not in values:
         values.append("https://queencalifia.tamerian.com")
     return values
