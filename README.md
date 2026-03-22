@@ -224,6 +224,12 @@ The harness sends **`X-QC-API-Key`** (must match the server’s `QC_API_KEY`). *
 
 **Perpetual learner (`scripts/qc_perpetual_learner.py`):** long-running, **randomized** high-concurrency harness (ThreadPoolExecutor) that continuously hits health, identity, market, mesh, evolution, predictor, threat-intel, and **short “whisper”** chat turns — plus optional light POSTs (events, forecast, telemetry). Use for **always-on stimulation**; use `qc_sovereign_training.py` for structured pass/fail QA. Example: `python scripts/qc_perpetual_learner.py --workers 16` (set `QC_API_KEY`; Ctrl+C to stop). Add `--heavy` only on environments where vuln/one-click load is acceptable.
 
+**Offline learning (`scripts/qc_offline_learning.py`):** **no HTTP** — loads `EvolutionEngine` locally and ingests **JSON/JSONL** corpora (`scripts/offline_corpus/`) and/or **synthetic** scan/incident/remediation bundles into a SQLite evolution DB (`--db` or `QC_EVOLUTION_DB`). Same learning paths as production (`learn_from_scan`, `learn_from_completed_scan`, `learn_from_incident`, `learn_from_remediation`, `evolve`). Optional **`--identity-db ./queen.db --identity-once`** runs one **identity** `run_learning_cycle` against a **copy** of your main DB (still offline). Example:
+
+```bash
+python scripts/qc_offline_learning.py --corpus scripts/offline_corpus/sample_scan.json --synthetic 40
+```
+
 **Training Command Center (UI):** open the dashboard with query `?qc_training=1` or set `VITE_QC_TRAINING_CONSOLE=1` when building — loads `frontend/src/panels/QCTrainingConsole.jsx` (architecture docs + TRAINING_REPORT.json viewer). No API keys in the browser.
 
 **Do not** call Anthropic directly from the browser with a secret key — use server-side scripts or a backend proxy. Conversation meta-intents may bypass the external LLM by design; use open-ended scenarios to exercise Claude.

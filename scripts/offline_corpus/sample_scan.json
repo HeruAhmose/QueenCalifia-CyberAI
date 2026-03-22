@@ -1,0 +1,69 @@
+[
+  {
+    "type": "scan",
+    "payload": {
+      "scan_id": "offline-sample-1",
+      "target": "10.0.0.0/24",
+      "scan_type": "full",
+      "hosts": [
+        {
+          "ip": "10.0.0.5",
+          "os_guess": "Ubuntu 22.04",
+          "open_ports": [22, 80, 443],
+          "services": {
+            "22": {"service": "ssh", "version": "OpenSSH_9.6", "banner": "SSH-2.0-OpenSSH_9.6"},
+            "80": {"service": "http", "version": "nginx/1.24", "banner": "Server: nginx"},
+            "443": {"service": "https", "version": "nginx/1.24", "banner": ""}
+          },
+          "findings": [
+            {
+              "title": "Missing HSTS",
+              "category": "http_security",
+              "severity": "HIGH",
+              "port": 443,
+              "service": "https",
+              "remediation": "Add Strict-Transport-Security header"
+            }
+          ]
+        },
+        {
+          "ip": "10.0.0.12",
+          "os_guess": "Windows Server 2022",
+          "open_ports": [3389, 445],
+          "services": {
+            "3389": {"service": "rdp", "version": "", "banner": ""},
+            "445": {"service": "smb", "version": "SMB 3.1.1", "banner": ""}
+          },
+          "findings": []
+        }
+      ]
+    }
+  },
+  {
+    "type": "incident",
+    "payload": {
+      "mitre_techniques": ["T1078", "T1486"],
+      "category": "ransomware",
+      "severity": "CRITICAL",
+      "affected_assets": ["10.0.0.5", "10.0.0.12"],
+      "iocs": [
+        {"type": "domain", "value": "c2-example.invalid"},
+        {"type": "sha256", "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+      ]
+    }
+  },
+  {
+    "type": "remediation",
+    "payload": {
+      "actions": [
+        {
+          "category": "http_security",
+          "title": "Enable HSTS",
+          "status": "completed",
+          "commands": ["nginx -s reload"],
+          "risk_level": "low"
+        }
+      ]
+    }
+  }
+]
