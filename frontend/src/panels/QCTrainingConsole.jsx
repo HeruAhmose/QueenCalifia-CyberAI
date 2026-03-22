@@ -88,8 +88,8 @@ const PHASES = [
     name: "Function Validation",
     icon: "⚙️",
     color: C.cyan,
-    tests: 17,
-    desc: "Every API endpoint tested: chat (all 3 modes), market sources, crypto, FX, FRED, SEC, Nasdaq, forecast, portfolio, memory. Plus error handling for bad inputs.",
+    tests: 16,
+    desc: "Chat (3 modes), market sources, snapshot (query params: crypto, forex, stock), FRED, forecast, portfolio, memory, error paths. URLs match backend/modules/market/routes.py.",
     what_it_proves: "Every route works, returns correct status codes, handles edge cases without crashing",
   },
   {

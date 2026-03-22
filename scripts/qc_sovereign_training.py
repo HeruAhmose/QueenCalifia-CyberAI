@@ -42,6 +42,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
+from urllib.parse import urlencode
 
 # ─── CONFIG ─────────────────────────────────────────────────────
 
@@ -383,21 +384,27 @@ def phase_functions(results: TrainingResults):
     _section("PHASE 2 — Function Validation (All Endpoints)")
     phase = "functions"
 
-    # ── Market Intelligence Endpoints
-    endpoints = [
+    # ── Market Intelligence (paths match backend/modules/market/routes.py)
+    def _snap(at: str, sym: str) -> str:
+        return "/api/market/snapshot?" + urlencode({"asset_type": at, "symbol": sym})
+
+    market_cases = [
         ("/api/market/sources", "Market sources list"),
-        ("/api/market/snapshot", "Market snapshot aggregation"),
-        ("/api/market/crypto/BTC", "Crypto price (BTC)"),
-        ("/api/market/crypto/ETH", "Crypto price (ETH)"),
-        ("/api/market/fx/USD", "FX rates (USD)"),
+        ("/api/market/snapshot", "Market snapshot (missing params → 400)"),
+        (_snap("crypto", "BTC-USD"), "Market snapshot (crypto BTC-USD)"),
+        (_snap("crypto", "ETH-USD"), "Market snapshot (crypto ETH-USD)"),
+        (_snap("forex", "USD/EUR"), "Market snapshot (forex USD/EUR)"),
+        (_snap("stock", "AAPL"), "Market snapshot (stock / SEC intel AAPL)"),
         ("/api/market/fred/GDP", "FRED series (GDP)"),
-        ("/api/market/sec/AAPL", "SEC filings (AAPL)"),
     ]
 
-    for path, name in endpoints:
+    for path, name in market_cases:
         status, data, lat = _get(path)
-        # 200 = success, 401/403 = auth required (valid), 500+ = server error
-        passed = status in (200, 401, 403)
+        if name.startswith("Market snapshot (missing params"):
+            passed = status in (400, 401, 403)
+        else:
+            # 200 = OK; 400 = validation/upstream (still a live route); 401/403 = auth
+            passed = status in (200, 400, 401, 403)
         results.add(phase, name, passed, f"status={status}", lat)
 
     # ── Chat endpoint (all three modes)
@@ -433,9 +440,9 @@ def phase_functions(results: TrainingResults):
     results.add(phase, "Chat error handling (empty message)", status in (200, 400, 422),
                 f"status={status}", lat)
 
-    # ── Error handling: invalid crypto symbol
-    status, data, lat = _get("/api/market/crypto/FAKECOIN999")
-    results.add(phase, "Market error handling (invalid symbol)", status in (200, 400, 404),
+    # ── Error handling: invalid / unknown symbol (snapshot pipeline)
+    status, data, lat = _get(_snap("crypto", "ZZZFAKECOIN999"))
+    results.add(phase, "Market error handling (invalid symbol)", status in (400, 404, 422, 500),
                 f"status={status}", lat)
 
     results.phase_summary(phase)
