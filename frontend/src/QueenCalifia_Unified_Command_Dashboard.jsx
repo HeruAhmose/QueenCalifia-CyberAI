@@ -2251,8 +2251,31 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
                     <Badge color={C.textDim}>Findings: {scanResult.vulnerabilities_found}</Badge>
                     <Badge color={C.green}>Risk score: {scanResult.risk_score}</Badge>
                   </div>
+                  {(scanResult.notes || []).length > 0 && (
+                    <div style={{ fontSize: 10, color: C.amber, padding: "6px 8px", background: C.surface, borderRadius: 6 }}>
+                      {(scanResult.notes || []).map((n, i) => (<div key={i}>{n}</div>))}
+                    </div>
+                  )}
+                  {(scanResult.findings || []).length > 0 && (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <div style={{ fontSize: 11, color: C.textSoft }}>Finding details</div>
+                      {(scanResult.findings || []).slice(0, 8).map((f, idx) => (
+                        <div key={idx} style={{ padding: "8px 10px", background: C.surface, borderRadius: 6 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                            <div style={{ fontSize: 11, color: C.text }}>{f.title || "Finding"}</div>
+                            <Badge color={(String(f.severity || "").toUpperCase() === "HIGH" || String(f.severity || "").toUpperCase() === "CRITICAL") ? C.red : C.textDim}>{f.severity || "INFO"}</Badge>
+                          </div>
+                          {!!f.description && <div style={{ fontSize: 10, color: C.textDim, marginTop: 4 }}>{f.description}</div>}
+                          {!!f.remediation && <div style={{ fontSize: 10, color: C.textDim, marginTop: 4 }}>Fix: {f.remediation}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div style={{ fontSize: 11, color: C.textDim }}>
-                    This UI shows aggregated counts. Use the Remediation Plan panel for prioritized actions and guidance.
+                    Hosted APIs scan from the server: <span style={{ fontFamily: MONO }}>127.0.0.1</span> is the container loopback, not your PC. Use <b>Web App</b> mode for HTTPS URLs, or a reachable private IP from the API&apos;s network.
+                  </div>
+                  <div style={{ fontSize: 11, color: C.textDim }}>
+                    Use the Remediation Plan panel for prioritized actions and guidance.
                   </div>
                 </>
               ) : (
