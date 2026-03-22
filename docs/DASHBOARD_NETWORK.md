@@ -17,9 +17,8 @@ The unified dashboard uses `fetch()` to `VITE_API_URL` / `VITE_QC_API_URL` (defa
 3. **`QC_CORS_ORIGINS` on Render (exact match)**  
    The API must list your dashboard **Origin** exactly (scheme + host, no path), comma-separated, e.g.  
    `https://queencalifia-cyberai.web.app,https://queencalifia-cyberai.firebaseapp.com`  
-   Add **preview channel** URLs if you use them, e.g.  
-   `https://queencalifia-cyberai--channel-abc123.web.app`  
-   Custom domains (e.g. `https://app.example.com`) **must** appear here; suffix rules alone are not enough for arbitrary domains.
+   The gateway also registers **regex** allowlists for `queencalifia-cyberai` **preview** Hosting URLs (`…--channel….web.app`) and `http://localhost:*` so those are not blocked by flask-cors preflight.  
+   **Custom domains** (e.g. `https://app.example.com`) must still be added to `QC_CORS_ORIGINS` explicitly.
 
 4. **VPN / adblock / corporate proxy**  
    Try another network or disable extensions; some block `*.onrender.com`.
