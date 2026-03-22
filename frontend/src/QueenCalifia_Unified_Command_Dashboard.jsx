@@ -1690,7 +1690,10 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
       let json = null;
       try { json = text ? JSON.parse(text) : null; } catch { json = null; }
       if (!res.ok) {
-        const msg = json?.error || json?.message || `${res.status} ${res.statusText}`;
+        const msg =
+          (json?.message && String(json.message).trim())
+          || json?.error
+          || `${res.status} ${res.statusText}`;
         throw new Error(msg);
       }
       if (text && json === null) {
@@ -2089,12 +2092,16 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
         }
       } catch (e) {
         const msg = String(e?.message || e || "");
-        const transientMissing = /scan not found/i.test(msg);
+        const transientMissing = /scan not found|no scan job with this id/i.test(msg);
         if (!cancelled && transientMissing) {
           notFoundStreak += 1;
           setScanStatus((prev) => prev || { state: "queued", ready: false, result: null });
-          if (notFoundStreak >= 4) {
-            setError("Scan status is synchronizing across the backend. Holding the scan session and retrying...");
+          // SQLite busy / load-balancer instance drift can cause short 404 bursts; keep polling quietly longer.
+          if (notFoundStreak >= 12) {
+            setError(
+              "Still can’t load scan status (scan not found). Common causes: (1) database briefly locked — wait and it often clears; " +
+              "(2) multiple API replicas without shared scan storage — use one instance or enable Celery + shared Redis. Retrying…",
+            );
           }
         } else if (!cancelled) {
           setError(msg);

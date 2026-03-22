@@ -1709,7 +1709,17 @@ def create_security_api(
 
         job = vuln_engine.get_scan_job(scan_id)
         if not job:
-            return jsonify({"error": "scan not found"}), 404
+            return jsonify(
+                {
+                    "error": "scan not found",
+                    "message": (
+                        "No scan job with this id. If this appears briefly and then resolves, the scan store was busy — retry. "
+                        "If it never resolves, your POST may have hit a different API instance than this GET "
+                        "(scale to one instance or use a shared store / Celery result backend)."
+                    ),
+                    "scan_id": scan_id,
+                }
+            ), 404
         if evolution_engine and isinstance(job, dict) and job.get("status") == "completed" and isinstance(job.get("result"), dict):
             try:
                 evolution_engine.learn_from_completed_scan(job["result"], source="local_scan_poll")
