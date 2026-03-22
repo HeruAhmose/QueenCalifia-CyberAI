@@ -183,6 +183,15 @@ services:
       QC_K6_ENABLE_SCAN: ${QC_K6_ENABLE_SCAN:-1}
       QC_K6_REPORT_DIR: "/output"
       QC_K6_EXPECT_BUDGET_HEADERS: ${QC_K6_EXPECT_BUDGET_HEADERS:-1}
+      # Full stress (see loadtest/README.md): QC_K6_FULL_SUITE=1, ENABLE_POSTS, ENABLE_CHAT, etc.
+      QC_K6_FULL_SUITE: ${QC_K6_FULL_SUITE:-0}
+      QC_K6_SAMPLES_PER_ITER: ${QC_K6_SAMPLES_PER_ITER:-12}
+      QC_K6_ENABLE_POSTS: ${QC_K6_ENABLE_POSTS:-0}
+      QC_K6_ENABLE_CHAT: ${QC_K6_ENABLE_CHAT:-0}
+      QC_K6_ENABLE_HEAVY: ${QC_K6_ENABLE_HEAVY:-0}
+      QC_K6_SCAN_TARGET: ${QC_K6_SCAN_TARGET:-10.0.0.1}
+      QC_K6_P95_MS: ${QC_K6_P95_MS:-}
+      QC_K6_HTTP_FAIL_RATE: ${QC_K6_HTTP_FAIL_RATE:-}
     command: ["run", "/scripts/k6_qc.js"]
     depends_on:
       - api
