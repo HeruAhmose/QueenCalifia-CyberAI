@@ -33,4 +33,4 @@ COPY . /opt/render/project/src
 
 WORKDIR /opt/render/project/src/backend
 
-CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:10000", "--workers", "2", "--threads", "4", "--timeout", "120"]
+CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:10000", "--workers", "2", "--threads", "4", "--timeout", "180", "--keep-alive", "30", "--graceful-timeout", "30"]

@@ -222,24 +222,9 @@ python .\scripts\qc_sovereign_training.py --phase advanced
 
 The harness sends **`X-QC-API-Key`** (must match the server’s `QC_API_KEY`). **`502`/`503`** on Render are usually transient—wait and retry.
 
-Cold start: the script waits up to **`QC_TRAINING_HEALTH_TIMEOUT`** seconds (default **60**) and retries **`QC_TRAINING_HEALTH_RETRIES`** times (default **3**) for `/healthz` before exiting. Override with e.g. `python scripts/qc_sovereign_training.py --phase advanced --health-timeout 90 --health-retries 5`.
+Startup `/healthz` uses **`QC_TRAINING_HEALTH_TIMEOUT`** (default 60s) and **`QC_TRAINING_HEALTH_RETRIES`** (default 3); flags `--health-timeout` / `--health-retries` override. Example: `python scripts/qc_sovereign_training.py --phase advanced --health-timeout 90`.
 
-**Windows:** see **[`docs/TRAINING_WINDOWS.md`](docs/TRAINING_WINDOWS.md)**. Quick start after `git pull`:
-
-```powershell
-$env:QC_API_KEY = "<from Render>"
-.\scripts\run_training_advanced.ps1
-.\scripts\run_perpetual_learner.ps1 -Workers 16
-.\scripts\run_offline_learning.ps1 -Synthetic 40
-```
-
-**Perpetual learner (`scripts/qc_perpetual_learner.py`):** long-running, **randomized** high-concurrency harness (ThreadPoolExecutor) that continuously hits health, identity, market, mesh, evolution, predictor, threat-intel, and **short “whisper”** chat turns — plus optional light POSTs (events, forecast, telemetry). Use for **always-on stimulation**; use `qc_sovereign_training.py` for structured pass/fail QA. Example: `python scripts/qc_perpetual_learner.py --workers 16` (set `QC_API_KEY`; Ctrl+C to stop). Add `--heavy` only on environments where vuln/one-click load is acceptable.
-
-**Offline learning (`scripts/qc_offline_learning.py`):** **no HTTP** — loads `EvolutionEngine` locally and ingests **JSON/JSONL** corpora (`scripts/offline_corpus/`) and/or **synthetic** scan/incident/remediation bundles into a SQLite evolution DB (`--db` or `QC_EVOLUTION_DB`). Same learning paths as production (`learn_from_scan`, `learn_from_completed_scan`, `learn_from_incident`, `learn_from_remediation`, `evolve`). Optional **`--identity-db ./queen.db --identity-once`** runs one **identity** `run_learning_cycle` against a **copy** of your main DB (still offline). Example:
-
-```bash
-python scripts/qc_offline_learning.py --corpus scripts/offline_corpus/sample_scan.json --synthetic 40
-```
+Also: **`scripts/qc_perpetual_learner.py`** (live load, `QC_API_KEY`), **`scripts/qc_offline_learning.py`** (local evolution DB, no network).
 
 **Training Command Center (UI):** open the dashboard with query `?qc_training=1` or set `VITE_QC_TRAINING_CONSOLE=1` when building — loads `frontend/src/panels/QCTrainingConsole.jsx` (architecture docs + TRAINING_REPORT.json viewer). No API keys in the browser.
 

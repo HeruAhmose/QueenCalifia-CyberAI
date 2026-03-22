@@ -34,10 +34,10 @@ Common on **Render** when the web service **sleeps** (free/hobby) or is **restar
 Mitigations:
 
 1. **Paid / always-on** instance on Render (or an external uptime ping every few minutes — use responsibly).
-2. **Dashboard retries:** `qcGet` / `qcPost` and the **Vulnerability** tab’s `apiFetch` use `qcFetchWithRetry` (defaults **4** attempts, base **~1100ms**; production `.env.production` may set **5** / **1400ms**). Tune at build time:
-   - `VITE_QC_FETCH_RETRIES` — number of attempts (1–8)
-   - `VITE_QC_FETCH_RETRY_MS` — base delay in ms before backoff multiplier (200–8000)
-3. **Gunicorn timeout:** `render.yaml` uses `--timeout 120` so long cold LLM/chat calls are less likely to be killed mid-request.
+2. **Dashboard retries:** `qcGet` / `qcPost`, **`frontend/src/lib/api.js`** (`apiGet`/`apiPost`), and the **Vulnerability** tab use the same backoff env vars (defaults **4** attempts, base **~1100ms**; production may set **5** / **1400ms**):
+   - `VITE_QC_FETCH_RETRIES` — attempts (1–8)
+   - `VITE_QC_FETCH_RETRY_MS` — base delay in ms (200–8000)
+3. **Gunicorn:** `render.yaml` uses **`--timeout 180 --keep-alive 30`** so slow LLM/chat and idle connections are less likely to drop mid-request.
 4. **Rate limits:** burst traffic can yield **429**; space out tab refreshes and heavy parallel panels.
 
 ## Vulnerability scan stuck on `PENDING` (UUID `scan_id`)

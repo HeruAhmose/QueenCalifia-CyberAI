@@ -3,7 +3,8 @@ services:
     name: queen-califia-cyberai
     runtime: docker
     dockerfilePath: backend/Dockerfile
-    dockerCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120
+    # Longer timeout + keep-alive reduce dropped connections during slow LLM / cold workers
+    dockerCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 180 --keep-alive 30 --graceful-timeout 30
     disk:
       name: qc-data
       mountPath: /var/data
