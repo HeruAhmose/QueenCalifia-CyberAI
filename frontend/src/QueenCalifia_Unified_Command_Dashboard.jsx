@@ -2371,11 +2371,45 @@ const qcRequestError = (err) => {
   }
   return err instanceof Error ? err : new Error(msg || "Backend request failed.");
 };
+
+/** Render cold start / transient proxy errors — retry a few times with backoff */
+const QC_FETCH_RETRIES = Math.max(1, Math.min(6, Number(import.meta.env?.VITE_QC_FETCH_RETRIES || 3)));
+const QC_FETCH_RETRY_BASE_MS = Math.max(200, Math.min(5000, Number(import.meta.env?.VITE_QC_FETCH_RETRY_MS || 900)));
+
+const _qcSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const _qcNetworkish = (err) => {
+  const m = String(err?.message || err || "").toLowerCase();
+  return /failed to fetch|networkerror|load failed|aborted|timed out|timeout/i.test(m);
+};
+const _qcStatusRetry = (status) => status === 502 || status === 503 || status === 504;
+
+async function qcFetchWithRetry(url, init) {
+  let lastErr;
+  for (let attempt = 0; attempt < QC_FETCH_RETRIES; attempt++) {
+    try {
+      const r = await fetch(url, init);
+      if (_qcStatusRetry(r.status) && attempt < QC_FETCH_RETRIES - 1) {
+        await _qcSleep(QC_FETCH_RETRY_BASE_MS * (attempt + 1));
+        continue;
+      }
+      return r;
+    } catch (e) {
+      lastErr = e;
+      if (attempt < QC_FETCH_RETRIES - 1 && _qcNetworkish(e)) {
+        await _qcSleep(QC_FETCH_RETRY_BASE_MS * (attempt + 1));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastErr ?? new Error("fetch failed");
+}
+
 const qcGet = async (p,ak,apiKey) => {
   try {
-    const r=await fetch(`${QC_API}${p}`,{headers:qcH(ak,apiKey)});
-    const d=await r.json().catch(()=>({}));
-    if(!r.ok) throw new Error(d.error||`HTTP ${r.status}`);
+    const r = await qcFetchWithRetry(`${QC_API}${p}`, { headers: qcH(ak, apiKey) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
     return d;
   } catch (err) {
     throw qcRequestError(err);
@@ -2383,9 +2417,13 @@ const qcGet = async (p,ak,apiKey) => {
 };
 const qcPost = async (p,b,ak,apiKey) => {
   try {
-    const r=await fetch(`${QC_API}${p}`,{method:"POST",headers:qcH(ak,apiKey),body:JSON.stringify(b||{})});
-    const d=await r.json().catch(()=>({}));
-    if(!r.ok) throw new Error(d.error||`HTTP ${r.status}`);
+    const r = await qcFetchWithRetry(`${QC_API}${p}`, {
+      method: "POST",
+      headers: qcH(ak, apiKey),
+      body: JSON.stringify(b || {}),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
     return d;
   } catch (err) {
     throw qcRequestError(err);

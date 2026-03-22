@@ -27,8 +27,21 @@ The unified dashboard uses `fetch()` to `VITE_API_URL` / `VITE_QC_API_URL` (defa
 5. **API keys**  
    After a full reload, paste the key again (sessionStorage). Structured keys must be the **raw** key the server accepts.
 
+## Intermittent disconnections
+
+Common on **Render** when the web service **sleeps** (free/hobby) or is **restarting**: the first requests after idle can return **502/503** or fail with **Failed to fetch** until Gunicorn is warm.
+
+Mitigations:
+
+1. **Paid / always-on** instance on Render (or an external uptime ping every few minutes — use responsibly).
+2. **Dashboard retries:** `qcGet` / `qcPost` retry transient failures automatically (default **3** attempts, backoff from **~900ms**). Tune at build time:
+   - `VITE_QC_FETCH_RETRIES` — number of attempts (1–6, default 3)
+   - `VITE_QC_FETCH_RETRY_MS` — base delay in ms before backoff multiplier (default 900)
+3. **Gunicorn timeout:** `render.yaml` uses `--timeout 120` so long cold LLM/chat calls are less likely to be killed mid-request.
+4. **Rate limits:** burst traffic can yield **429**; space out tab refreshes and heavy parallel panels.
+
 ## Related code
 
-- Dashboard API base: `frontend/src/QueenCalifia_Unified_Command_Dashboard.jsx` (`QC_API`, `qcGet` / `qcPost`).  
-- Shared helper: `frontend/src/lib/api.js` (`VITE_API_URL` only — keep in sync with dashboard).  
+- Dashboard API base: `frontend/src/QueenCalifia_Unified_Command_Dashboard.jsx` (`QC_API`, `qcGet` / `qcPost`, `qcFetchWithRetry`).  
+- Shared helper: `frontend/src/lib/api.js` (`VITE_API_URL` / `VITE_QC_API_URL` — keep in sync with dashboard).  
 - CORS: `api/gateway.py` (`_browser_cors_origin_allowed`), Flask CORS on `/api/*` in `backend/app.py`.
