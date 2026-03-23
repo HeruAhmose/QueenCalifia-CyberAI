@@ -3,7 +3,6 @@
 # Usage: .\scripts\run_k6_docker.ps1
 # Optional: $env:QC_LOADTEST_API_KEY = "..." ; $env:QC_K6_VUS = "25" ; $env:QC_K6_DURATION = "90s"
 
-$ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
 Set-Location $root
 
@@ -12,18 +11,22 @@ if (-not (Test-Path (Join-Path $root "docker-compose.yml"))) {
   exit 1
 }
 
+# Do not use ErrorActionPreference Stop here: docker prints to stderr when the daemon is down.
+$ErrorActionPreference = "Continue"
 docker info 2>&1 | Out-Null
+$ErrorActionPreference = "Stop"
 if ($LASTEXITCODE -ne 0) {
-  Write-Host "Docker engine is not running. Open Docker Desktop and wait until it shows 'Engine running', then retry." -ForegroundColor Yellow
+  Write-Host "Docker engine is not running. Open Docker Desktop and wait until the engine is running, then retry." -ForegroundColor Yellow
   exit 1
 }
 
 if (-not (Test-Path (Join-Path $root ".env"))) {
-  @"
-# Minimal compose env (gitignored) — add secrets from .env.example as needed.
+  $envBody = @"
+# Minimal compose env (gitignored). Add secrets from .env.example as needed.
 QC_ALLOW_INSECURE_BOOTSTRAP=1
-"@ | Set-Content -Path (Join-Path $root ".env") -Encoding UTF8
-  Write-Host "Created minimal .env — customize if needed." -ForegroundColor DarkYellow
+"@
+  Set-Content -Path (Join-Path $root ".env") -Value $envBody -Encoding UTF8
+  Write-Host "Created minimal .env - customize if needed." -ForegroundColor DarkYellow
 }
 
 if (-not $env:QC_K6_FULL_SUITE) { $env:QC_K6_FULL_SUITE = "1" }
