@@ -9,6 +9,12 @@ It validates budgeting headers when enabled and writes `summary.json` / `summary
 
 ## Run via Docker Compose
 
+**Windows:** if the CLI is installed but commands fail with `dockerDesktopLinuxEngine`, **start Docker Desktop** and wait until the engine is running, then:
+
+```powershell
+.\scripts\run_k6_docker.ps1
+```
+
 1) Start the stack:
 
 ```bash
