@@ -127,6 +127,17 @@ services:
       - "5000:5000"
     volumes:
       - ./data:/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/healthz', timeout=8).read()"
+      interval: 15s
+      timeout: 12s
+      retries: 5
+      start_period: 90s
+    restart: unless-stopped
     depends_on:
       - redis
       - otel-collector
@@ -172,11 +183,14 @@ services:
   k6:
     image: grafana/k6:0.49.0
     profiles: ["loadtest"]
+    # k6 reaches the API via the host-published port (avoids "lookup api: no such host" on `compose run`).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./loadtest:/scripts:ro
       - ./data/loadtest:/output
     environment:
-      QC_API_BASE: "http://api:5000"
+      QC_API_BASE: ${QC_K6_API_BASE:-http://host.docker.internal:5000}
       QC_API_KEY: ${QC_LOADTEST_API_KEY:-}
       QC_K6_VUS: ${QC_K6_VUS:-20}
       QC_K6_DURATION: ${QC_K6_DURATION:-30s}
@@ -194,7 +208,8 @@ services:
       QC_K6_HTTP_FAIL_RATE: ${QC_K6_HTTP_FAIL_RATE:-}
     command: ["run", "/scripts/k6_qc.js"]
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
 
   # Smoke test profile: validates Grafana webhook sends Authorization header
