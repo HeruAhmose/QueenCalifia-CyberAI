@@ -99,6 +99,9 @@ services:
       QC_REDIS_URL: redis://redis:6379/0
       QC_USE_CELERY: "1"
       QC_PRODUCTION: "1"
+      # Required when QC_PRODUCTION=1 (gateway refuses empty pepper). Override in .env for anything real.
+      QC_API_KEY_PEPPER: ${QC_API_KEY_PEPPER:-compose-local-dev-pepper-not-for-production}
+      QC_AUDIT_HMAC_KEY: ${QC_AUDIT_HMAC_KEY:-compose-local-dev-audit-hmac-not-for-production}
       QC_ENFORCE_HTTPS: "0"
       QC_ALLOW_INSECURE_BOOTSTRAP: "1"   # initial local bootstrap only; disable once keys are provisioned
       QC_API_KEYS_FILE: /data/keys.json

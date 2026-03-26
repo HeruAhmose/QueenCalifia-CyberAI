@@ -90,7 +90,8 @@ docker compose --profile loadtest run --rm k6
 | `QC_K6_API_BASE` | Override API URL for k6 (default in compose: `http://host.docker.internal:5000` so `docker compose run k6` works on Docker Desktop) |
 | `QC_K6_P95_MS` / `QC_K6_HTTP_FAIL_RATE` | Override thresholds (full suite defaults are looser) |
 
-If **`curl http://localhost:5000/healthz`** fails, the **`api`** container is not listening (often exited). Check: `docker compose -f docker-compose.yml logs api --tail 100` and `docker compose -f docker-compose.yml ps -a`.
+If **`curl http://localhost:5000/healthz`** fails, the **`api`** container is not listening (often exited). Check: `docker compose -f docker-compose.yml logs api --tail 100` and `docker compose -f docker-compose.yml ps -a`.  
+If logs show **`QC_API_KEY_PEPPER must be set in production`**, set **`QC_API_KEY_PEPPER`** and **`QC_AUDIT_HMAC_KEY`** in `.env`, or `git pull` — compose now supplies **local-only defaults** for `docker compose up`.
 
 ### Output
 Compose mounts `./data/loadtest` into the k6 container at `/output`.
