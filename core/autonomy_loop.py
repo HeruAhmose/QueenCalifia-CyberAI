@@ -153,7 +153,7 @@ def start_autonomy_loop(
     path = Path(
         db_path
         or os.environ.get("QC_DB_PATH")
-        or "data/queen.db"
+        or "data/qc_os.db"
     ).expanduser().resolve()
 
     poll_seconds = max(30.0, float(os.environ.get("QC_AUTONOMY_POLL_SECONDS", "90")))

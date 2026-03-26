@@ -266,7 +266,8 @@ def build_system(no_auth: bool, origins: str) -> dict:
     # Background identity learning + optional safe localhost scans for evolution
     # (thread + SQLite lease; see core/autonomy_loop.py).
     start_autonomy_loop(
-        db_path=os.environ.get("QC_DB_PATH", "data/queen.db"),
+        # Must match core.settings.get_settings().db_path default (data/qc_os.db).
+        db_path=os.environ.get("QC_DB_PATH", "data/qc_os.db"),
         vuln_engine=vuln_engine,
         evolution_engine=evolution_engine,
     )

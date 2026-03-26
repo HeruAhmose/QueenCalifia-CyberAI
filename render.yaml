@@ -19,6 +19,8 @@ services:
         value: "1"
       - key: QC_NAME
         value: Queen Califia
+      # Canonical SQLite for chat (turns), identity, market, etc. Same path as
+      # init_db (backend/app.py) and autonomy (app.py); keep QC_AUDIT_CHAIN_DB aligned when co-located.
       - key: QC_DB_PATH
         value: /var/data/queen.db
       - key: QC_EVOLUTION_DB
