@@ -12,7 +12,7 @@ There are two supported deployment postures:
 
 1. **Dashboard convenience mode**
    - `QC_NO_AUTH=1`
-   - Best for the current public Firebase dashboard UX
+   - Best for the current public dashboard UX (GCS static site or legacy Firebase)
    - Keep `QC_MEMORY_EXPORT_TOKEN` set so memory backup/export remains protected
 
 2. **Strict API mode**

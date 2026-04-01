@@ -41,6 +41,26 @@ from pathlib import Path
 logger = logging.getLogger("queencalifia.remediation")
 
 
+def _finding_severity_to_risk_level(severity: Any) -> str:
+    """Map scanner finding severity to remediation action risk_level (low|medium|high)."""
+    raw = str(severity or "LOW").strip().upper()
+    if raw in ("CRITICAL", "HIGH"):
+        return "high"
+    if raw == "MEDIUM":
+        return "medium"
+    return "low"
+
+
+def _finding_cvss_score(finding: Dict) -> Optional[float]:
+    v = finding.get("cvss_score")
+    if v is None:
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
 class RemediationMode(Enum):
     PREVIEW = "preview"     # Show what would change
     APPROVE = "approve"     # Queued for human approval
@@ -85,6 +105,7 @@ class RemediationAction:
     requires_restart: List[str] = field(default_factory=list)
     estimated_downtime: str = "none"
     approved_by: str = ""
+    cvss_score: Optional[float] = None
 
     def to_dict(self) -> Dict:
         return asdict(self)
@@ -316,9 +337,14 @@ class AutoRemediation:
         if category in ("exposed_service", "cleartext_protocol", "potential_no_auth"):
             actions.append(self._firewall_block(finding, target, port))
 
-        # === Missing Security Headers ===
-        if category == "web_security" and "Missing Security Header" in title:
-            header_name = title.replace("Missing Security Header: ", "")
+        # === Missing Security Headers (live_scanner title + webapp {type, header} shape) ===
+        header_name: Optional[str] = None
+        if str(finding.get("type") or "") == "missing_security_header" and finding.get("header"):
+            header_name = str(finding.get("header") or "").strip()
+        elif category == "web_security" and "missing security header" in title.lower():
+            if ":" in title:
+                header_name = title.split(":", 1)[1].strip()
+        if header_name:
             actions.append(self._add_security_header(finding, target, header_name))
 
         # === Information Disclosure ===
@@ -359,7 +385,8 @@ class AutoRemediation:
                 title=f"Manual Review: {title}",
                 description=finding.get("remediation", "Review and remediate manually"),
                 category="manual",
-                risk_level="low",
+                risk_level=_finding_severity_to_risk_level(finding.get("severity")),
+                cvss_score=_finding_cvss_score(finding),
                 commands=[f"# Manual review required: {title}"],
             ))
 
@@ -391,7 +418,8 @@ class AutoRemediation:
             description=f"Restrict network access to port {port} ({finding.get('affected_component', '')})",
             category="firewall",
             platform=self.platform.value,
-            risk_level="low",
+            risk_level=_finding_severity_to_risk_level(finding.get("severity")),
+            cvss_score=_finding_cvss_score(finding),
             commands=cmds,
             rollback_commands=rollback,
             pre_check=f"sudo ufw status | grep {port} || sudo iptables -L -n | grep {port}",
@@ -413,13 +441,20 @@ class AutoRemediation:
         }
 
         directive = nginx_directives.get(header, f'add_header {header} "VALUE" always;')
+        risk = _finding_severity_to_risk_level(finding.get("severity"))
+        cvss = _finding_cvss_score(finding)
+        if cvss is None:
+            cvss = {"CRITICAL": 9.0, "HIGH": 7.5, "MEDIUM": 5.3, "LOW": 3.1}.get(
+                str(finding.get("severity") or "LOW").strip().upper(), 3.1
+            )
 
         return RemediationAction(
             finding_id=finding.get("finding_id", ""),
             title=f"Add Security Header: {header}",
             description=f"Add {header} to web server configuration",
             category="web_hardening",
-            risk_level="low",
+            risk_level=risk,
+            cvss_score=cvss,
             commands=[
                 f"# Add to nginx server block (typically /etc/nginx/sites-available/default):",
                 f"# {directive}",
@@ -443,7 +478,8 @@ class AutoRemediation:
             title="Suppress Information Disclosure Headers",
             description="Remove Server, X-Powered-By, and other version-revealing headers",
             category="web_hardening",
-            risk_level="low",
+            risk_level=_finding_severity_to_risk_level(finding.get("severity")),
+            cvss_score=_finding_cvss_score(finding),
             commands=[
                 "# Nginx: add to http block",
                 "echo 'server_tokens off;' | sudo tee /etc/nginx/conf.d/suppress-info.conf",
@@ -563,7 +599,8 @@ class AutoRemediation:
             title="Fix Insecure Cookies",
             description="Add Secure, HttpOnly, SameSite flags to cookies",
             category="web_hardening",
-            risk_level="low",
+            risk_level=_finding_severity_to_risk_level(finding.get("severity")),
+            cvss_score=_finding_cvss_score(finding),
             commands=[
                 "# Nginx: add to server block",
                 'proxy_cookie_flags ~ secure httponly samesite=strict;',

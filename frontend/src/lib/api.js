@@ -3,9 +3,9 @@
  * Centralised fetch with auth headers + retries (Render cold start / transient 502).
  */
 
-const API = String(
-  import.meta.env.VITE_QC_API_URL || import.meta.env.VITE_API_URL || "http://localhost:5000",
-).replace(/\/$/, "");
+import { getQcApiBase } from "../utils/qcApiBase.js";
+
+const API = getQcApiBase();
 const CONFIGURED_API_KEY = import.meta.env.VITE_QC_API_KEY || "";
 
 // Same env names as QueenCalifia_Unified_Command_Dashboard (qcFetchWithRetry)
@@ -67,4 +67,4 @@ export async function apiPost(path, body, adminKey) {
   return d;
 }
 
-export { API };
+export { API, fetchWithRetry };

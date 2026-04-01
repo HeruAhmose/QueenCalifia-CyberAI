@@ -10,6 +10,13 @@ def test_health_is_public_even_when_auth_required(app_factory):
     assert r.status_code == 200
 
 
+def test_healthz_readyz_public_when_auth_required(app_factory):
+    app = app_factory(require_api_key=True)
+    c = app.test_client()
+    assert c.get("/healthz").status_code == 200
+    assert c.get("/readyz").status_code in (200, 503)
+
+
 def test_auth_required_for_protected_endpoints(app_factory):
     app = app_factory(require_api_key=True)
     c = app.test_client()

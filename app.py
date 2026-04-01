@@ -49,8 +49,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 def _parse_origins(origins_str: str) -> list[str]:
     if not origins_str:
-        # Defaults when QC_CORS_ORIGINS is unset (local dev): include Firebase URLs so
-        # browser fetches from hosted dashboards are not blocked by CORS.
+        # Defaults when QC_CORS_ORIGINS is unset (local dev): include legacy Firebase
+        # dashboard URLs; GCS bucket sites use https://BUCKET.storage.googleapis.com
+        # (allowed via gateway regex when QC_CORS_ORIGINS is set — add exact origin here if needed).
         return [
             "https://queencalifia.tamerian.com",
             "https://queencalifia-cyberai.web.app",

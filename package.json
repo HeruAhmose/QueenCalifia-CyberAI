@@ -1,0 +1,8 @@
+{
+  "name": "queencalifia-cyberai",
+  "private": true,
+  "description": "Root scripts (dashboard lives in frontend/)",
+  "scripts": {
+    "deploy:dashboard:gcs": "powershell -NoProfile -ExecutionPolicy Bypass -File gcp/dashboard-hosting/deploy_gcs.ps1"
+  }
+}

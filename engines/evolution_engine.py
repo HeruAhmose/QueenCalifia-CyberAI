@@ -1292,7 +1292,7 @@ class EvolutionEngine:
                     "cve_id": "",
                     "title": action.get("title") or f"Remediation action {idx + 1}",
                     "severity": str(action.get("risk_level", "low")).upper(),
-                    "cvss_score": None,
+                    "cvss_score": action.get("cvss_score"),
                     "affected_asset": plan_dict.get("target_host") or target,
                     "remediation": action.get("description") or " ; ".join(action.get("commands", [])[:2]),
                     "category": action.get("category", "other"),
@@ -1300,9 +1300,23 @@ class EvolutionEngine:
                     "rollback_commands": action.get("rollback_commands", []),
                 })
 
+            sev_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+            for row in priority_actions:
+                s = str(row.get("severity") or "").upper()
+                if s == "CRITICAL":
+                    sev_counts["critical"] += 1
+                elif s == "HIGH":
+                    sev_counts["high"] += 1
+                elif s == "MEDIUM":
+                    sev_counts["medium"] += 1
+                elif s == "LOW":
+                    sev_counts["low"] += 1
+
             report["phases"]["remediation"] = {
                 "plan_id": plan_dict.get("plan_id"),
                 "total_actions": plan_dict.get("total_actions", 0),
+                "total_vulnerabilities": len(priority_actions),
+                "summary": sev_counts,
                 "target_host": plan_dict.get("target_host") or target,
                 "categories": {},
                 "actions": plan_dict.get("actions", []),

@@ -10,14 +10,14 @@ The unified dashboard uses `fetch()` to `VITE_API_URL` / `VITE_QC_API_URL` (defa
    - **401/403** → not a fetch failure; re-enter API key in the dashboard auth panel.
 
 2. **Correct API URL in the built site**  
-   Firebase Hosting bakes env at **build** time.  
+   The static host (GCS or legacy Firebase) bakes env at **build** time.  
    - `frontend/.env.production` should set `VITE_API_URL=https://queencalifia-cyberai.onrender.com` (no trailing slash).  
-   - Rebuild and redeploy: `cd frontend && npm run build` then `firebase deploy`.
+   - Rebuild and redeploy: `cd frontend && npm run build` then upload `frontend/dist` (see **`docs/DEPLOY_DASHBOARD_GCS.md`**) or, if still on Firebase, `firebase deploy --only hosting`.
 
 3. **`QC_CORS_ORIGINS` on Render (exact match)**  
    The API must list your dashboard **Origin** exactly (scheme + host, no path), comma-separated, e.g.  
-   `https://queencalifia-cyberai.web.app,https://queencalifia-cyberai.firebaseapp.com`  
-   The gateway also registers **regex** allowlists for `queencalifia-cyberai` **preview** Hosting URLs (`…--channel….web.app`) and `http://localhost:*` so those are not blocked by flask-cors preflight.  
+   `https://queencalifia-cyberai.web.app,https://queencalifia-cyberai.firebaseapp.com` (legacy) or your **`https://<bucket>.storage.googleapis.com`** dashboard origin.  
+   The gateway also registers **regex** allowlists for `queencalifia-cyberai` **preview** Hosting URLs (`…--channel….web.app`), **`https://<bucket>.storage.googleapis.com`**, and `http://localhost:*` so those are not blocked by flask-cors preflight.  
    **Custom domains** (e.g. `https://app.example.com`) must still be added to `QC_CORS_ORIGINS` explicitly.
 
 4. **VPN / adblock / corporate proxy**  

@@ -34,7 +34,7 @@ jobs:
           set -euo pipefail
           chmod +x scripts/bootstrap/bump_versions.sh
           out="$(scripts/bootstrap/bump_versions.sh scripts/bootstrap/versions.env)"
-          echo "result=$out" >> $GITHUB_OUTPUT
+          echo "result=$out" >> "${GITHUB_OUTPUT}"
           git status --porcelain
 
       - name: Stop if no changes

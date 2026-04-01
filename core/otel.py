@@ -23,6 +23,22 @@ from contextlib import contextmanager
 from typing import Any, Dict, Iterator, Optional
 
 _otel_initialized = False
+_otel_sdk_available_cache: Optional[bool] = None
+
+
+def _otel_sdk_available() -> bool:
+    """True only if OpenTelemetry packages are installed (env may still disable usage)."""
+    global _otel_sdk_available_cache
+    if _otel_sdk_available_cache is not None:
+        return _otel_sdk_available_cache
+    try:
+        import importlib
+
+        importlib.import_module("opentelemetry.trace")
+        _otel_sdk_available_cache = True
+    except ModuleNotFoundError:
+        _otel_sdk_available_cache = False
+    return _otel_sdk_available_cache
 
 
 def otel_enabled() -> bool:
@@ -45,6 +61,8 @@ def init_tracing(*, default_service_name: str) -> bool:
     if _otel_initialized:
         return True
     if not otel_enabled():
+        return False
+    if not _otel_sdk_available():
         return False
 
     traces_exporter = os.environ.get("OTEL_TRACES_EXPORTER", "otlp").strip().lower()
@@ -121,14 +139,14 @@ def instrument_celery() -> None:
 
 
 def inject(carrier: Dict[str, str]) -> None:
-    if not otel_enabled():
+    if not otel_enabled() or not _otel_sdk_available():
         return
     from opentelemetry import propagate  # type: ignore
     propagate.inject(carrier)
 
 
 def extract(carrier: Dict[str, str]) -> Any:
-    if not otel_enabled():
+    if not otel_enabled() or not _otel_sdk_available():
         return None
     from opentelemetry import propagate  # type: ignore
     return propagate.extract(carrier)
@@ -136,7 +154,7 @@ def extract(carrier: Dict[str, str]) -> Any:
 
 def attach_extracted_context(carrier: Dict[str, str]):
     """Attach extracted context. Returns a detach token or None."""
-    if not otel_enabled():
+    if not otel_enabled() or not _otel_sdk_available():
         return None
     from opentelemetry import context as otel_context  # type: ignore
     ctx = extract(carrier) or otel_context.get_current()
@@ -144,7 +162,7 @@ def attach_extracted_context(carrier: Dict[str, str]):
 
 
 def detach(token: Any) -> None:
-    if not otel_enabled() or token is None:
+    if not otel_enabled() or not _otel_sdk_available() or token is None:
         return
     from opentelemetry import context as otel_context  # type: ignore
     otel_context.detach(token)
@@ -152,7 +170,7 @@ def detach(token: Any) -> None:
 
 def current_trace_ids() -> tuple[Optional[str], Optional[str]]:
     """Return (trace_id_hex, span_id_hex) for log enrichment."""
-    if not otel_enabled():
+    if not otel_enabled() or not _otel_sdk_available():
         return None, None
     from opentelemetry import trace  # type: ignore
 
@@ -166,7 +184,7 @@ def current_trace_ids() -> tuple[Optional[str], Optional[str]]:
 @contextmanager
 def start_span(name: str, attributes: Optional[Dict[str, Any]] = None) -> Iterator[None]:
     """Start a span if tracing is enabled; otherwise no-op."""
-    if not otel_enabled():
+    if not otel_enabled() or not _otel_sdk_available():
         yield
         return
     from opentelemetry import trace  # type: ignore

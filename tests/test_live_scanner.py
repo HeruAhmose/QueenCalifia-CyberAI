@@ -320,6 +320,8 @@ class TestPlanGeneration:
         plan = remediator.generate_plan(findings)
         assert plan.total_actions >= 1
         assert plan.actions[0].category == "web_hardening"
+        assert plan.actions[0].risk_level == "medium"
+        assert plan.actions[0].cvss_score is not None
         assert len(plan.actions[0].commands) > 0
 
     def test_generate_plan_firewall(self, remediator):

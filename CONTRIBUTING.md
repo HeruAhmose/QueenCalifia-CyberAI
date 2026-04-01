@@ -17,4 +17,4 @@
 ## Security-Sensitive Changes
 - Follow the scan allowlist policy
 - Avoid introducing new persistent secret storage on the frontend
-- Keep Render/Firebase/README docs in sync with actual auth and persistence behavior
+- Keep Render/GCS dashboard deploy docs (`docs/DEPLOY_DASHBOARD_GCS.md`) and README in sync with actual auth and persistence behavior

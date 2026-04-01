@@ -11,7 +11,7 @@ Examples in current use include:
 
 - Python packages installed from `backend/requirements.txt`
 - JavaScript packages installed from `frontend/package.json`
-- Firebase Hosting
+- Google Cloud Storage (dashboard static hosting; optional legacy Firebase Hosting config in repo)
 - Render
 - Redis, Celery, Gunicorn, Flask, React, Vite, and related ecosystem tooling
 

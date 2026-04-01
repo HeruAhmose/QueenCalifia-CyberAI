@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",
     "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0 --port 4173"
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "deploy:gcs": "bash ../gcp/dashboard-hosting/deploy_gcs.sh",
+    "deploy:gcs:ps1": "powershell -NoProfile -ExecutionPolicy Bypass -File ../gcp/dashboard-hosting/deploy_gcs.ps1"
   },
   "dependencies": {
     "framer-motion": "^12.38.0",

@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Cell, PieChart, Pie } from "recharts";
+import { normalizeRemediationPlan, enrichScanResultForUi } from "./utils/qcNormalize.js";
+import { API, fetchWithRetry } from "./lib/api.js";
 
 /*
  * QueenCalifia CyberAI — Unified Command Dashboard
@@ -1605,7 +1607,11 @@ function VulnsTab() {
   }, [apiKey]);
 
   const apiFetch = useCallback(async (path, init = {}) => {
-    const res = await fetch(path, { ...init, headers: { ...(init.headers || {}), ...headers } });
+    const url =
+      path.startsWith("http://") || path.startsWith("https://")
+        ? path
+        : `${API}${path.startsWith("/") ? path : `/${path}`}`;
+    const res = await fetchWithRetry(url, { ...init, headers: { ...(init.headers || {}), ...headers } });
     const text = await res.text();
     let json = null;
     try { json = text ? JSON.parse(text) : null; } catch { json = null; }
@@ -1623,14 +1629,15 @@ function VulnsTab() {
     //   { scan_id, status, result? }
     if (!payload) return { state: "unknown", ready: false, result: null };
 
-    if (payload.result) {
-      return { state: payload.state || payload.status || "completed", ready: true, result: payload.result };
-    }
+    const state = (payload.state || payload.status || "unknown").toString();
+    const stUp = state.toUpperCase();
+    const result = payload.result ?? payload?.data?.result ?? null;
+    const hasResult = result != null && typeof result === "object";
+    const terminalOk =
+      stUp === "SUCCESS" || stUp === "COMPLETED" || stUp === "COMPLETE";
+    const ready = hasResult && (payload.ready === true || terminalOk);
 
-    const state = payload.state || payload.status || "unknown";
-    const ready = payload.ready === true || state === "completed" || state === "SUCCESS";
-    const result = payload.result || payload?.data?.result || null;
-    return { state, ready, result };
+    return { state, ready, result: hasResult ? result : null };
   }, []);
 
   const downloadText = useCallback((filename, content) => {
@@ -1703,11 +1710,12 @@ function VulnsTab() {
   const fetchRemediation = useCallback(async () => {
     try {
       const r = await apiFetch("/api/vulns/remediation");
-      setRemediation(r?.data || null);
+      const fb = (scanType === "web_app" ? webUrl : target) || "";
+      setRemediation(normalizeRemediationPlan(r?.data || null, fb));
     } catch (e) {
       setError(String(e?.message || e));
     }
-  }, [apiFetch]);
+  }, [apiFetch, scanType, target, webUrl]);
 
   const oneClickRemediate = async () => {
     setOneClickRunning(true);
@@ -1717,30 +1725,29 @@ function VulnsTab() {
     setError("");
     ocLog("⚡ Starting one-click remediation of 127.0.0.1...", "#60a5fa");
     try {
-      // Step 1: Launch scan
+      // Step 1: Launch scan (absolute API base — static hosting must not use same-origin /api)
       ocLog("🔍 Launching full scan of localhost...");
-      const scanResp = await fetch("/api/vulns/scan", {
+      const scanJson = await apiFetch("/api/vulns/scan", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) },
         body: JSON.stringify({ target: "127.0.0.1", scan_type: "full", mode: "async", acknowledge_authorized: true }),
       });
-      const scanJson = await scanResp.json();
       const sid = scanJson?.data?.scan_id || scanJson?.data?.scanId;
       if (!sid) throw new Error("No scan_id returned. Is QC backend running?");
+      setScanId(sid);
+      setScanStatus({ state: "queued", ready: false, result: null });
       ocLog("✓ Scan queued — ID: " + sid, "#10b981");
       // Step 2: Poll for completion
       let tries = 0;
       let scanDone = false;
       while (tries < 60 && !scanDone) {
         await new Promise(r => setTimeout(r, 3000));
-        const pollResp = await fetch("/api/vulns/scan/" + encodeURIComponent(sid), {
-          headers: { "Content-Type": "application/json", ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) }
-        });
-        const pollJson = await pollResp.json();
+        const pollJson = await apiFetch(`/api/vulns/scan/${encodeURIComponent(sid)}`, { method: "GET" });
         const state = pollJson?.data?.state || pollJson?.data?.status || "pending";
         ocLog("  ↳ Scan status: " + state);
         if (state === "completed" || state === "SUCCESS" || pollJson?.data?.ready) {
-          setScanResult(pollJson?.data?.result || null);
+          const raw = pollJson?.data?.result || null;
+          setScanStatus({ state: "completed", ready: true, result: raw });
+          setScanResult(enrichScanResultForUi(raw));
           scanDone = true;
           ocLog("✓ Scan complete!", "#10b981");
         }
@@ -1750,19 +1757,19 @@ function VulnsTab() {
       // Step 3: Execute remediation
       setOneClickPhase("remediating");
       ocLog("🛠️ Executing auto-remediation...", "#f59e0b");
-      const remResp = await fetch("/api/vulns/remediation/execute", {
+      const remJson = await apiFetch("/api/vulns/remediation/execute", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) },
-        body: JSON.stringify({ confirm: "EXECUTE", target: "127.0.0.1", auto_approve: true }),
+        body: JSON.stringify({
+          confirm: "EXECUTE",
+          target: "127.0.0.1",
+          auto_approve: true,
+          scan_id: sid,
+        }),
       });
-      const remJson = await remResp.json();
       setOneClickResult(remJson?.data || remJson);
       // Step 4: Load remediation plan
-      const planResp = await fetch("/api/vulns/remediation", {
-        headers: { ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) }
-      });
-      const planJson = await planResp.json();
-      setRemediation(planJson?.data || null);
+      const planJson = await apiFetch("/api/vulns/remediation", { method: "GET" });
+      setRemediation(normalizeRemediationPlan(planJson?.data || null, "127.0.0.1"));
       setOneClickPhase("done");
       ocLog("✅ All done — vulnerabilities remediated.", "#10b981");
     } catch (e) {
@@ -1792,7 +1799,7 @@ function VulnsTab() {
           method: "POST",
           body: JSON.stringify({ url: webUrl, acknowledge_authorized: true }),
         });
-        setScanResult(r?.data || null);
+        setScanResult(enrichScanResultForUi(r?.data || null));
         // webapp scans have their own findings; still show remediation guidance
         await fetchRemediation();
         return;
@@ -1832,7 +1839,7 @@ function VulnsTab() {
         if (cancelled) return;
         setScanStatus(s);
         if (s.ready) {
-          setScanResult(s.result || null);
+          setScanResult(enrichScanResultForUi(s.result || null));
           await fetchRemediation();
           return;
         }
@@ -1872,7 +1879,7 @@ function VulnsTab() {
               </div>
             ))}
             {oneClickPhase === "done" && oneClickResult && (
-              <div style={{ marginTop: 8, color: "#10b981", fontWeight: 600 }}>✅ Actions applied: {JSON.stringify(oneClickResult?.actions_executed || oneClickResult?.total || "see plan below")}</div>
+              <div style={{ marginTop: 8, color: "#10b981", fontWeight: 600 }}>✅ Actions applied: {JSON.stringify(oneClickResult?.actions_executed || oneClickResult?.actions_applied || oneClickResult?.total || "see plan below")}</div>
             )}
           </div>
         )}
@@ -1982,7 +1989,7 @@ function VulnsTab() {
                     <Badge color={C.green}>Risk score: {scanResult.risk_score}</Badge>
                   </div>
                   <div style={{ fontSize: 11, color: C.textDim }}>
-                    This UI shows aggregated counts. Use the Remediation Plan panel for prioritized actions and guidance.
+                    Severity totals match exported findings. Use the Remediation Plan panel for prioritized actions and exportable scripts.
                   </div>
                 </>
               ) : (
@@ -2032,6 +2039,8 @@ function VulnsTab() {
                 <Badge color={C.textDim}>Total: {remediation.total_vulnerabilities}</Badge>
                 <Badge color={C.red}>Critical: {remediation.summary?.critical || 0}</Badge>
                 <Badge color={C.amber}>High: {remediation.summary?.high || 0}</Badge>
+                <Badge color={C.accent}>Medium: {remediation.summary?.medium || 0}</Badge>
+                <Badge color={C.textDim}>Low: {remediation.summary?.low || 0}</Badge>
               </div>
 
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -2076,7 +2085,7 @@ function VulnsTab() {
                         {a.title}
                       </div>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        <Badge color={a.severity === "CRITICAL" ? C.red : a.severity === "HIGH" ? C.amber : C.textDim}>{a.severity}</Badge>
+                        <Badge color={a.severity === "CRITICAL" ? C.red : a.severity === "HIGH" ? C.amber : a.severity === "MEDIUM" ? C.accent : C.textDim}>{a.severity}</Badge>
                         <Badge color={C.textDim}>{a.cve_id || a.vuln_id}</Badge>
                       </div>
                     </div>
@@ -2156,10 +2165,9 @@ const DEVOPS_WORKFLOWS = [
 
 // ─── QC OS v4.2.1 — API Layer (shared by all QC tabs) ────────────────────
 
-const QC_API = "https://queencalifia-cyberai.onrender.com";
 const qcH = (ak,apiKey) => { const h = {"Content-Type":"application/json"}; if (apiKey) h["X-QC-API-Key"]=apiKey; if (ak) h["X-QC-Admin-Key"]=ak; return h; };
-const qcGet = async (p,ak,apiKey) => { const r=await fetch(`${QC_API}${p}`,{headers:qcH(ak,apiKey)}); const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(d.error||`HTTP ${r.status}`); return d; };
-const qcPost = async (p,b,ak,apiKey) => { const r=await fetch(`${QC_API}${p}`,{method:"POST",headers:qcH(ak,apiKey),body:JSON.stringify(b||{})}); const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(d.error||`HTTP ${r.status}`); return d; };
+const qcGet = async (p,ak,apiKey) => { const r=await fetch(`${API}${p}`,{headers:qcH(ak,apiKey)}); const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(d.error||`HTTP ${r.status}`); return d; };
+const qcPost = async (p,b,ak,apiKey) => { const r=await fetch(`${API}${p}`,{method:"POST",headers:qcH(ak,apiKey),body:JSON.stringify(b||{})}); const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(d.error||`HTTP ${r.status}`); return d; };
 
 const QC_MODES = {cyber:{label:"Cyber Guardian",color:C.green},research:{label:"Research Companion",color:C.amber},lab:{label:"Quant Lab",color:C.purple}};
 const SAMPLE_HOLDINGS = [

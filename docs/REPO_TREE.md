@@ -7,9 +7,12 @@
 ├── README.md
 ├── render.yaml
 ├── run-local.ps1
-├── firebase.json
+├── firebase.json          # legacy Firebase Hosting (optional)
+├── gcp/
+│   └── dashboard-hosting/ # GCS deploy script + README
 ├── docs/
 │   ├── API_CONTRACT.md
+│   ├── DEPLOY_DASHBOARD_GCS.md
 │   ├── REPO_TREE.md
 │   └── TRIPLE_CORE_BUILD_PLAN.md
 ├── backend/

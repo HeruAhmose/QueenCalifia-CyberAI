@@ -57,7 +57,7 @@ Version 4.3 | Tamerian Materials | Proprietary
 
 ## Runtime Model
 
-- Frontend is served from Firebase Hosting.
+- Frontend is served from **Google Cloud Storage** static website hosting (see `docs/DEPLOY_DASHBOARD_GCS.md`). Firebase Hosting files in the repo are legacy.
 - The production API runs on Render using `backend/app.py`, which loads the root security gateway app and mounts the dashboard blueprints.
 - Persistent memory/state is stored on a Render disk mounted at `/var/data`.
 - The evolution engine uses `QC_EVOLUTION_DB=/var/data/qc_evolution.db`.
@@ -234,9 +234,10 @@ Also: **`scripts/qc_perpetual_learner.py`** (live load, `QC_API_KEY`), **`script
 
 ```bash
 # Backend → Render (uses render.yaml and persistent disk)
-# Frontend → Firebase Hosting
-cd frontend && npm run build && cd ..
-firebase deploy --only hosting
+# Frontend → Google Cloud Storage (see docs/DEPLOY_DASHBOARD_GCS.md)
+export GCS_DASHBOARD_BUCKET=your-bucket-name
+bash gcp/dashboard-hosting/deploy_gcs.sh
+# Legacy: firebase deploy --only hosting (optional until cutover)
 ```
 
 Render requirements before redeploy:

@@ -78,7 +78,8 @@ def _browser_cors_origin_allowed(origin: str) -> bool:
     Whether to echo Access-Control-Allow-Origin for this browser Origin.
 
     Honors QC_CORS_ORIGINS (comma-separated exact origins from Render/env).
-    Also allows Firebase Hosting (*.web.app, *.firebaseapp.com) and local dev.
+    Also allows Firebase Hosting (*.web.app, *.firebaseapp.com), GCS static website
+    origins (https://<bucket>.storage.googleapis.com), and local dev.
     """
     origin = (origin or "").strip()
     if not origin:
@@ -90,6 +91,8 @@ def _browser_cors_origin_allowed(origin: str) -> bool:
             return True
     if re.match(r"^https?://queencalifia-cyberai(?::\d+)?$", origin, re.I):
         # Docker Compose / K8s service name + port (e.g. backend Dockerfile on :10000)
+        return True
+    if re.match(r"^https://[a-z0-9][a-z0-9_.-]*\.storage\.googleapis\.com$", origin, re.I):
         return True
     return (
         origin.endswith(".web.app")
@@ -104,13 +107,18 @@ def _flask_cors_origin_values(config: SecurityConfig) -> List[Any]:
     Origins passed to flask-cors must cover the same cases as _browser_cors_origin_allowed.
 
     When QC_CORS_ORIGINS is set, config.allowed_origins is *only* those literals; without
-    regex fallbacks, Firebase preview sites (…--channel.web.app) and local dashboards
-    fail the library's preflight check and the browser shows only \"Failed to fetch\".
+    regex fallbacks, Firebase preview sites (…--channel.web.app), GCS bucket website
+    origins, and local dashboards fail the library's preflight check and the browser
+    shows only \"Failed to fetch\".
     """
     values: List[Any] = list(config.allowed_origins)
     # Firebase Hosting: prod + preview channels for this default project id
     values.append(re.compile(r"^https://queencalifia-cyberai(?:--[a-z0-9-]+)?\.web\.app$", re.I))
     values.append(re.compile(r"^https://queencalifia-cyberai\.firebaseapp\.com$", re.I))
+    # GCS static website (virtual-hosted style): https://BUCKET.storage.googleapis.com
+    values.append(
+        re.compile(r"^https://[a-z0-9][a-z0-9_.-]*\.storage\.googleapis\.com$", re.I)
+    )
     # Vite / CRA hitting a hosted API
     values.append(re.compile(r"^http://localhost(?::\d+)?$", re.I))
     values.append(re.compile(r"^http://127\.0\.0\.1(?::\d+)?$", re.I))
@@ -1090,16 +1098,27 @@ def create_security_api(
             if proto != "https":
                 return jsonify({"error": "https required"}), 403
 
+        # Liveness/readiness/metrics/config: never depend on Redis-backed rate limits
+        # or token budgets (QC_FORCE_REDIS_BUDGET=1 would otherwise 500 probes when Redis is down).
+        if request.path in (
+            "/api/health",
+            "/api/ready",
+            "/healthz",
+            "/readyz",
+            "/metrics",
+            "/api/config",
+        ):
+            g.principal = None
+            g.user_role = "public"
+            g.rate_limit_identity = f"ip:{_safe_remote_addr()}"
+            set_principal(f"ip:{_safe_remote_addr()}")
+            return None
+
         principal = None
         if config.require_api_key:
             presented = request.headers.get(config.api_key_header, "").strip()
             principal = api_keys.validate(presented) if api_keys else None
             if not principal:
-                # Allow unauthenticated health/readiness probes
-                if request.path in ("/api/health", "/api/ready", "/healthz", "/readyz", "/metrics", "/api/config"):
-                    g.principal = None
-                    g.user_role = "public"
-                    return None
                 return jsonify({"error": "unauthorized"}), 401
         else:
             # Dev bypass (explicitly enabled via config): grant full permissions
@@ -1806,6 +1825,128 @@ def create_security_api(
         audit.log("remediation_plan_read", _safe_remote_addr(), g.user_role, 200, details={"asset_id": asset_id})
         return jsonify({"success": True, "data": plan})
 
+    @app.route("/api/vulns/remediation/execute", methods=["POST"])
+    @require_permission("execute")
+    def vuln_remediation_execute():
+        """Run auto-remediation for the best persisted plan, or generate a plan from a completed scan (scan_id)."""
+        data = request.get_json(silent=True) or {}
+        data = InputSanitizer.sanitize_json_body(data)
+        confirm = (data.get("confirm") or "").strip()
+        target = (data.get("target") or "").strip() or "127.0.0.1"
+        scan_id_raw = (data.get("scan_id") or "").strip()
+        scan_id = InputSanitizer.sanitize_string(scan_id_raw, max_length=128) if scan_id_raw else ""
+
+        if remediator is None:
+            return jsonify({"success": False, "error": "Remediation engine unavailable"}), 503
+
+        def _remediation_plan_score(p):
+            try:
+                d = p.to_dict() if hasattr(p, "to_dict") else p
+            except Exception:
+                return (0, "")
+            if not isinstance(d, dict):
+                return (0, "")
+            actions = d.get("actions") or []
+            n = int(d.get("total_actions") or len(actions) or 0)
+            ts = d.get("created_at") or d.get("executed_at") or ""
+            return (n, ts)
+
+        plan_obj = None
+        try:
+            persisted = list(getattr(remediator, "plans", {}).values())
+            if persisted:
+                best = max(persisted, key=_remediation_plan_score)
+                latest_dict = best.to_dict() if hasattr(best, "to_dict") else best
+                if isinstance(latest_dict, dict):
+                    act_count = int(
+                        latest_dict.get("total_actions") or len(latest_dict.get("actions") or []) or 0
+                    )
+                    if act_count > 0:
+                        plan_obj = best
+        except Exception:
+            logger.exception("Failed to resolve persisted remediation plan for execute")
+
+        if plan_obj is None and scan_id:
+            job = vuln_engine.get_scan_job(scan_id)
+            res = job.get("result") if isinstance(job, dict) else None
+            if isinstance(res, dict):
+                findings = res.get("findings") or []
+                if findings:
+                    try:
+                        plan_obj = remediator.generate_plan(findings, target_host=target, mode="preview")
+                    except Exception:
+                        logger.exception("remediator.generate_plan failed for scan_id=%s", scan_id)
+
+        if plan_obj is None:
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "no_plan",
+                    "message": "No remediation plan found. Run a scan first, or pass scan_id from a completed scan.",
+                }
+            ), 400
+
+        plan_dict = plan_obj.to_dict() if hasattr(plan_obj, "to_dict") else plan_obj
+        if not isinstance(plan_dict, dict):
+            return jsonify({"success": False, "error": "invalid_plan"}), 400
+        plan_id = plan_dict.get("plan_id")
+        if not plan_id:
+            return jsonify({"success": False, "error": "invalid_plan"}), 400
+
+        if confirm != "EXECUTE":
+            audit.log(
+                "remediation_execute_preview",
+                _safe_remote_addr(),
+                g.user_role,
+                200,
+                details={"plan_id": plan_id},
+            )
+            return jsonify(
+                {
+                    "success": True,
+                    "data": {
+                        "preview": True,
+                        "plan_id": plan_id,
+                        "message": "Send confirm: EXECUTE to run the current plan.",
+                    },
+                }
+            )
+
+        exec_result = remediator.execute_plan(plan_id, approved_by="one_click_dashboard")
+        if isinstance(exec_result, dict) and exec_result.get("error"):
+            audit.log(
+                "remediation_execute_failed",
+                _safe_remote_addr(),
+                g.user_role,
+                400,
+                details={"plan_id": plan_id, "error": exec_result.get("error")},
+            )
+            return jsonify({"success": False, "error": exec_result["error"], "data": exec_result}), 400
+
+        actions_applied = []
+        for a in exec_result.get("actions") or []:
+            if isinstance(a, dict) and a.get("status") == "completed" and a.get("title"):
+                actions_applied.append(a["title"])
+
+        audit.log(
+            "remediation_execute",
+            _safe_remote_addr(),
+            g.user_role,
+            200,
+            details={"plan_id": plan_id, "actions": len(actions_applied)},
+        )
+        return jsonify(
+            {
+                "success": True,
+                "data": {
+                    "plan_id": plan_id,
+                    "actions_applied": actions_applied,
+                    "actions_executed": actions_applied,
+                    "plan": exec_result,
+                },
+            }
+        )
+
     @app.route("/api/vulns/webapp", methods=["POST"])
     @require_permission("execute")
     def webapp_scan():
@@ -1821,6 +1962,11 @@ def create_security_api(
             return jsonify({"error": "authorization_ack_required", "message": "You must acknowledge you are authorized to scan this target. Set acknowledge_authorized: true in the request body."}), 400
 
         result = vuln_engine.scan_web_application(url)
+        if remediator is not None and result.get("findings"):
+            try:
+                remediator.generate_plan(result["findings"], target_host=url, mode="preview")
+            except Exception:
+                logger.exception("Failed to generate remediation plan after webapp scan")
         audit.log("webapp_scan", _safe_remote_addr(), g.user_role, 200, details={"url": url})
         return jsonify({"success": True, "data": result})
 

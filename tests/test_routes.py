@@ -24,6 +24,7 @@ def test_routes_registered(app_factory):
         "/api/vulns/scan/<scan_id>",
         "/api/vulns/status",
         "/api/vulns/remediation",
+        "/api/vulns/remediation/execute",
         "/api/vulns/webapp",
         "/api/incidents",
         "/api/incidents/<incident_id>",
@@ -127,3 +128,90 @@ def test_remediation_route_prefers_nonempty_plan_over_newer_empty_plan(tmp_path,
     assert data.get("plan_id") == good.plan_id
     assert data.get("total_actions", 0) >= 1
     assert len(data.get("actions", [])) >= 1
+
+
+def test_vuln_remediation_execute_preview_without_confirm(tmp_path, monkeypatch):
+    monkeypatch.setenv("QC_PRODUCTION", "0")
+    monkeypatch.setenv("QC_LOG_FORMAT", "plain")
+    monkeypatch.setenv("QC_API_KEY_PEPPER", "pepper-test")
+    monkeypatch.setenv("QC_AUDIT_HMAC_KEY", "hmac-test")
+    monkeypatch.setenv("QC_API_KEYS_JSON", _make_keys_json("test-api-key", "pepper-test"))
+
+    remediator = AutoRemediation({"db_path": str(tmp_path / "rex-prev.db"), "allow_execute": False})
+    plan = remediator.generate_plan(
+        [
+            {
+                "finding_id": "F-1",
+                "title": "Missing Security Header: HSTS",
+                "severity": "HIGH",
+                "category": "web_security",
+                "affected_component": "HTTPS",
+                "remediation": "Add Strict-Transport-Security header",
+            }
+        ],
+        target_host="127.0.0.1",
+    )
+
+    app = create_security_api(
+        DummyMesh(),
+        DummyVuln(),
+        DummyIR(),
+        remediator=remediator,
+        config=SecurityConfig(require_api_key=True, rate_limit_requests_per_minute=120),
+    )
+    app.testing = True
+    client = app.test_client()
+
+    rv = client.post(
+        "/api/vulns/remediation/execute",
+        json={"target": "127.0.0.1"},
+        headers={"Content-Type": "application/json", "X-QC-API-Key": "test-api-key"},
+    )
+    assert rv.status_code == 200
+    payload = rv.get_json() or {}
+    assert payload.get("success") is True
+    assert (payload.get("data") or {}).get("plan_id") == plan.plan_id
+    assert (payload.get("data") or {}).get("preview") is True
+
+
+def test_vuln_remediation_execute_returns_error_when_execution_disabled(tmp_path, monkeypatch):
+    monkeypatch.setenv("QC_PRODUCTION", "0")
+    monkeypatch.setenv("QC_LOG_FORMAT", "plain")
+    monkeypatch.setenv("QC_API_KEY_PEPPER", "pepper-test")
+    monkeypatch.setenv("QC_AUDIT_HMAC_KEY", "hmac-test")
+    monkeypatch.setenv("QC_API_KEYS_JSON", _make_keys_json("test-api-key", "pepper-test"))
+
+    remediator = AutoRemediation({"db_path": str(tmp_path / "rex-ex.db"), "allow_execute": False})
+    remediator.generate_plan(
+        [
+            {
+                "finding_id": "F-1",
+                "title": "Missing Security Header: HSTS",
+                "severity": "HIGH",
+                "category": "web_security",
+                "affected_component": "HTTPS",
+                "remediation": "Add Strict-Transport-Security header",
+            }
+        ],
+        target_host="127.0.0.1",
+    )
+
+    app = create_security_api(
+        DummyMesh(),
+        DummyVuln(),
+        DummyIR(),
+        remediator=remediator,
+        config=SecurityConfig(require_api_key=True, rate_limit_requests_per_minute=120),
+    )
+    app.testing = True
+    client = app.test_client()
+
+    rv = client.post(
+        "/api/vulns/remediation/execute",
+        json={"confirm": "EXECUTE", "target": "127.0.0.1"},
+        headers={"Content-Type": "application/json", "X-QC-API-Key": "test-api-key"},
+    )
+    assert rv.status_code == 400
+    payload = rv.get_json() or {}
+    assert payload.get("success") is False
+    assert "error" in (payload.get("data") or {}) or payload.get("error")

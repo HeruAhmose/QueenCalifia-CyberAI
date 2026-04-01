@@ -620,7 +620,7 @@ export default function QCTrainingConsole() {
         }}>
           {[
             { label: "Backend", value: "Render (Flask)", color: C.gold },
-            { label: "Frontend", value: "Firebase", color: C.cyan },
+            { label: "Frontend", value: "GCS static (legacy: Firebase)", color: C.cyan },
             { label: "Personas", value: "Cyber · Research · Lab", color: C.purple },
             { label: "Sources", value: "6 Trusted", color: C.green },
           ].map((s, i) => (

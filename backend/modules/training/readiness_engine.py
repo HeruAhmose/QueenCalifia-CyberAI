@@ -109,6 +109,21 @@ def build_capabilities_catalog() -> list[dict[str, Any]]:
             "probe_hints": ["Engine runs on schedule when QC_THREAT_INTEL_AUTO_SYNC=1"],
             "env_signals": ["QC_THREAT_INTEL_DB", "QC_THREAT_INTEL_AUTO_SYNC"],
         },
+        {
+            "id": "post_quantum_readiness",
+            "name": "Post-quantum / TLS quantum readiness",
+            "probe_hints": [
+                "GET /api/v1/quantum/readiness (gateway; X-QC-API-Key)",
+                "Vuln scans expose quantum_readiness + quantum_risk_summary on results",
+                "Optional: QC_ALLOW_SIMULATED_PQ=1 for demo without liboqs",
+            ],
+            "env_signals": [
+                "QC_HYBRID_SIGNATURES",
+                "QC_ALLOW_SIMULATED_PQ",
+                "QC_PQ_VERIFY_HOOK",
+                "QC_REQUIRE_HYBRID_SIGNATURES",
+            ],
+        },
     ]
 
 
@@ -127,6 +142,7 @@ def collect_route_hits(app) -> dict[str, bool]:
         "api_telemetry_summary": "/api/v1/telemetry/summary" in rules,
         "api_predictor_status": "/api/v1/predictor/status" in rules,
         "api_evolution_status": "/api/v1/evolution/status" in rules,
+        "api_quantum_readiness": "/api/v1/quantum/readiness" in rules,
         "healthz": "/healthz" in rules,
         "readyz": "/readyz" in rules,
     }
@@ -188,6 +204,13 @@ def run_readiness_checks(app, settings_db_path: Path | None) -> dict[str, Any]:
         "ok": routes.get("api_evolution_status", False),
         "severity": "medium",
         "detail": "/api/v1/evolution/status present" if routes.get("api_evolution_status") else "evolution route missing",
+    })
+    checks.append({
+        "id": "routes_quantum_readiness",
+        "ok": routes.get("api_quantum_readiness", False),
+        "severity": "medium",
+        "detail": "/api/v1/quantum/readiness present" if routes.get("api_quantum_readiness") else "quantum readiness route missing on gateway",
+        "routes": {"api_quantum_readiness": routes.get("api_quantum_readiness")},
     })
     checks.append({
         "id": "routes_health",

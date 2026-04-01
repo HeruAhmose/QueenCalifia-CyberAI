@@ -52,4 +52,4 @@ jobs:
 
       - name: Summary
         run: |
-          echo "Deployed ref '${{ inputs.ref }}' to ${{ secrets.DEPLOY_HOST }} (acme=${{ inputs.acme }})" >> $GITHUB_STEP_SUMMARY
+          echo "Deployed ref '${{ inputs.ref }}' to '${{ secrets.DEPLOY_HOST }}' (acme='${{ inputs.acme }}')" >> "${GITHUB_STEP_SUMMARY}"

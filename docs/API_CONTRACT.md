@@ -2,7 +2,7 @@
 
 This document reflects the repository as currently wired:
 
-- Frontend is hosted on Firebase.
+- Frontend is hosted on Google Cloud Storage static website hosting (see `docs/DEPLOY_DASHBOARD_GCS.md`; legacy Firebase config may still exist in-repo).
 - Backend runs on Render using `backend/app.py` + the root security gateway.
 - The current checked-in Render profile sets `QC_NO_AUTH=1` for dashboard UX.
 - In stricter deployments, the same routes can be protected by API/admin keys.

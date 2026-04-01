@@ -25,6 +25,7 @@ def test_capabilities_catalog_nonempty():
     ids = {c["id"] for c in cat}
     assert "cyber_chat" in ids
     assert "vulnerability_engine" in ids
+    assert "post_quantum_readiness" in ids
 
 
 def test_collect_route_hits_detects_core_routes():

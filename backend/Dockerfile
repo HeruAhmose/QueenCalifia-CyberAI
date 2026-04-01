@@ -18,6 +18,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /opt/render/project/src
 
+# Celery worker runs with cwd=backend; celery_app.py and tasks.py live at repo root.
+ENV PYTHONPATH=/opt/render/project/src
+
 COPY backend/requirements.txt /tmp/requirements.txt
 
 RUN python -m pip install --upgrade pip setuptools wheel

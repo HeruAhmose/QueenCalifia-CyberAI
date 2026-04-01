@@ -61,7 +61,7 @@
 - Unified auth (QC_API_KEY + QC_ADMIN_KEY)
 - Frozen Settings dataclass
 - Audit log + telemetry events
-- Firebase frontend + Render backend
+- GCS static dashboard (or legacy Firebase) + Render backend
 
 ---
 

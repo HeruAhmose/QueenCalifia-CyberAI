@@ -102,6 +102,7 @@ def qc_public_config():
             "vulnerability_scanning",
             "evolution_memory",
             "advanced_training_readiness",
+            "post_quantum_readiness",
         ],
         "training": {
             "capabilities_catalog_url": "/api/training/capabilities-catalog",

@@ -54,7 +54,7 @@ services:
         value: /var/data/audit.log.jsonl
       - key: QC_AUDIT_CHAIN_DB
         value: /var/data/queen.db
-      # Exact Origins (scheme+host). API also allows QC Firebase preview *.web.app + localhost via regex in gateway.
+      # Exact Origins (scheme+host). Gateway also allows Firebase preview *.web.app, GCS *.storage.googleapis.com, localhost via regex.
       - key: QC_CORS_ORIGINS
         value: https://queencalifia-cyberai.web.app,https://queencalifia-cyberai.firebaseapp.com,https://queencalifia.tamerian.com
       - key: QC_REDIS_URL

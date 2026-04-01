@@ -1,5 +1,13 @@
 FROM node:20-alpine AS build
 WORKDIR /app
+
+ARG VITE_SAME_ORIGIN_API=0
+ARG VITE_API_URL=
+ARG VITE_QC_API_URL=
+ENV VITE_SAME_ORIGIN_API=$VITE_SAME_ORIGIN_API
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_QC_API_URL=$VITE_QC_API_URL
+
 COPY package.json package-lock.json* ./
 RUN npm ci --ignore-scripts 2>/dev/null || npm install --ignore-scripts
 COPY . .

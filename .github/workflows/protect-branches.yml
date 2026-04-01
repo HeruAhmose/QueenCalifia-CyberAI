@@ -1,5 +1,6 @@
 name: Protect branches (one click)
 
+# GitHub allows at most 10 workflow_dispatch inputs. Optional lists live in advanced_json.
 on:
   workflow_dispatch:
     inputs:
@@ -40,31 +41,15 @@ on:
         required: true
         type: boolean
         default: true
-      exclude_app_slugs:
-        description: "Exclude check runs emitted by these GitHub Apps (comma-separated app slugs)"
-        required: false
-        default: ""
-      allowlist_regex:
-        description: "Optional regex allowlist (comma-separated). If set, only matching checks are required."
-        required: false
-        default: ""
-      denylist_regex:
-        description: "Optional regex denylist (comma-separated). Matches are excluded."
-        required: false
-        default: ""
-      extra_checks_staging:
-        description: "Extra required checks for staging (comma-separated)"
-        required: false
-        default: ""
-      extra_checks_production:
-        description: "Extra required checks for production (comma-separated)"
-        required: false
-        default: ""
       dry_run:
         description: "Print payload only (no API call)"
         required: true
         type: boolean
         default: false
+      advanced_json:
+        description: 'Optional JSON, e.g. {"exclude_app_slugs":["slug"],"allowlist_regex":["^ci"],"denylist_regex":[],"extra_checks_staging":["x"],"extra_checks_production":["y"]} — string values may be comma-separated instead of arrays'
+        required: false
+        default: "{}"
 
 permissions:
   contents: read
@@ -93,6 +78,30 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
+          function Get-AdvStringList([psobject]$obj, [string]$prop) {
+            $v = $obj.$prop
+            if ($null -eq $v -or $v -eq '') { return @() }
+            if ($v -is [System.Array]) {
+              return @($v | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
+            }
+            return @("$v".Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+          }
+
+          $advJson = '${{ inputs.advanced_json }}'.Trim()
+          if (-not $advJson) { $advJson = '{}' }
+          try {
+            $adv = $advJson | ConvertFrom-Json
+          } catch {
+            Write-Error "advanced_json must be valid JSON: $_"
+            exit 1
+          }
+
+          $exclude = Get-AdvStringList $adv 'exclude_app_slugs'
+          $allow = Get-AdvStringList $adv 'allowlist_regex'
+          $deny = Get-AdvStringList $adv 'denylist_regex'
+          $extraStaging = Get-AdvStringList $adv 'extra_checks_staging'
+          $extraProd = Get-AdvStringList $adv 'extra_checks_production'
+
           $owner = "${{ inputs.owner }}"
           $repo  = "${{ inputs.repo }}"
 
@@ -104,12 +113,6 @@ jobs:
 
           $useChecksObjects = ("${{ inputs.use_checks_objects }}" -eq "true")
           $preferChecksObjects = ("${{ inputs.prefer_checks_objects }}" -eq "true")
-
-          $exclude = "${{ inputs.exclude_app_slugs }}".Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }
-          $allow   = "${{ inputs.allowlist_regex }}".Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }
-          $deny    = "${{ inputs.denylist_regex }}".Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }
-          $extraStaging = "${{ inputs.extra_checks_staging }}".Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }
-          $extraProd    = "${{ inputs.extra_checks_production }}".Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }
 
           $args = @()
           if ($owner) { $args += @("-Owner", $owner) }

@@ -74,9 +74,30 @@ jobs:
           npm install
           npm run build
 
+  # Validates docker-compose.prod.yml + frontend/nginx.conf (same-origin /api build). Full API image
+  # build uses backend/Dockerfile (liboqs compile) and is intentionally not run every PR.
+  docker-prod-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compose config (requires .env for env_file)
+        run: |
+          printf '%s\n' 'QC_API_KEY_PEPPER=ci-not-a-secret' 'QC_AUDIT_HMAC_KEY=ci-not-a-secret' > .env
+          docker compose -f docker-compose.prod.yml config >/dev/null
+          echo "docker-compose.prod.yml OK"
+
+      - name: Build dashboard Docker image (nginx + Vite, VITE_SAME_ORIGIN_API)
+        run: |
+          docker build -f frontend/Dockerfile ./frontend \
+            --build-arg VITE_SAME_ORIGIN_API=1 \
+            --build-arg VITE_API_URL= \
+            --build-arg VITE_QC_API_URL= \
+            -t qc-dashboard:ci
+
   argocd-health:
     if: github.event_name == 'pull_request' && github.base_ref == 'production'
-    needs: [backend-check, frontend-check]
+    needs: [backend-check, frontend-check, docker-prod-frontend]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -100,6 +121,7 @@ jobs:
           OPTS="${ARGOCD_OPTS:-}"
           sudo apt-get update -y >/dev/null
           sudo apt-get install -y jq >/dev/null
+          # shellcheck disable=SC2086
           status="$(argocd app get "$APP_PRODUCTION" --server "$ARGOCD_SERVER" --auth-token "$ARGOCD_AUTH_TOKEN" $OPTS -o json \
             | jq -r '.status.health.status + "/" + .status.sync.status')"
           echo "$APP_PRODUCTION => $status"

@@ -178,7 +178,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          CHART="$(ls dist/*.tgz | head -n1)"
+          shopt -s nullglob
+          charts=(dist/*.tgz)
+          if ((${#charts[@]} == 0)); then
+            echo "No chart package found under dist/" >&2
+            exit 1
+          fi
+          CHART="${charts[0]}"
           helm push "${CHART}" "oci://${{ env.OCI_CHART_REPO }}"
 
   publish-pages:

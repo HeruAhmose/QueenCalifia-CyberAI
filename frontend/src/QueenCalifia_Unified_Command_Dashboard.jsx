@@ -3,6 +3,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Cell, PieChart, Pie } from "recharts";
 import QueenCalifiaAvatar from "./components/QueenCalifiaAvatar.jsx";
 import { useSound } from "./contexts/SoundContext.jsx";
+import { normalizeRemediationPlan, enrichScanResultForUi } from "./utils/qcNormalize.js";
+import { getQcApiBase } from "./utils/qcApiBase.js";
 
 /*
  * QueenCalifia CyberAI — Unified Command Dashboard
@@ -1713,32 +1715,27 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
     //   { scan_id, status, result?, error? }
     if (!payload) return { state: "unknown", ready: false, result: null, failed: false, error: null };
 
-    if (payload.result) {
-      return {
-        state: payload.state || payload.status || "completed",
-        ready: true,
-        result: payload.result,
-        failed: false,
-        error: null,
-      };
-    }
-
     const state = (payload.state || payload.status || "unknown").toString();
     const stUp = state.toUpperCase();
     const failStates = ["FAILURE", "FAILED", "REVOKED", "REJECTED"];
     const failed = Boolean(payload.error) || failStates.includes(stUp);
-    const ready =
-      payload.ready === true ||
-      stUp === "completed" ||
-      stUp === "SUCCESS" ||
-      failed;
-    const result = payload.result || payload?.data?.result || null;
+    const result = payload.result ?? payload?.data?.result ?? null;
+    const hasResult = result != null && typeof result === "object";
+    const terminalOk =
+      stUp === "SUCCESS" || stUp === "COMPLETED" || stUp === "COMPLETE";
+    const readyOk = hasResult && !failed && (payload.ready === true || terminalOk);
     const errorMsg = payload.error
       ? String(payload.error)
-      : failed && !result
+      : failed && !hasResult
         ? `Scan ended with status ${state}`
         : null;
-    return { state, ready, result, failed, error: errorMsg };
+    return {
+      state,
+      ready: failed ? true : readyOk,
+      result: hasResult ? result : null,
+      failed,
+      error: errorMsg,
+    };
   }, []);
 
   const downloadText = useCallback((filename, content) => {
@@ -2016,7 +2013,7 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
           method: "POST",
           body: JSON.stringify({ url: webUrl, acknowledge_authorized: true }),
         });
-        setScanResult(r?.data || null);
+        setScanResult(enrichScanResultForUi(r?.data || null));
         // webapp scans have their own findings; still show remediation guidance
         await fetchRemediation();
         return;
@@ -2083,8 +2080,9 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
         }
         if (s.ready && !s.failed) {
           setError("");
-          setScanResult(s.result || null);
-          const critical = (s.result?.critical_count ?? s.result?.summary?.critical ?? 0) || 0;
+          const enriched = enrichScanResultForUi(s.result || null);
+          setScanResult(enriched);
+          const critical = (enriched?.critical_count ?? enriched?.summary?.critical ?? 0) || 0;
           onSound?.(critical > 0 ? "threat_alert" : "scan_complete");
           onAvatarStateChange?.(critical > 0 ? "ascended" : "active");
           await fetchRemediation();
@@ -2332,6 +2330,8 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
                 <Badge color={C.textDim}>Total: {remediation.total_vulnerabilities}</Badge>
                 <Badge color={C.red}>Critical: {remediation.summary?.critical || 0}</Badge>
                 <Badge color={C.amber}>High: {remediation.summary?.high || 0}</Badge>
+                <Badge color={C.accent}>Medium: {remediation.summary?.medium || 0}</Badge>
+                <Badge color={C.textDim}>Low: {remediation.summary?.low || 0}</Badge>
               </div>
 
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -2376,7 +2376,7 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
                         {a.title}
                       </div>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        <Badge color={a.severity === "CRITICAL" ? C.red : a.severity === "HIGH" ? C.amber : C.textDim}>{a.severity}</Badge>
+                        <Badge color={a.severity === "CRITICAL" ? C.red : a.severity === "HIGH" ? C.amber : a.severity === "MEDIUM" ? C.accent : C.textDim}>{a.severity}</Badge>
                         <Badge color={C.textDim}>{a.cve_id || a.vuln_id}</Badge>
                       </div>
                     </div>
@@ -2456,11 +2456,7 @@ const DEVOPS_WORKFLOWS = [
 
 // ─── QC OS v4.2.1 — API Layer (shared by all QC tabs) ────────────────────
 
-const QC_API = String(
-  import.meta.env?.VITE_QC_API_URL ||
-    import.meta.env?.VITE_API_URL ||
-    "https://queencalifia-cyberai.onrender.com",
-).replace(/\/$/, "");
+const QC_API = getQcApiBase();
 const loadStoredDashboardAuth = () => {
   try {
     return {
@@ -2501,7 +2497,7 @@ const qcRequestError = (err) => {
     }
     return new Error(
       "Failed to fetch live backend data. Open DevTools → Network (pending = cold start / blocked) and Console (CORS errors = wrong Origin on API). " +
-        `This build calls ${QC_API} (set VITE_API_URL / VITE_QC_API_URL at build time).${originHint} Custom domains must be listed in QC_CORS_ORIGINS on the API. Re-save API keys after reload.`,
+        `This build calls ${QC_API || "(same origin)"} (set VITE_API_URL / VITE_QC_API_URL for Firebase/GCS → API, or VITE_SAME_ORIGIN_API=1 when nginx proxies /api).${originHint} Custom domains must be listed in QC_CORS_ORIGINS on the API. Re-save API keys after reload.`,
     );
   }
   return err instanceof Error ? err : new Error(msg || "Backend request failed.");
@@ -2563,70 +2559,6 @@ const qcPost = async (p,b,ak,apiKey) => {
   } catch (err) {
     throw qcRequestError(err);
   }
-};
-
-const normalizeRemediationPlan = (plan, targetFallback = "") => {
-  if (!plan) return null;
-  const rawPriority = plan.priority_actions;
-  const rawActions = plan.actions;
-  const hasPriority = Array.isArray(rawPriority) && rawPriority.length > 0;
-  const hasActions = Array.isArray(rawActions) && rawActions.length > 0;
-
-  // VulnEngine returns priority_actions (may be []). AutoRemediation returns actions[] only.
-  if (hasPriority) {
-    const pa = rawPriority;
-    const sevOf = (a) => String(a?.severity ?? "").toUpperCase();
-    const summaryFromActions = {
-      critical: pa.filter((a) => sevOf(a) === "CRITICAL").length,
-      high: pa.filter((a) => sevOf(a) === "HIGH").length,
-      medium: pa.filter((a) => sevOf(a) === "MEDIUM").length,
-      low: pa.filter((a) => sevOf(a) === "LOW").length,
-    };
-    const totalVen = Math.max(
-      pa.length,
-      Number(plan.total_vulnerabilities) || 0,
-      Number(plan.total_actions) || 0
-    );
-    return {
-      ...plan,
-      priority_actions: pa,
-      total_vulnerabilities: totalVen,
-      total_actions: Number(plan.total_actions) || pa.length,
-      // Always derive counts from rows so we never show stale zeros from the API.
-      summary: summaryFromActions,
-    };
-  }
-
-  const actions = hasActions ? rawActions : [];
-  const priority_actions = actions.map((action, index) => ({
-    priority: index + 1,
-    action_id: action.action_id,
-    vuln_id: action.finding_id || action.action_id || `action-${index + 1}`,
-    cve_id: action.cve_id || "",
-    title: action.title || `Remediation action ${index + 1}`,
-    severity: String(action.risk_level || action.severity || "low").toUpperCase(),
-    cvss_score: action.cvss_score ?? null,
-    affected_asset: plan.target_host || targetFallback || action.affected_asset || "",
-    remediation: action.description || action.remediation || (Array.isArray(action.commands) ? action.commands.slice(0, 2).join(" ; ") : ""),
-    category: action.category || "other",
-    commands: Array.isArray(action.commands) ? action.commands : [],
-    rollback_commands: Array.isArray(action.rollback_commands) ? action.rollback_commands : [],
-  }));
-
-  return {
-    plan_id: plan.plan_id || `derived-${Date.now()}`,
-    generated_at: plan.generated_at || new Date().toISOString(),
-    total_vulnerabilities: Number(plan.total_vulnerabilities ?? plan.total_actions ?? priority_actions.length),
-    total_actions: Number(plan.total_actions ?? priority_actions.length),
-    target_host: plan.target_host || targetFallback || "",
-    summary: {
-      critical: priority_actions.filter((a) => a.severity === "CRITICAL").length,
-      high: priority_actions.filter((a) => a.severity === "HIGH").length,
-      medium: priority_actions.filter((a) => a.severity === "MEDIUM").length,
-      low: priority_actions.filter((a) => a.severity === "LOW").length,
-    },
-    priority_actions,
-  };
 };
 
 const EMPTY_MESH = {

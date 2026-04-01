@@ -34,11 +34,15 @@ class JSONFormatter(logging.Formatter):
         base["request_id"] = getattr(record, "request_id", None) or get_request_id()
         base["principal"] = getattr(record, "principal", None) or get_principal()
 
-        trace_id, span_id = current_trace_ids()
-        if trace_id:
-            base["trace_id"] = trace_id
-        if span_id:
-            base["span_id"] = span_id
+        try:
+            trace_id, span_id = current_trace_ids()
+            if trace_id:
+                base["trace_id"] = trace_id
+            if span_id:
+                base["span_id"] = span_id
+        except Exception:
+            # Never break logging if OTel or formatters misbehave in minimal images.
+            pass
 
         # Optional structured fields
         for k in (
