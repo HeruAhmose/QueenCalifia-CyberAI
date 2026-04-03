@@ -21,3 +21,6 @@ firebase-debug.log
 qc_training_*/
 .DS_Store
 Thumbs.db
+
+# Standalone portfolio app lives in its own repository (HeruAhmose/peoples-portfolio)
+/peoples-portfolio/
