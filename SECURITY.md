@@ -13,7 +13,15 @@ Please report vulnerabilities responsibly.
 - **Do not** open a public GitHub issue for exploitable findings.
 - Treat non-public code, screenshots, stack traces, and operational details as
   confidential unless disclosure is expressly approved in writing.
-- Email the maintainers with:
+
+### Preferred channel (GitHub)
+If **private vulnerability reporting** is enabled for this repository, use the
+**Security** tab → **Report a vulnerability**. That keeps details off public
+issues and threads.
+
+### Email (if private reporting is unavailable)
+Contact the **repository owner** (`HeruAhmose` org / listed maintainers) with:
+
   - a clear description of the issue
   - affected component(s) and version/commit
   - steps to reproduce (proof-of-concept if safe)

@@ -22,5 +22,6 @@ qc_training_*/
 .DS_Store
 Thumbs.db
 
-# Standalone portfolio app lives in its own repository (HeruAhmose/peoples-portfolio)
+# Peoples Portfolio is a separate repository and product — never vendor it here.
+# Clone/develop it only outside this tree (e.g. its own folder / remote).
 /peoples-portfolio/

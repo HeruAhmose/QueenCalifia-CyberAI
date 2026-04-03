@@ -30,6 +30,7 @@ export default function CinematicIntro({ onComplete, onAwaken }) {
   const [telemetryIndex, setTelemetryIndex] = useState(0);
   const particlesRef = useRef([]);
   const animFrameRef = useRef(0);
+  const animRunningRef = useRef(false);
   const { toggle, enabled } = useSound();
   const telemetryLines = [
     "Hex mesh aligning",
@@ -53,6 +54,7 @@ export default function CinematicIntro({ onComplete, onAwaken }) {
     }
 
     const animate = () => {
+      if (!animRunningRef.current) return;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       particlesRef.current.forEach((p, i) => {
         p.life++;
@@ -85,9 +87,26 @@ export default function CinematicIntro({ onComplete, onAwaken }) {
       ctx.globalAlpha = 1;
       animFrameRef.current = requestAnimationFrame(animate);
     };
+    animRunningRef.current = true;
     animate();
 
-    return () => { window.removeEventListener("resize", resize); cancelAnimationFrame(animFrameRef.current); };
+    const onVisibility = () => {
+      if (document.hidden) {
+        animRunningRef.current = false;
+        cancelAnimationFrame(animFrameRef.current);
+      } else {
+        animRunningRef.current = true;
+        animate();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      window.removeEventListener("resize", resize);
+      document.removeEventListener("visibilitychange", onVisibility);
+      animRunningRef.current = false;
+      cancelAnimationFrame(animFrameRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -107,17 +126,20 @@ export default function CinematicIntro({ onComplete, onAwaken }) {
   }, [telemetryLines.length]);
 
   const handleEnter = useCallback(() => {
-    if (!enabled) {
-      toggle();
-      setMasterVolume(0.3);
-      startAmbient();
-    }
-    playSound("sovereign_awaken");
-
     if (phase === "waiting") {
+      if (!enabled) {
+        toggle();
+      } else {
+        setMasterVolume(0.3);
+        startAmbient();
+      }
+      playSound("sovereign_awaken");
       onAwaken?.();
       setPhase("awakening");
-    } else if (phase === "revealing") {
+      return;
+    }
+    if (phase === "revealing") {
+      playSound("button_click");
       setPhase("ready");
       setTimeout(onComplete, 600);
     }

@@ -26,7 +26,23 @@ let audioCtx = null;
 let masterGain = null;
 let ambientOsc = null;
 let ambientGain = null;
+/** @type {OscillatorNode | null} */
+let ambientLfo = null;
+/** @type {GainNode | null} */
+let ambientLfoGain = null;
 let isAmbientPlaying = false;
+let ambientStopScheduled = false;
+
+/** ms — suppress stacked identical UI sounds */
+const SOUND_THROTTLE_MS = {
+  button_click: 55,
+  tab_switch: 140,
+  avatar_transition: 420,
+  panel_click: 55,
+  prediction_reveal: 200,
+};
+
+const lastPlayedAt = Object.create(null);
 
 function getCtx() {
   if (!audioCtx) {
@@ -52,51 +68,79 @@ export function setMasterVolume(v) {
 }
 
 export function startAmbient() {
-  if (isAmbientPlaying) return;
+  if (isAmbientPlaying || ambientStopScheduled) return;
   const ctx = getCtx();
   const master = getMaster();
-  
+
   ambientGain = ctx.createGain();
   ambientGain.gain.value = 0;
   ambientGain.connect(master);
-  
+
   ambientOsc = ctx.createOscillator();
-  ambientOsc.type = 'sine';
+  ambientOsc.type = "sine";
   ambientOsc.frequency.value = 42;
-  
+
   const filter = ctx.createBiquadFilter();
-  filter.type = 'lowpass';
+  filter.type = "lowpass";
   filter.frequency.value = 80;
   filter.Q.value = 2;
-  
+
   ambientOsc.connect(filter);
   filter.connect(ambientGain);
   ambientOsc.start();
-  
-  const lfo = ctx.createOscillator();
-  lfo.type = 'sine';
-  lfo.frequency.value = 0.08;
-  const lfoGain = ctx.createGain();
-  lfoGain.gain.value = 3;
-  lfo.connect(lfoGain);
-  lfoGain.connect(ambientOsc.frequency);
-  lfo.start();
-  
+
+  ambientLfo = ctx.createOscillator();
+  ambientLfo.type = "sine";
+  ambientLfo.frequency.value = 0.08;
+  ambientLfoGain = ctx.createGain();
+  ambientLfoGain.gain.value = 3;
+  ambientLfo.connect(ambientLfoGain);
+  ambientLfoGain.connect(ambientOsc.frequency);
+  ambientLfo.start();
+
   ambientGain.gain.setTargetAtTime(0.06, ctx.currentTime, 2);
   isAmbientPlaying = true;
 }
 
 export function stopAmbient() {
-  if (!isAmbientPlaying || !ambientGain || !ambientOsc) return;
+  if (!isAmbientPlaying || ambientStopScheduled) return;
+  ambientStopScheduled = true;
   const ctx = getCtx();
-  ambientGain.gain.setTargetAtTime(0, ctx.currentTime, 0.5);
+  if (ambientGain) {
+    ambientGain.gain.setTargetAtTime(0, ctx.currentTime, 0.45);
+  }
+  const oscToStop = ambientOsc;
+  const lfoToStop = ambientLfo;
+  const lfoG = ambientLfoGain;
+  ambientOsc = null;
+  ambientLfo = null;
+  ambientLfoGain = null;
+  ambientGain = null;
   setTimeout(() => {
-    try { ambientOsc?.stop(); } catch {}
+    try {
+      lfoToStop?.stop();
+    } catch {}
+    try {
+      lfoG?.disconnect();
+    } catch {}
+    try {
+      oscToStop?.stop();
+    } catch {}
     isAmbientPlaying = false;
-  }, 2000);
+    ambientStopScheduled = false;
+  }, 650);
 }
 
 export function playSound(type) {
+  const throttleMs = SOUND_THROTTLE_MS[type];
+  if (throttleMs) {
+    const now =
+      typeof performance !== "undefined" ? performance.now() : Date.now();
+    const prev = lastPlayedAt[type];
+    if (prev !== undefined && now - prev < throttleMs) return;
+    lastPlayedAt[type] = now;
+  }
+
   const ctx = getCtx();
   const master = getMaster();
   const t = ctx.currentTime;
@@ -114,18 +158,18 @@ export function playSound(type) {
       bass.connect(bassGain);
       bass.start(t);
       bass.stop(t + 3);
-      [880, 1320, 1760, 2200].forEach((freq, i) => {
+      [880, 1400].forEach((freq, i) => {
         const g = ctx.createGain();
-        g.gain.setValueAtTime(0, t + 0.3 + i * 0.15);
-        g.gain.linearRampToValueAtTime(0.08, t + 0.5 + i * 0.15);
-        g.gain.exponentialRampToValueAtTime(0.001, t + 2.5 + i * 0.1);
+        g.gain.setValueAtTime(0, t + 0.35 + i * 0.2);
+        g.gain.linearRampToValueAtTime(0.07, t + 0.55 + i * 0.2);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 2.2 + i * 0.12);
         g.connect(master);
         const osc = ctx.createOscillator();
-        osc.type = 'sine';
+        osc.type = "sine";
         osc.frequency.value = freq;
         osc.connect(g);
-        osc.start(t + 0.3 + i * 0.15);
-        osc.stop(t + 3);
+        osc.start(t + 0.35 + i * 0.2);
+        osc.stop(t + 2.8);
       });
       const impactGain = ctx.createGain();
       impactGain.gain.setValueAtTime(0.3, t);

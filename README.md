@@ -81,6 +81,7 @@ python cli.py quantum
 
 ## License And Provenance
 
+- **Peoples Portfolio** (personal site) is **not part of this repository**. It is developed and deployed as its **own** GitHub project; the path `/peoples-portfolio/` is ignored here so it is never merged into Queen Califia CyberAI.
 - This repository is **proprietary** — see [`LICENSE`](LICENSE) and [`PROPRIETARY.md`](PROPRIETARY.md) (not open source).
 - This repository is now governed by the proprietary `LICENSE` in the repo root, not Apache 2.0.
 - Queen Califia CyberAI source in this repository is intended to be original repo-owned implementation unless a file explicitly states otherwise.
