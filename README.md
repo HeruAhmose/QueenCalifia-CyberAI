@@ -81,6 +81,7 @@ python cli.py quantum
 
 ## License And Provenance
 
+- This repository is **proprietary** — see [`LICENSE`](LICENSE) and [`PROPRIETARY.md`](PROPRIETARY.md) (not open source).
 - This repository is now governed by the proprietary `LICENSE` in the repo root, not Apache 2.0.
 - Queen Califia CyberAI source in this repository is intended to be original repo-owned implementation unless a file explicitly states otherwise.
 - Third-party software is used as dependencies and hosted services, not as copied external repository source, unless separately documented.
