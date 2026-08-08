@@ -1,0 +1,85 @@
+{
+  "protocol": "TRAI Organism Protocol",
+  "version": "5.3.0",
+  "updated": "2026-08-07",
+  "worlds": [
+    {
+      "id": "peoples",
+      "name": "People's Portfolio",
+      "short": "Portfolio",
+      "role": "Human / Founder",
+      "url": "https://heruahmose.github.io/peoples-portfolio/",
+      "skin": "lineage",
+      "accent": "#D6A33A",
+      "secondary": "#7DD3FC",
+      "thesis": "The human story, research practice, work, and lineage behind the wider TRAI organism.",
+      "synopsis": "People's Portfolio is the canonical personal portfolio world. It presents Jonathan Peoples as founder, researcher, builder, and community technologist without conflating that human story with the TRAI systems architecture.",
+      "transitionLine": "Golden threads converge into the human story that anchors the organism."
+    },
+    {
+      "id": "trai",
+      "name": "TRAI",
+      "short": "TRAI",
+      "role": "Organism / Systems",
+      "url": "https://heruahmose.github.io/trai-portfolio/",
+      "skin": "orbit",
+      "accent": "#D9AB45",
+      "secondary": "#5E86C9",
+      "thesis": "The systems world: ventures, sovereignty architecture, research, and regenerative connections.",
+      "synopsis": "TRAI is the organism map rather than the personal portfolio. It connects materials, cybersecurity, community infrastructure, biological products, identity, mobility, and regenerative return as coordinated sovereign systems.",
+      "transitionLine": "Sovereign orbital fields collapse into a crystalline route, carrying the living architecture between worlds."
+    },
+    {
+      "id": "bluegold",
+      "name": "True Mélange Φ",
+      "short": "True Mélange Φ",
+      "role": "Biological / Formulation",
+      "url": "https://heruahmose.github.io/blue-gold-daily/layers.html",
+      "skin": "phi",
+      "accent": "#F0C463",
+      "secondary": "#5E86C9",
+      "thesis": "A Fibonacci-indexed formulation and cultural world built around the Blue-Gold Daily concept.",
+      "synopsis": "True Mélange Φ combines formulation architecture, evidence boundaries, ritual language, and a sovereignty loop. The Φ layers are presented as a precise system in which mythology, sensory design, and documented function remain clearly distinguished.",
+      "transitionLine": "A phyllotaxis field unfolds at the golden angle, revealing the Φ layer system."
+    },
+    {
+      "id": "tamerian",
+      "name": "Tamerian Materials",
+      "short": "Tamerian",
+      "role": "Material Sovereignty",
+      "url": "https://tamerian-materials.com/",
+      "skin": "crystal",
+      "accent": "#D6A33A",
+      "secondary": "#39C6C9",
+      "thesis": "Advanced material research where carbon systems meet crystalline structure and energy-harvesting design.",
+      "synopsis": "Tamerian Materials is the materials-science world of the organism. Its native cinematic experience remains intact; the organism adapter adds only a matched carbon-to-crystal gateway around that experience.",
+      "transitionLine": "Orbital systems fracture into carbon vectors, then lock into a luminous crystalline lattice."
+    },
+    {
+      "id": "califia",
+      "name": "Queen Califia",
+      "short": "Queen Califia",
+      "role": "Cognitive Sovereignty",
+      "url": "https://queencalifia-cyberai.web.app/",
+      "skin": "command",
+      "accent": "#D4AF37",
+      "secondary": "#7DD3FC",
+      "thesis": "A sovereign CyberAI command world centered on autonomous security, operational awareness, and controlled activation.",
+      "synopsis": "Queen Califia is a dedicated command experience with its own cinematic awakening and Framer Motion handoff into the sovereign dashboard. The organism adapter deliberately wraps that experience rather than replacing its internal command choreography.",
+      "transitionLine": "The command core acquires signal, verifies the route, and opens the sovereign interface."
+    },
+    {
+      "id": "techbridge",
+      "name": "TechBridge Collective",
+      "short": "TechBridge",
+      "role": "Community Reach",
+      "url": "https://techbridge-collective.org/",
+      "skin": "bridge",
+      "accent": "#E8B931",
+      "secondary": "#00D4AA",
+      "thesis": "Community technology infrastructure built around access, Digital Navigators, hubs, help, and measurable impact.",
+      "synopsis": "TechBridge is the community-facing infrastructure world. Its native visual language already centers bridge construction, progress, forest green, gold, and teal, so v5 uses span-and-node choreography for cross-world arrivals and leaves the existing cinematic intro and route design intact.",
+      "transitionLine": "Connected nodes become a bridge span, carrying the organism into community action."
+    }
+  ]
+}
