@@ -982,7 +982,7 @@ html[data-trai-v5-internal="true"]::view-transition-new(root) {
     });
 
     origins.forEach(function (origin) {
-      if (document.head.querySelector('link[data-trai-v5-preconnect="' + CSS.escape(origin) + '"]')) return;
+      if (document.head.querySelector('link[data-trai-v5-preconnect="' + window.CSS.escape(origin) + '"]')) return;
       var link = document.createElement("link");
       link.rel = "preconnect";
       link.href = origin;
@@ -1179,7 +1179,7 @@ html[data-trai-v5-internal="true"]::view-transition-new(root) {
     }
 
     var preferred = state.dialog.querySelector(
-      '[data-world-id="' + CSS.escape(id || SELF) + '"]'
+      '[data-world-id="' + window.CSS.escape(id || SELF) + '"]'
     );
     if (preferred) preferred.focus({ preventScroll: true });
   }
