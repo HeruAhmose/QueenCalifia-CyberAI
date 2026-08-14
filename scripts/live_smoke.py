@@ -31,6 +31,37 @@ DEFAULT_DASHBOARD_URL = os.environ.get("QC_DASHBOARD_URL", "https://queencalifia
 DEFAULT_API_URL = os.environ.get("QC_API_URL", "https://queencalifia-cyberai.onrender.com").rstrip("/")
 
 
+def canonical_smoke_origin(raw: str, kind: str) -> str:
+    parsed = parse.urlsplit((raw or "").strip())
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise SystemExit(f"{kind} URL must be a clean origin without credentials/query/fragment")
+
+    host = (parsed.hostname or "").lower()
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise SystemExit(f"{kind} URL contains an invalid port") from exc
+
+    if parsed.path not in ("", "/"):
+        raise SystemExit(f"{kind} URL must be an origin only")
+
+    if kind == "dashboard":
+        if parsed.scheme == "https" and host == "queencalifia-cyberai.web.app" and port in (None, 443):
+            return "https://queencalifia-cyberai.web.app"
+        if parsed.scheme == "http" and host in {"localhost", "127.0.0.1"} and port == 3000:
+            return "http://127.0.0.1:3000"
+        if parsed.scheme == "http" and host in {"localhost", "127.0.0.1"} and port == 5173:
+            return "http://127.0.0.1:5173"
+
+    if kind == "api":
+        if parsed.scheme == "https" and host == "queencalifia-cyberai.onrender.com" and port in (None, 443):
+            return "https://queencalifia-cyberai.onrender.com"
+        if parsed.scheme == "http" and host in {"localhost", "127.0.0.1"} and port == 5000:
+            return "http://127.0.0.1:5000"
+
+    raise SystemExit(f"{kind} URL is not an approved Queen Califia smoke-test target")
+
+
 @dataclass
 class Check:
     name: str
@@ -221,8 +252,8 @@ def main() -> int:
     parser.add_argument("--skip-async-scan", action="store_true", help="Skip the real async scan queue/completion gate.")
     args = parser.parse_args()
 
-    dashboard_url = args.dashboard_url.rstrip("/")
-    api_url = args.api_url.rstrip("/")
+    dashboard_url = canonical_smoke_origin(args.dashboard_url, "dashboard")
+    api_url = canonical_smoke_origin(args.api_url, "api")
 
     results: list[Check] = []
 
