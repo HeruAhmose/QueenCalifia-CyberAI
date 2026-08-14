@@ -1157,8 +1157,8 @@ def create_security_api(
             }
 
         g.principal = principal
-        set_principal((principal or {}).get("key_hash") if principal else f"ip:{_safe_remote_addr()}")
         g.user_role = principal.get("role") if principal else "public"
+        set_principal(f"role:{g.user_role}")
         # Rate limit
         # Rate limit (global + per-endpoint; Redis-backed when available)
         role = g.user_role or "public"
@@ -1306,7 +1306,6 @@ def create_security_api(
                     "remote_addr": _safe_remote_addr(),
                     "role": getattr(g, "user_role", None),
                     "request_id": getattr(g, "request_id", None),
-                    "principal": getattr(g, "rate_limit_identity", None),
                 },
             )
         except Exception:
