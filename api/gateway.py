@@ -57,6 +57,11 @@ except Exception:  # pragma: no cover
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 from core.auth import require_admin
+from core.api_key_crypto import (
+    API_KEY_HASH_SCHEME,
+    API_KEY_STORE_VERSION,
+    api_key_fingerprint,
+)
 from core.log_context import set_request_id, set_principal, clear_request_id, clear_principal
 from core.redis_client import key_prefix
 from core.otel import instrument_flask, inject, current_trace_ids
@@ -714,6 +719,22 @@ class APIKeyStore:
         if not isinstance(keys, list):
             raise ValueError("Invalid API keys data (expected {'keys': [...]})")
 
+        if (
+            data.get("version") != API_KEY_STORE_VERSION
+            or data.get("hash_scheme") != API_KEY_HASH_SCHEME
+        ):
+            if self._load_legacy_env_keys():
+                logger.warning(
+                    "Rebuilt legacy API-key store metadata from explicit QC_API_KEY/QC_ADMIN_KEY values"
+                )
+                self._persist()
+                return
+            raise RuntimeError(
+                "Unsupported legacy API-key store. Rotate structured keys or provide "
+                "QC_API_KEY/QC_ADMIN_KEY once so the store can be rebuilt with "
+                f"{API_KEY_HASH_SCHEME}."
+            )
+
         with self._lock:
             self._by_hash.clear()
             for item in keys:
@@ -735,7 +756,11 @@ class APIKeyStore:
 
     def _persist(self) -> None:
         os.makedirs(os.path.dirname(self.file_path) or ".", exist_ok=True)
-        payload = {"version": 1, "keys": [{"key_hash": k, **v} for k, v in self._by_hash.items()]}
+        payload = {
+            "version": API_KEY_STORE_VERSION,
+            "hash_scheme": API_KEY_HASH_SCHEME,
+            "keys": [{"key_hash": k, **v} for k, v in self._by_hash.items()],
+        }
         tmp = self.file_path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2, sort_keys=True)
@@ -747,40 +772,19 @@ class APIKeyStore:
             pass
 
     def _hash_key(self, key: str) -> str:
-        return hmac.new(
-            self.pepper.encode("utf-8"),
-            key.encode("utf-8"),
-            hashlib.sha256,
-        ).hexdigest()
-
-    def _legacy_hash_key(self, key: str) -> str:
-        return hashlib.sha256((key + self.pepper).encode()).hexdigest()
+        return api_key_fingerprint(key, self.pepper)
 
     def validate(self, presented_key: str) -> Optional[Dict[str, Any]]:
         if not presented_key:
             return None
 
         key_hash = self._hash_key(presented_key)
-        legacy_hash = self._legacy_hash_key(presented_key)
 
         with self._lock:
             meta = self._by_hash.get(key_hash)
-            if meta and not meta.get("revoked"):
-                return {**meta, "key_hash": key_hash}
-
-            legacy_meta = self._by_hash.get(legacy_hash)
-            if not legacy_meta or legacy_meta.get("revoked"):
+            if not meta or meta.get("revoked"):
                 return None
-
-            # Opportunistically migrate a valid legacy hash in writable stores.
-            self._by_hash[key_hash] = legacy_meta
-            self._by_hash.pop(legacy_hash, None)
-            try:
-                self._persist()
-            except OSError:
-                # Authentication remains valid even if the store is read-only.
-                pass
-            return {**legacy_meta, "key_hash": key_hash}
+            return {**meta, "key_hash": key_hash}
 
     def generate_key(self, role: str, permissions: List[str], rate_limit: int, description: str) -> str:
         new_key = secrets.token_hex(32)

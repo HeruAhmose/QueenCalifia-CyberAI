@@ -31,23 +31,8 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 from pathlib import Path
 
-def _qc_data_path(raw_path: str, purpose: str) -> Path:
-    """Resolve a configurable data path under QC_DATA_ROOT in production."""
-    candidate = Path(raw_path).expanduser()
-    root_raw = (os.environ.get("QC_DATA_ROOT") or "").strip()
+from sovereignty.storage_paths import resolve_configured_sqlite_path
 
-    if not root_raw:
-        if os.environ.get("QC_PRODUCTION") == "1":
-            raise RuntimeError("QC_DATA_ROOT is required for production filesystem persistence")
-        return candidate.resolve()
-
-    root = Path(root_raw).expanduser().resolve()
-    resolved = candidate.resolve() if candidate.is_absolute() else (root / candidate).resolve()
-    try:
-        resolved.relative_to(root)
-    except ValueError as exc:
-        raise ValueError(f"{purpose} must remain under QC_DATA_ROOT") from exc
-    return resolved
 
 logger = logging.getLogger("sovereignty.audit_chain")
 
@@ -176,7 +161,7 @@ class SQLiteAuditChain(AuditChain):
     """Durable audit chain backed by SQLite."""
 
     def __init__(self, db_path: str, hash_alg: Optional[str] = None):
-        self._db_path = _qc_data_path(db_path, "audit-chain database")
+        self._db_path = Path(db_path).expanduser().resolve()
         super().__init__(hash_alg=hash_alg, persist_fn=self._persist_entry)
         self._init_db()
         self._load_chain()
@@ -250,10 +235,28 @@ class SQLiteAuditChain(AuditChain):
 
 
 def build_default_audit_chain() -> AuditChain:
-    db_path = os.environ.get("QC_AUDIT_CHAIN_DB") or os.environ.get("QC_DB_PATH")
-    if db_path:
-        try:
-            return SQLiteAuditChain(db_path)
-        except Exception as exc:
-            logger.error("audit_chain.sqlite_init_failed: %s", exc)
-    return AuditChain()
+    raw_path = os.environ.get("QC_AUDIT_CHAIN_DB") or os.environ.get("QC_DB_PATH")
+    production = os.environ.get("QC_PRODUCTION") == "1"
+
+    try:
+        db_path = resolve_configured_sqlite_path(
+            raw_path,
+            "audit-chain database",
+            production=production,
+        )
+    except Exception as exc:
+        logger.error("audit_chain.sqlite_destination_invalid: %s", exc)
+        if production:
+            raise
+        return AuditChain()
+
+    if db_path is None:
+        return AuditChain()
+
+    try:
+        return SQLiteAuditChain(str(db_path))
+    except Exception as exc:
+        logger.error("audit_chain.sqlite_init_failed: %s", exc)
+        if production:
+            raise
+        return AuditChain()

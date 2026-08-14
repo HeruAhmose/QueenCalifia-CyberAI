@@ -5,7 +5,6 @@ API key validation and admin gating for internal endpoints.
 """
 from __future__ import annotations
 
-import hashlib
 import hmac
 import json
 import os
@@ -14,17 +13,12 @@ from typing import Callable
 
 from flask import jsonify, request
 
+from core.api_key_crypto import (
+    API_KEY_HASH_SCHEME,
+    API_KEY_STORE_VERSION,
+    api_key_fingerprint,
+)
 
-def _hash_api_key(value: str, pepper: str) -> str:
-    return hmac.new(
-        pepper.encode("utf-8"),
-        value.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
-
-
-def _legacy_hash_api_key(value: str, pepper: str) -> str:
-    return hashlib.sha256((value + pepper).encode()).hexdigest()
 
 
 def _structured_key_meta(provided: str):
@@ -48,14 +42,22 @@ def _structured_key_meta(provided: str):
     except json.JSONDecodeError:
         return None
 
+    if (
+        not isinstance(data, dict)
+        or data.get("version") != API_KEY_STORE_VERSION
+        or data.get("hash_scheme") != API_KEY_HASH_SCHEME
+    ):
+        return None
+
     pepper = os.getenv("QC_API_KEY_PEPPER", "")
-    provided_hash = _hash_api_key(provided, pepper)
-    legacy_hash = _legacy_hash_api_key(provided, pepper)
-    for item in data.get("keys", []) if isinstance(data, dict) else []:
+    if not pepper:
+        return None
+
+    provided_hash = api_key_fingerprint(provided, pepper)
+    for item in data.get("keys", []):
         stored_hash = str(item.get("key_hash") or "")
         if (
-            (hmac.compare_digest(stored_hash, provided_hash) or
-             hmac.compare_digest(stored_hash, legacy_hash))
+            hmac.compare_digest(stored_hash, provided_hash)
             and not bool(item.get("revoked", False))
         ):
             return item
