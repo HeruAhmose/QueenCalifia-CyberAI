@@ -1017,7 +1017,7 @@ Environment:
     key_norm = (QC_API_KEY or "").strip().lower()
     if key_norm and key_norm in _PLACEHOLDER_API_KEYS:
         print(
-            f"{_C.RED}QC_API_KEY looks like a placeholder ({QC_API_KEY!r}).{_C.RESET}\n"
+            "QC_API_KEY looks like a placeholder; value redacted.\\n"
             f"  {_C.DIM}Use the real key from Render (same value as QC_API_KEY on the service).{_C.RESET}\n"
             f"  {_C.DIM}Set it in this shell *before* running python (PowerShell: $env:QC_API_KEY='...').{_C.RESET}\n"
         )

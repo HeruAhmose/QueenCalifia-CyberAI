@@ -75,13 +75,35 @@ def _replace_values_section_tag(values_path: Path, section: str, new_tag: str) -
     values_path.write_text("".join(out), encoding="utf-8")
 
 
+def _is_valid_release_version(value: str) -> bool:
+    """Validate the accepted release-version subset without a backtracking regex."""
+    if not value or len(value) > 128:
+        return False
+
+    core = value
+    suffix = ""
+    for separator in ("-", "+"):
+        if separator in core:
+            core, suffix = core.split(separator, 1)
+            if not suffix:
+                return False
+            if any(ch not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-" for ch in suffix):
+                return False
+            break
+
+    parts = core.split(".")
+    if len(parts) != 3:
+        return False
+    return all(part.isdigit() and len(part) <= 10 for part in parts)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("version", help="Release version (e.g. 0.1.0 or v0.1.0)")
     args = parser.parse_args()
 
     version = args.version.lstrip("v").strip()
-    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9._-]+)?", version):
+    if not _is_valid_release_version(version):
         raise SystemExit(f"Invalid version: {version}")
 
     chart = Path("helm/queen-califia/Chart.yaml")

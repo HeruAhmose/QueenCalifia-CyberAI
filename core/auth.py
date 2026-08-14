@@ -10,6 +10,7 @@ the security gateway root app (which imports from `core.*`) is loaded.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 from functools import wraps
@@ -19,6 +20,14 @@ from flask import jsonify, request
 
 
 def _hash_api_key(value: str, pepper: str) -> str:
+    return hmac.new(
+        pepper.encode("utf-8"),
+        value.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _legacy_hash_api_key(value: str, pepper: str) -> str:
     return hashlib.sha256((value + pepper).encode()).hexdigest()
 
 
@@ -45,8 +54,14 @@ def _structured_key_meta(provided: str):
 
     pepper = os.getenv("QC_API_KEY_PEPPER", "")
     provided_hash = _hash_api_key(provided, pepper)
+    legacy_hash = _legacy_hash_api_key(provided, pepper)
     for item in data.get("keys", []) if isinstance(data, dict) else []:
-        if item.get("key_hash") == provided_hash and not bool(item.get("revoked", False)):
+        stored_hash = str(item.get("key_hash") or "")
+        if (
+            (hmac.compare_digest(stored_hash, provided_hash) or
+             hmac.compare_digest(stored_hash, legacy_hash))
+            and not bool(item.get("revoked", False))
+        ):
             return item
     return None
 

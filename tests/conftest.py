@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 import hashlib
+import hmac
 import json
 import os
 import sys
@@ -211,7 +212,7 @@ def _ensure_redis_prefix() -> None:
     os.environ["QC_REDIS_PREFIX"] = f"qc:test:{uuid.uuid4().hex}:"
 
 def _make_keys_json(api_key: str, pepper: str) -> str:
-    key_hash = hashlib.sha256((api_key + pepper).encode()).hexdigest()
+    key_hash = hmac.new(pepper.encode("utf-8"), api_key.encode("utf-8"), hashlib.sha256).hexdigest()
     data = {
         "version": 1,
         "keys": [

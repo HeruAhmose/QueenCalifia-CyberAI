@@ -747,17 +747,40 @@ class APIKeyStore:
             pass
 
     def _hash_key(self, key: str) -> str:
+        return hmac.new(
+            self.pepper.encode("utf-8"),
+            key.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+
+    def _legacy_hash_key(self, key: str) -> str:
         return hashlib.sha256((key + self.pepper).encode()).hexdigest()
 
     def validate(self, presented_key: str) -> Optional[Dict[str, Any]]:
         if not presented_key:
             return None
+
         key_hash = self._hash_key(presented_key)
+        legacy_hash = self._legacy_hash_key(presented_key)
+
         with self._lock:
             meta = self._by_hash.get(key_hash)
-            if not meta or meta.get("revoked"):
+            if meta and not meta.get("revoked"):
+                return {**meta, "key_hash": key_hash}
+
+            legacy_meta = self._by_hash.get(legacy_hash)
+            if not legacy_meta or legacy_meta.get("revoked"):
                 return None
-            return {**meta, "key_hash": key_hash}
+
+            # Opportunistically migrate a valid legacy hash in writable stores.
+            self._by_hash[key_hash] = legacy_meta
+            self._by_hash.pop(legacy_hash, None)
+            try:
+                self._persist()
+            except OSError:
+                # Authentication remains valid even if the store is read-only.
+                pass
+            return {**legacy_meta, "key_hash": key_hash}
 
     def generate_key(self, role: str, permissions: List[str], rate_limit: int, description: str) -> str:
         new_key = secrets.token_hex(32)

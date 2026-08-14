@@ -41,6 +41,24 @@ from sovereignty.schemas import (
     SignatureAlg,
 )
 
+def _qc_data_path(raw_path: str, purpose: str) -> Path:
+    """Resolve a configurable data path under QC_DATA_ROOT in production."""
+    candidate = Path(raw_path).expanduser()
+    root_raw = (os.environ.get("QC_DATA_ROOT") or "").strip()
+
+    if not root_raw:
+        if os.environ.get("QC_PRODUCTION") == "1":
+            raise RuntimeError("QC_DATA_ROOT is required for production filesystem persistence")
+        return candidate.resolve()
+
+    root = Path(root_raw).expanduser().resolve()
+    resolved = candidate.resolve() if candidate.is_absolute() else (root / candidate).resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(f"{purpose} must remain under QC_DATA_ROOT") from exc
+    return resolved
+
 logger = logging.getLogger("sovereignty.approvals")
 
 # ─── Crypto Backend ──────────────────────────────────────────────────────────
@@ -295,7 +313,7 @@ class SQLiteApprovalStore(ApprovalStore):
 
     def __init__(self, db_path: str):
         self._lock = threading.RLock()
-        self._db_path = Path(db_path).expanduser().resolve()
+        self._db_path = _qc_data_path(db_path, "approval database")
         self._init_db()
 
     def _connect(self) -> sqlite3.Connection:

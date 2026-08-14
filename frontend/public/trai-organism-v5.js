@@ -927,14 +927,24 @@ html[data-trai-v5-internal="true"]::view-transition-new(root) {
     if (!(anchor instanceof HTMLAnchorElement)) return;
 
     var raw = anchor.getAttribute("href");
-    if (!raw || raw.startsWith("mailto:") || raw.startsWith("tel:") || raw.startsWith("javascript:")) {
-      return;
-    }
+    if (!raw) return;
 
     var url;
     try {
       url = new URL(raw, window.location.href);
     } catch {
+      anchor.removeAttribute("href");
+      anchor.setAttribute("aria-disabled", "true");
+      return;
+    }
+
+    var protocol = url.protocol.toLowerCase();
+    if (protocol === "mailto:" || protocol === "tel:") {
+      return;
+    }
+    if (protocol !== "http:" && protocol !== "https:") {
+      anchor.removeAttribute("href");
+      anchor.setAttribute("aria-disabled", "true");
       return;
     }
 
