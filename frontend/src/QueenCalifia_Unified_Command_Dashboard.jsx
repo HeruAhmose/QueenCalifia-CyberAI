@@ -2457,23 +2457,10 @@ const DEVOPS_WORKFLOWS = [
 // ─── QC OS v4.2.1 — API Layer (shared by all QC tabs) ────────────────────
 
 const QC_API = getQcApiBase();
-const loadStoredDashboardAuth = () => {
-  try {
-    return {
-      apiKey: window.sessionStorage?.getItem?.("qc_api_key") || "",
-      adminKey: window.sessionStorage?.getItem?.("qc_admin_key") || "",
-    };
-  } catch {
-    return { apiKey: "", adminKey: "" };
-  }
-};
+let dashboardAuthMemory = { apiKey: "", adminKey: "" };
+const loadStoredDashboardAuth = () => ({ ...dashboardAuthMemory });
 const saveStoredDashboardAuth = ({ apiKey = "", adminKey = "" }) => {
-  try {
-    if (apiKey) window.sessionStorage?.setItem?.("qc_api_key", apiKey);
-    else window.sessionStorage?.removeItem?.("qc_api_key");
-    if (adminKey) window.sessionStorage?.setItem?.("qc_admin_key", adminKey);
-    else window.sessionStorage?.removeItem?.("qc_admin_key");
-  } catch {}
+  dashboardAuthMemory = { apiKey, adminKey };
 };
 const qcH = (ak,apiKey) => {
   const stored = loadStoredDashboardAuth();
@@ -2806,8 +2793,8 @@ function QCConsoleTab() {
   const [err,setErr] = useState("");
   const [memories,setMems] = useState([]);
   const [config,setConfig] = useState(null);
-  const [sessionId] = useState(()=>"ses-"+Math.random().toString(36).slice(2,10));
-  const [userId] = useState(()=>"usr-"+Math.random().toString(36).slice(2,10));
+  const [sessionId] = useState(() => `ses-${globalThis.crypto.randomUUID()}`);
+  const [userId] = useState(() => `usr-${globalThis.crypto.randomUUID()}`);
   const streamRef = useRef(null);
 
   useEffect(()=>{

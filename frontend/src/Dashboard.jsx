@@ -1579,7 +1579,7 @@ function IncidentsTab({ incidents }) {
 // ─── VULN TAB ─────────────────────────────────────────────────────────────
 
 function VulnsTab() {
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem("qc_api_key") || "");
+  const [apiKey, setApiKey] = useState("");
   const [ack, setAck] = useState(false);
 
   const [target, setTarget] = useState("192.168.1.0/24");
@@ -1825,9 +1825,6 @@ function VulnsTab() {
     }
   }, [ack, apiFetch, fetchRemediation, scanType, target, webUrl]);
 
-  useEffect(() => {
-    localStorage.setItem("qc_api_key", apiKey || "");
-  }, [apiKey]);
 
   useEffect(() => {
     if (!scanId) return;
@@ -2192,8 +2189,8 @@ function QCConsoleTab() {
   const [err,setErr] = useState("");
   const [memories,setMems] = useState([]);
   const [config,setConfig] = useState(null);
-  const [sessionId] = useState(()=>"ses-"+Math.random().toString(36).slice(2,10));
-  const [userId] = useState(()=>"usr-"+Math.random().toString(36).slice(2,10));
+  const [sessionId] = useState(() => `ses-${globalThis.crypto.randomUUID()}`);
+  const [userId] = useState(() => `usr-${globalThis.crypto.randomUUID()}`);
   const streamRef = useRef(null);
 
   useEffect(()=>{

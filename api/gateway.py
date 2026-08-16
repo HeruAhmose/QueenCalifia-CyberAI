@@ -57,6 +57,11 @@ except Exception:  # pragma: no cover
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 from core.auth import require_admin
+from core.api_key_crypto import (
+    API_KEY_HASH_SCHEME,
+    API_KEY_STORE_VERSION,
+    api_key_fingerprint,
+)
 from core.log_context import set_request_id, set_principal, clear_request_id, clear_principal
 from core.redis_client import key_prefix
 from core.otel import instrument_flask, inject, current_trace_ids
@@ -714,6 +719,22 @@ class APIKeyStore:
         if not isinstance(keys, list):
             raise ValueError("Invalid API keys data (expected {'keys': [...]})")
 
+        if (
+            data.get("version") != API_KEY_STORE_VERSION
+            or data.get("hash_scheme") != API_KEY_HASH_SCHEME
+        ):
+            if self._load_legacy_env_keys():
+                logger.warning(
+                    "Rebuilt legacy API-key store metadata from explicit QC_API_KEY/QC_ADMIN_KEY values"
+                )
+                self._persist()
+                return
+            raise RuntimeError(
+                "Unsupported legacy API-key store. Rotate structured keys or provide "
+                "QC_API_KEY/QC_ADMIN_KEY once so the store can be rebuilt with "
+                f"{API_KEY_HASH_SCHEME}."
+            )
+
         with self._lock:
             self._by_hash.clear()
             for item in keys:
@@ -735,7 +756,11 @@ class APIKeyStore:
 
     def _persist(self) -> None:
         os.makedirs(os.path.dirname(self.file_path) or ".", exist_ok=True)
-        payload = {"version": 1, "keys": [{"key_hash": k, **v} for k, v in self._by_hash.items()]}
+        payload = {
+            "version": API_KEY_STORE_VERSION,
+            "hash_scheme": API_KEY_HASH_SCHEME,
+            "keys": [{"key_hash": k, **v} for k, v in self._by_hash.items()],
+        }
         tmp = self.file_path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2, sort_keys=True)
@@ -747,12 +772,14 @@ class APIKeyStore:
             pass
 
     def _hash_key(self, key: str) -> str:
-        return hashlib.sha256((key + self.pepper).encode()).hexdigest()
+        return api_key_fingerprint(key, self.pepper)
 
     def validate(self, presented_key: str) -> Optional[Dict[str, Any]]:
         if not presented_key:
             return None
+
         key_hash = self._hash_key(presented_key)
+
         with self._lock:
             meta = self._by_hash.get(key_hash)
             if not meta or meta.get("revoked"):
@@ -1130,8 +1157,8 @@ def create_security_api(
             }
 
         g.principal = principal
-        set_principal((principal or {}).get("key_hash") if principal else f"ip:{_safe_remote_addr()}")
         g.user_role = principal.get("role") if principal else "public"
+        set_principal(f"role:{g.user_role}")
         # Rate limit
         # Rate limit (global + per-endpoint; Redis-backed when available)
         role = g.user_role or "public"
@@ -1279,7 +1306,6 @@ def create_security_api(
                     "remote_addr": _safe_remote_addr(),
                     "role": getattr(g, "user_role", None),
                     "request_id": getattr(g, "request_id", None),
-                    "principal": getattr(g, "rate_limit_identity", None),
                 },
             )
         except Exception:

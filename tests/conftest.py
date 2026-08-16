@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import uuid
-import hashlib
 import json
 import os
 import sys
 
 # Ensure repo root is importable under all pytest import modes
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from core.api_key_crypto import (
+    API_KEY_HASH_SCHEME,
+    API_KEY_STORE_VERSION,
+    api_key_fingerprint,
+)
 from dataclasses import dataclass
 from typing import Any, Dict
 
@@ -211,9 +215,10 @@ def _ensure_redis_prefix() -> None:
     os.environ["QC_REDIS_PREFIX"] = f"qc:test:{uuid.uuid4().hex}:"
 
 def _make_keys_json(api_key: str, pepper: str) -> str:
-    key_hash = hashlib.sha256((api_key + pepper).encode()).hexdigest()
+    key_hash = api_key_fingerprint(api_key, pepper)
     data = {
-        "version": 1,
+        "version": API_KEY_STORE_VERSION,
+        "hash_scheme": API_KEY_HASH_SCHEME,
         "keys": [
             {
                 "key_hash": key_hash,

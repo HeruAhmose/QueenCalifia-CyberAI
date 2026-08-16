@@ -31,6 +31,9 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 from pathlib import Path
 
+from sovereignty.storage_paths import resolve_configured_sqlite_path
+
+
 logger = logging.getLogger("sovereignty.audit_chain")
 
 AUDIT_HASH_ALG = os.environ.get("QC_AUDIT_HASH_ALG", "sha256")
@@ -232,10 +235,28 @@ class SQLiteAuditChain(AuditChain):
 
 
 def build_default_audit_chain() -> AuditChain:
-    db_path = os.environ.get("QC_AUDIT_CHAIN_DB") or os.environ.get("QC_DB_PATH")
-    if db_path:
-        try:
-            return SQLiteAuditChain(db_path)
-        except Exception as exc:
-            logger.error("audit_chain.sqlite_init_failed: %s", exc)
-    return AuditChain()
+    raw_path = os.environ.get("QC_AUDIT_CHAIN_DB") or os.environ.get("QC_DB_PATH")
+    production = os.environ.get("QC_PRODUCTION") == "1"
+
+    try:
+        db_path = resolve_configured_sqlite_path(
+            raw_path,
+            "audit-chain database",
+            production=production,
+        )
+    except Exception as exc:
+        logger.error("audit_chain.sqlite_destination_invalid: %s", exc)
+        if production:
+            raise
+        return AuditChain()
+
+    if db_path is None:
+        return AuditChain()
+
+    try:
+        return SQLiteAuditChain(str(db_path))
+    except Exception as exc:
+        logger.error("audit_chain.sqlite_init_failed: %s", exc)
+        if production:
+            raise
+        return AuditChain()

@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 
 import pytest
@@ -38,8 +39,45 @@ _DEFAULT_API = (
     "https://queencalifia-cyberai.onrender.com" if _LIVE_DEFAULTS else "http://localhost:5000"
 )
 
-DASHBOARD_URL = os.environ.get("QC_DASHBOARD_URL", _DEFAULT_DASHBOARD).rstrip("/")
-API_URL = os.environ.get("QC_API_URL", _DEFAULT_API).rstrip("/")
+def _canonical_smoke_origin(raw: str, kind: str) -> str:
+    parsed = urllib.parse.urlsplit((raw or "").strip())
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise ValueError(f"{kind} URL must be a clean origin")
+
+    host = (parsed.hostname or "").lower()
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError(f"{kind} URL contains an invalid port") from exc
+
+    if parsed.path not in ("", "/"):
+        raise ValueError(f"{kind} URL must be an origin only")
+
+    if kind == "dashboard":
+        if parsed.scheme == "https" and host == "queencalifia-cyberai.web.app" and port in (None, 443):
+            return "https://queencalifia-cyberai.web.app"
+        if parsed.scheme == "http" and host in {"localhost", "127.0.0.1"} and port == 3000:
+            return "http://127.0.0.1:3000"
+        if parsed.scheme == "http" and host in {"localhost", "127.0.0.1"} and port == 5173:
+            return "http://127.0.0.1:5173"
+
+    if kind == "api":
+        if parsed.scheme == "https" and host == "queencalifia-cyberai.onrender.com" and port in (None, 443):
+            return "https://queencalifia-cyberai.onrender.com"
+        if parsed.scheme == "http" and host in {"localhost", "127.0.0.1"} and port == 5000:
+            return "http://127.0.0.1:5000"
+
+    raise ValueError(f"{kind} URL is not an approved Queen Califia Playwright target")
+
+
+DASHBOARD_URL = _canonical_smoke_origin(
+    os.environ.get("QC_DASHBOARD_URL", _DEFAULT_DASHBOARD),
+    "dashboard",
+)
+API_URL = _canonical_smoke_origin(
+    os.environ.get("QC_API_URL", _DEFAULT_API),
+    "api",
+)
 
 
 def playwright_api_key() -> str:

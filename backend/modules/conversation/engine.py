@@ -21,6 +21,7 @@ import logging
 import os
 import re
 import time
+from urllib.parse import urlsplit
 
 from core.database import get_db, utc_now, audit, log_event
 
@@ -614,23 +615,76 @@ def _local_reply(message, mode, memories, recent_turns):
 #  OPTIONAL EXTERNAL LLM (pluggable, not required)
 # ═══════════════════════════════════════════════════════════════
 
-def _resolved_llm_provider():
-    if LLM_PROVIDER and LLM_PROVIDER != "auto":
-        return LLM_PROVIDER
+def _canonical_llm_url(raw_url: str) -> str:
+    value = (raw_url or "").strip()
+    if not value:
+        return ""
 
-    low_url = (LLM_URL or "").lower()
-    low_model = (LLM_MODEL or "").lower()
-    if "anthropic.com" in low_url or low_model.startswith("claude"):
-        return "anthropic"
-    return "openai"
+    parsed = urlsplit(value)
+    if parsed.username or parsed.password:
+        raise ValueError("QC_LLM_URL must not contain embedded credentials")
+    if parsed.query or parsed.fragment:
+        raise ValueError("QC_LLM_URL must not contain query parameters or fragments")
+
+    host = (parsed.hostname or "").lower()
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("QC_LLM_URL contains an invalid port") from exc
+    path = parsed.path or "/"
+
+    if parsed.scheme == "http" and host in {"localhost", "127.0.0.1", "::1"}:
+        if port == 11434 and path == "/v1/chat/completions":
+            return "http://127.0.0.1:11434/v1/chat/completions"
+        if port == 8000 and path == "/v1/chat/completions":
+            return "http://127.0.0.1:8000/v1/chat/completions"
+        raise ValueError("QC_LLM_URL local endpoint is not an approved Ollama/vLLM target")
+
+    if parsed.scheme != "https":
+        raise ValueError("QC_LLM_URL remote endpoints must use HTTPS")
+    if port not in (None, 443):
+        raise ValueError("QC_LLM_URL remote endpoints must use the standard HTTPS port")
+
+    if host == "api.anthropic.com" and path == "/v1/messages":
+        return "https://api.anthropic.com/v1/messages"
+    if host == "api.openai.com" and path == "/v1/chat/completions":
+        return "https://api.openai.com/v1/chat/completions"
+    if host == "api.together.xyz" and path == "/v1/chat/completions":
+        return "https://api.together.xyz/v1/chat/completions"
+
+    raise ValueError("QC_LLM_URL is not an approved external LLM endpoint")
 
 
 def _resolved_llm_url():
     if LLM_URL:
-        return LLM_URL
-    if _resolved_llm_provider() == "anthropic":
+        return _canonical_llm_url(LLM_URL)
+
+    if LLM_PROVIDER == "anthropic" or (LLM_PROVIDER == "auto" and (LLM_MODEL or "").lower().startswith("claude")):
         return "https://api.anthropic.com/v1/messages"
+
     return ""
+
+
+def _resolved_llm_provider():
+    if LLM_PROVIDER and LLM_PROVIDER != "auto":
+        if LLM_PROVIDER not in {"anthropic", "openai"}:
+            raise ValueError("QC_LLM_PROVIDER must be 'auto', 'anthropic', or 'openai'")
+        provider = LLM_PROVIDER
+    else:
+        provider = (
+            "anthropic"
+            if _resolved_llm_url() == "https://api.anthropic.com/v1/messages"
+            or (LLM_MODEL or "").lower().startswith("claude")
+            else "openai"
+        )
+
+    resolved_url = _resolved_llm_url()
+    if provider == "anthropic" and resolved_url and resolved_url != "https://api.anthropic.com/v1/messages":
+        raise ValueError("QC_LLM_PROVIDER=anthropic requires the approved Anthropic endpoint")
+    if provider == "openai" and resolved_url == "https://api.anthropic.com/v1/messages":
+        raise ValueError("QC_LLM_PROVIDER=openai cannot target the Anthropic endpoint")
+
+    return provider
 
 
 def _call_anthropic_llm(system, messages, url):

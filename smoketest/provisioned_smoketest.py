@@ -85,6 +85,39 @@ def _basic_auth_header(user: str, password: str) -> str:
     return f"Basic {token}"
 
 
+def _canonical_internal_url(raw: str, purpose: str) -> str:
+    parsed = urllib.parse.urlsplit((raw or "").strip())
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise SystemExit(f"{purpose} URL must not contain credentials/query/fragment")
+
+    host = (parsed.hostname or "").lower()
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise SystemExit(f"{purpose} URL contains an invalid port") from exc
+    path = parsed.path or "/"
+
+    if purpose == "grafana":
+        if parsed.scheme == "http" and host == "grafana" and port == 3000 and path == "/":
+            return "http://grafana:3000"
+        if parsed.scheme == "http" and host in {"localhost", "127.0.0.1"} and port == 3000 and path == "/":
+            return "http://127.0.0.1:3000"
+
+    if purpose == "webhook":
+        if parsed.scheme == "http" and host == "webhook-receiver" and port == 8080 and path == "/webhook":
+            return "http://webhook-receiver:8080/webhook"
+        if parsed.scheme == "http" and host in {"localhost", "127.0.0.1"} and port == 8081 and path == "/webhook":
+            return "http://127.0.0.1:8081/webhook"
+
+    if purpose == "last":
+        if parsed.scheme == "http" and host == "webhook-receiver" and port == 8080 and path == "/last":
+            return "http://webhook-receiver:8080/last"
+        if parsed.scheme == "http" and host in {"localhost", "127.0.0.1"} and port == 8081 and path == "/last":
+            return "http://127.0.0.1:8081/last"
+
+    raise SystemExit(f"{purpose} URL is not an approved provisioned-smoketest target")
+
+
 def _http_json(
     method: str,
     url: str,
@@ -371,12 +404,21 @@ def wait_for_webhook_seen(last_url: str, deadline_s: float = 120.0) -> Dict[str,
 
 
 def main() -> None:
-    base_url = _env("GRAFANA_URL", "http://grafana:3000")
+    base_url = _canonical_internal_url(
+        _env("GRAFANA_URL", "http://grafana:3000"),
+        "grafana",
+    )
     user = _env("GRAFANA_USER", "admin")
     password = _env("GRAFANA_PASS", "admin")
     bearer = _env("QC_ALERT_WEBHOOK_BEARER_TOKEN", required=True)
-    expected_url = _env("QC_ALERT_WEBHOOK_URL", required=True)
-    last_url = _env("WEBHOOK_LAST_URL", "http://webhook-receiver:8080/last")
+    expected_url = _canonical_internal_url(
+        _env("QC_ALERT_WEBHOOK_URL", required=True),
+        "webhook",
+    )
+    last_url = _canonical_internal_url(
+        _env("WEBHOOK_LAST_URL", "http://webhook-receiver:8080/last"),
+        "last",
+    )
 
     auth = _basic_auth_header(user, password)
 

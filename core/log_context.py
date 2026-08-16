@@ -4,7 +4,7 @@ This module provides a minimal context layer for structured JSON logging.
 
 Context variables:
 - request_id: propagated from HTTP -> Celery tasks when available.
-- principal: API key hash or "ip:<addr>" for unauthenticated access.
+- principal: non-secret role/IP context only; credential fingerprints are never logged.
 """
 
 from __future__ import annotations

@@ -34,12 +34,15 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Set
 from pathlib import Path
 
+from sovereignty.storage_paths import resolve_configured_sqlite_path
+
 from sovereignty.schemas import (
     ApprovalRecord,
     ApprovalSignature,
     HybridSignaturePolicy,
     SignatureAlg,
 )
+
 
 logger = logging.getLogger("sovereignty.approvals")
 
@@ -417,13 +420,31 @@ class SQLiteApprovalStore(ApprovalStore):
 
 
 def build_default_approval_store() -> ApprovalStore:
-    db_path = os.environ.get("QC_APPROVALS_DB") or os.environ.get("QC_DB_PATH")
-    if db_path:
-        try:
-            return SQLiteApprovalStore(db_path)
-        except Exception as exc:
-            logger.error("approvals.store: failed to initialize sqlite store: %s", exc)
-    return InMemoryApprovalStore()
+    raw_path = os.environ.get("QC_APPROVALS_DB") or os.environ.get("QC_DB_PATH")
+    production = os.environ.get("QC_PRODUCTION") == "1"
+
+    try:
+        db_path = resolve_configured_sqlite_path(
+            raw_path,
+            "approval database",
+            production=production,
+        )
+    except Exception as exc:
+        logger.error("approvals.store: invalid sqlite destination: %s", exc)
+        if production:
+            raise
+        return InMemoryApprovalStore()
+
+    if db_path is None:
+        return InMemoryApprovalStore()
+
+    try:
+        return SQLiteApprovalStore(str(db_path))
+    except Exception as exc:
+        logger.error("approvals.store: failed to initialize sqlite store: %s", exc)
+        if production:
+            raise
+        return InMemoryApprovalStore()
 
 
 # ─── Convenience ─────────────────────────────────────────────────────────────

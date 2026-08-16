@@ -129,10 +129,12 @@ def _connect_tls(host: str, port: int) -> ssl.SSLSocket:
 
     if insecure:
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
     else:
         ctx = ssl.create_default_context()
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         if ca_path:
             ctx.load_verify_locations(cafile=ca_path)
 
