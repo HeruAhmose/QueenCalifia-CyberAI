@@ -678,11 +678,8 @@ class APIKeyStore:
         admin = self.generate_key(role="admin", permissions=["read", "write", "execute", "admin"], rate_limit=240, description="bootstrap admin key")
         analyst = self.generate_key(role="analyst", permissions=["read", "write", "execute"], rate_limit=120, description="bootstrap analyst key")
         reader = self.generate_key(role="reader", permissions=["read"], rate_limit=60, description="bootstrap reader key")
-        bootstrap_path = (os.environ.get("QC_BOOTSTRAP_KEYS_FILE", "") or "").strip()
-        if not bootstrap_path:
-            bootstrap_path = self.file_path + ".bootstrap.json"
+        bootstrap_path = "keys.bootstrap.json"
         self._persist_bootstrap_secrets(
-            bootstrap_path,
             {"admin": admin, "analyst": analyst, "reader": reader},
         )
         try:
@@ -786,10 +783,9 @@ class APIKeyStore:
             # Best-effort on non-POSIX.
             pass
 
-    def _persist_bootstrap_secrets(self, file_path: str, keys: Dict[str, str]) -> None:
+    def _persist_bootstrap_secrets(self, keys: Dict[str, str]) -> None:
         """Write one-time bootstrap credentials without exposing them to logs."""
-        directory = os.path.dirname(file_path) or "."
-        os.makedirs(directory, exist_ok=True)
+        file_path = "keys.bootstrap.json"
         payload = {
             "created_at": _utcnow(),
             "warning": "Move these credentials to a secret manager, then delete this file.",
@@ -800,7 +796,7 @@ class APIKeyStore:
             fd = os.open(file_path, flags, 0o600)
         except FileExistsError as exc:
             raise RuntimeError(
-                f"Bootstrap credential file already exists: {file_path}. "
+                "Bootstrap credential file already exists: keys.bootstrap.json. "
                 "Refusing to overwrite existing secrets."
             ) from exc
         try:
