@@ -1,0 +1,78 @@
+name: dependency-zero-remediate
+
+on:
+  push:
+    branches:
+      - agent/dependency-zero-audit-20260816
+
+permissions:
+  contents: write
+
+jobs:
+  remediate-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Apply frontend security floors
+        working-directory: frontend
+        run: |
+          npm pkg set devDependencies.vite=8.0.16
+          npm pkg set overrides.postcss='>=8.5.23'
+          npm pkg set overrides.nanoid='>=3.3.18'
+          npm install --package-lock-only
+          npm ci
+          npm run build
+          npm audit --audit-level=low
+
+      - name: Apply backend security floors
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('backend/requirements.txt')
+          lines = p.read_text().splitlines()
+          replacements = {
+              'urllib3': 'urllib3==2.7.0',
+              'cryptography': 'cryptography==50.0.0',
+              'PyJWT': 'PyJWT==2.13.0',
+          }
+          out = []
+          for line in lines:
+              name = line.split('==', 1)[0]
+              out.append(replacements.get(name, line))
+          p.write_text('\n'.join(out) + '\n')
+          PY
+          python -m pip install --upgrade pip pip-audit
+          python -m pip install -r backend/requirements.txt pytest
+          python -m compileall -q backend
+          PYTHONPATH=backend python -c "from app import app; print(app.url_map)"
+          pytest -q backend/tests
+          pip-audit -r backend/requirements.txt
+
+      - name: Commit verified dependency remediation
+        shell: bash
+        run: |
+          git diff -- frontend/package.json frontend/package-lock.json backend/requirements.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/package.json frontend/package-lock.json backend/requirements.txt
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "chore(security): remediate frontend and backend dependencies"
+          git push origin HEAD:agent/dependency-zero-audit-20260816
