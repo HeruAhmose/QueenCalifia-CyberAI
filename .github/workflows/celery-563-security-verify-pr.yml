@@ -1,0 +1,58 @@
+name: celery-563-security-verify-pr
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  celery-security-verify:
+    if: github.head_ref == 'agent/celery-563-redis74-20260816'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install backend and audit tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt pytest pip-audit
+
+      - name: Verify exact Celery and Redis versions
+        run: |
+          python - <<'PY'
+          import celery
+          import redis
+          assert celery.__version__ == '5.6.3', celery.__version__
+          assert redis.__version__ == '7.4.0', redis.__version__
+          PY
+
+      - name: Compile and Celery-Redis compatibility regression
+        run: |
+          python -m compileall -q api backend core tests celery_app.py tasks.py
+          python -m pytest -q tests/test_celery_redis_compat.py tests/test_redis_password_redaction.py
+
+      - name: Flask app boots
+        working-directory: backend
+        run: |
+          python -c "
+          import sys; sys.path.insert(0, '.')
+          from app import app
+          rules = [r.rule for r in app.url_map.iter_rules() if r.rule != '/static/<path:filename>']
+          critical = ['/healthz', '/api/vulns/scan', '/api/v1/evolution/status']
+          missing = [r for r in critical if r not in rules]
+          assert not missing, f'Missing critical routes: {missing}'
+          print('App boots successfully.')
+          "
+
+      - name: Full backend test suite
+        run: python -m pytest -q
+
+      - name: Backend dependency audit
+        run: pip-audit -r backend/requirements.txt --desc on
