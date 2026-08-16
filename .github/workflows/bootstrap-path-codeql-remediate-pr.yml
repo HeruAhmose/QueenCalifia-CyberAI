@@ -1,0 +1,59 @@
+name: bootstrap-path-codeql-remediate-pr
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  remediate-and-verify:
+    if: github.head_ref == 'agent/redact-bootstrap-api-keys-20260816'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Apply CodeQL path remediation
+        run: python scripts/security/remediate_bootstrap_path_codeql.py
+
+      - name: Verify targeted and full test suites
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt pytest
+          python -m compileall -q api backend core tests
+          python -m pytest -q tests/test_api_key_bootstrap_secrets.py
+          python -m pytest -q
+
+      - name: Prove bootstrap filesystem path is static
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('api/gateway.py').read_text(encoding='utf-8')
+          forbidden = ['QC_BOOTSTRAP_KEYS_FILE', 'self.file_path + ".bootstrap.json"']
+          present = [item for item in forbidden if item in text]
+          if present:
+              raise SystemExit(f'Uncontrolled bootstrap path inputs remain: {present}')
+          if text.count('keys.bootstrap.json') < 3:
+              raise SystemExit('Expected static bootstrap path invariants are missing')
+          PY
+
+      - name: Commit verified CodeQL remediation to PR head
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add api/gateway.py tests/test_api_key_bootstrap_secrets.py
+          if git diff --cached --quiet; then
+            echo 'CodeQL remediation already applied.'
+            exit 0
+          fi
+          git commit -m 'fix(security): constrain bootstrap secret path'
+          git push origin HEAD:${{ github.head_ref }}
