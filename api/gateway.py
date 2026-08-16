@@ -674,15 +674,27 @@ class APIKeyStore:
                 "or QC_ALLOW_INSECURE_BOOTSTRAP=1 for initial bootstrap."
             )
 
-        # Dev bootstrap (writes keys.json)
+        # Dev bootstrap. Raw credentials are never emitted to application logs.
         admin = self.generate_key(role="admin", permissions=["read", "write", "execute", "admin"], rate_limit=240, description="bootstrap admin key")
         analyst = self.generate_key(role="analyst", permissions=["read", "write", "execute"], rate_limit=120, description="bootstrap analyst key")
         reader = self.generate_key(role="reader", permissions=["read"], rate_limit=60, description="bootstrap reader key")
-        self._persist()
-        logger.warning("🔑 Bootstrapped API keys (store securely; rotate immediately):")
-        logger.warning("   ADMIN  = %s", admin)
-        logger.warning("   ANALYST= %s", analyst)
-        logger.warning("   READER = %s", reader)
+        bootstrap_path = "keys.bootstrap.json"
+        self._persist_bootstrap_secrets(
+            {"admin": admin, "analyst": analyst, "reader": reader},
+        )
+        try:
+            self._persist()
+        except Exception:
+            try:
+                os.unlink(bootstrap_path)
+            except OSError:
+                pass
+            raise
+        logger.warning(
+            "Bootstrapped API keys written to owner-only file %s; "
+            "move them to a secret manager and delete the bootstrap file after capture.",
+            bootstrap_path,
+        )
 
     def _load_legacy_env_keys(self) -> bool:
         """Support legacy QC_API_KEY/QC_ADMIN_KEY env bootstrap."""
@@ -770,6 +782,42 @@ class APIKeyStore:
         except OSError:
             # Best-effort on non-POSIX.
             pass
+
+    def _persist_bootstrap_secrets(self, keys: Dict[str, str]) -> None:
+        """Write one-time bootstrap credentials without exposing them to logs."""
+        file_path = "keys.bootstrap.json"
+        payload = {
+            "created_at": _utcnow(),
+            "warning": "Move these credentials to a secret manager, then delete this file.",
+            "keys": dict(keys),
+        }
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        try:
+            fd = os.open(file_path, flags, 0o600)
+        except FileExistsError as exc:
+            raise RuntimeError(
+                "Bootstrap credential file already exists: keys.bootstrap.json. "
+                "Refusing to overwrite existing secrets."
+            ) from exc
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=2, sort_keys=True)
+                f.write("\n")
+                f.flush()
+                try:
+                    os.fsync(f.fileno())
+                except OSError:
+                    pass
+            try:
+                os.chmod(file_path, 0o600)
+            except OSError:
+                pass
+        except Exception:
+            try:
+                os.unlink(file_path)
+            except OSError:
+                pass
+            raise
 
     def _hash_key(self, key: str) -> str:
         return api_key_fingerprint(key, self.pepper)
