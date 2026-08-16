@@ -1,0 +1,159 @@
+{
+  "frontend": {
+    "counts": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 3,
+      "critical": 0,
+      "total": 3
+    },
+    "packages": [
+      {
+        "name": "nanoid",
+        "severity": "high",
+        "isDirect": false,
+        "range": "<=3.3.17",
+        "fixAvailable": true
+      },
+      {
+        "name": "postcss",
+        "severity": "high",
+        "isDirect": false,
+        "range": "<=8.5.22",
+        "fixAvailable": true
+      },
+      {
+        "name": "vite",
+        "severity": "high",
+        "isDirect": true,
+        "range": "8.0.0 - 8.0.15",
+        "fixAvailable": true
+      }
+    ]
+  },
+  "backend": {
+    "vulnerable_packages": [
+      {
+        "name": "urllib3",
+        "version": "2.6.3",
+        "vulns": [
+          {
+            "id": "PYSEC-2026-142",
+            "fix_versions": [
+              "2.7.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-142",
+            "fix_versions": [
+              "2.7.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-141",
+            "fix_versions": [
+              "2.7.0"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "cryptography",
+        "version": "46.0.6",
+        "vulns": [
+          {
+            "id": "PYSEC-2026-36",
+            "fix_versions": [
+              "46.0.7"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-36",
+            "fix_versions": [
+              "46.0.7"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-3552",
+            "fix_versions": [
+              "50.0.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-3553",
+            "fix_versions": [
+              "49.0.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-3554",
+            "fix_versions": [
+              "49.0.0"
+            ]
+          },
+          {
+            "id": "GHSA-537c-gmf6-5ccf",
+            "fix_versions": [
+              "48.0.1"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "pyjwt",
+        "version": "2.12.1",
+        "vulns": [
+          {
+            "id": "PYSEC-2026-179",
+            "fix_versions": [
+              "2.13.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-175",
+            "fix_versions": [
+              "2.13.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-177",
+            "fix_versions": [
+              "2.13.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-178",
+            "fix_versions": [
+              "2.13.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-177",
+            "fix_versions": [
+              "2.13.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-179",
+            "fix_versions": [
+              "2.13.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-176",
+            "fix_versions": [
+              "2.13.0"
+            ]
+          },
+          {
+            "id": "PYSEC-2026-178",
+            "fix_versions": [
+              "2.13.0"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
