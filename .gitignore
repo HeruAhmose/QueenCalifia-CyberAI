@@ -25,3 +25,4 @@ Thumbs.db
 # Peoples Portfolio is a separate repository and product — never vendor it here.
 # Clone/develop it only outside this tree (e.g. its own folder / remote).
 /peoples-portfolio/
+*.bootstrap.json
