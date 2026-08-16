@@ -1,0 +1,92 @@
+name: dependency-audit-evidence
+
+on:
+  push:
+    branches:
+      - agent/dependency-audit-20260816
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Frontend audit
+        shell: bash
+        run: |
+          cd frontend
+          npm ci
+          set +e
+          npm audit --json > ../frontend-audit.json
+          set -e
+
+      - name: Backend audit
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip pip-audit
+          set +e
+          pip-audit -r backend/requirements.txt --format json --output backend-audit.json
+          set -e
+
+      - name: Summarize audit evidence
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          npm = json.loads(Path('frontend-audit.json').read_text())
+          py = json.loads(Path('backend-audit.json').read_text())
+
+          npm_v = npm.get('metadata', {}).get('vulnerabilities', {})
+          npm_packages = []
+          for name, item in sorted((npm.get('vulnerabilities') or {}).items()):
+              npm_packages.append({
+                  'name': name,
+                  'severity': item.get('severity'),
+                  'isDirect': item.get('isDirect'),
+                  'range': item.get('range'),
+                  'fixAvailable': item.get('fixAvailable'),
+              })
+
+          py_findings = []
+          for dep in py.get('dependencies', []):
+              vulns = dep.get('vulns') or []
+              if vulns:
+                  py_findings.append({
+                      'name': dep.get('name'),
+                      'version': dep.get('version'),
+                      'vulns': [{'id': v.get('id'), 'fix_versions': v.get('fix_versions')} for v in vulns],
+                  })
+
+          summary = {
+              'frontend': {'counts': npm_v, 'packages': npm_packages},
+              'backend': {'vulnerable_packages': py_findings},
+          }
+          Path('dependency-audit-summary.json').write_text(json.dumps(summary, indent=2) + '\n')
+          PY
+
+      - name: Commit compact evidence to isolated branch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dependency-audit-summary.json
+          git commit -m "chore(security): capture dependency audit evidence [skip ci]"
+          git push origin HEAD:agent/dependency-audit-20260816
