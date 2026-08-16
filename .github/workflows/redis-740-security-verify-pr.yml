@@ -1,0 +1,58 @@
+name: redis-740-security-verify-pr
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  redis-security-verify:
+    if: github.head_ref == 'agent/redis-740-security-20260816'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install backend and audit tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt pytest pip-audit
+
+      - name: Verify exact Redis version and password redaction
+        run: |
+          python - <<'PY'
+          import redis
+          from redis import Redis
+
+          assert redis.__version__ == '7.4.0', redis.__version__
+          password = 'qc-super-secret-password'
+          client = Redis.from_url(
+              f'redis://:{password}@localhost:6379/0',
+              decode_responses=True,
+              socket_timeout=2,
+              socket_connect_timeout=2,
+          )
+          representation = repr(client.connection_pool)
+          assert password not in representation, representation
+          assert 'password' in representation.lower(), representation
+          PY
+
+      - name: Python compile and targeted regression test
+        run: |
+          python -m compileall -q api backend core tests
+          python -m pytest -q tests/test_redis_password_redaction.py
+
+      - name: Flask app boots
+        run: python -c "from api.gateway import app; print(app.url_map)"
+
+      - name: Full backend test suite
+        run: python -m pytest -q
+
+      - name: Backend dependency audit
+        run: pip-audit -r backend/requirements.txt --desc on
