@@ -27,6 +27,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Workflow shell-context guard
+        run: python scripts/ci/check_workflow_contexts.py
+
       - name: Install backend dependencies
         working-directory: backend
         run: |
