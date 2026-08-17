@@ -24,6 +24,19 @@ api:
     tag: "TAG"
     digest: ""
     pullPolicy: IfNotPresent
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    # The application writes SQLite/runtime state under data/, so the root
+    # filesystem is intentionally not marked read-only without a state volume.
+    readOnlyRootFilesystem: false
   service:
     type: ClusterIP
     port: 5000
@@ -64,6 +77,17 @@ worker:
     tag: "TAG"
     digest: ""
     pullPolicy: IfNotPresent
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    readOnlyRootFilesystem: false
   command: ["celery", "-A", "celery_app.celery_app", "worker", "-l", "INFO", "--concurrency", "4", "-Q", "scans"]
   resources:
     requests:
