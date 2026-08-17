@@ -33,6 +33,9 @@ jobs:
       - name: Platform toolchain integrity guard
         run: python scripts/ci/check_platform_toolchain.py
 
+      - name: Container and Kubernetes runtime isolation guard
+        run: python scripts/ci/check_runtime_isolation.py
+
       - name: Install backend dependencies
         working-directory: backend
         run: |

@@ -35,6 +35,7 @@ spec:
         app: redis
         {{- include "queen-califia.selectorLabels" . | nindent 8 }}
     spec:
+      automountServiceAccountToken: false
       {{- if not .Values.redis.persistence.enabled }}
       volumes:
         - name: data

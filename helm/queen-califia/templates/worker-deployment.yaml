@@ -18,6 +18,7 @@ spec:
         app: qc-worker
         {{- include "queen-califia.selectorLabels" . | nindent 8 }}
     spec:
+      automountServiceAccountToken: false
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
 {{ toYaml . | indent 8 }}
