@@ -24,6 +24,13 @@ from core.api_key_crypto import (
 )
 
 
+def _development_auth_disabled() -> bool:
+    """Honor QC_NO_AUTH only outside a production runtime."""
+    return (
+        os.getenv("QC_NO_AUTH", "0") == "1"
+        and os.getenv("QC_PRODUCTION", "0") != "1"
+    )
+
 
 def _structured_key_meta(provided: str):
     if not provided:
@@ -73,18 +80,15 @@ def require_api_key(fn: Callable) -> Callable:
 
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        if os.getenv("QC_NO_AUTH", "0") == "1":
+        if _development_auth_disabled():
             return fn(*args, **kwargs)
 
         provided = request.headers.get("X-QC-API-Key", "")
         if _structured_key_meta(provided):
             return fn(*args, **kwargs)
 
-        expected = os.getenv("QC_API_KEY")
-        if not expected:
-            return fn(*args, **kwargs)
-
-        if provided != expected:
+        expected = (os.getenv("QC_API_KEY", "") or "").strip()
+        if not expected or not hmac.compare_digest(provided, expected):
             return jsonify({"error": "unauthorized"}), 401
 
         return fn(*args, **kwargs)
@@ -97,7 +101,7 @@ def require_admin(fn: Callable) -> Callable:
 
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        if os.getenv("QC_NO_AUTH", "0") == "1":
+        if _development_auth_disabled():
             return fn(*args, **kwargs)
 
         provided_api_key = request.headers.get("X-QC-API-Key", "")
@@ -105,15 +109,14 @@ def require_admin(fn: Callable) -> Callable:
         if meta and "admin" in list(meta.get("permissions", [])):
             return fn(*args, **kwargs)
 
-        admin_key = os.getenv("QC_ADMIN_KEY")
+        admin_key = (os.getenv("QC_ADMIN_KEY", "") or "").strip()
         if not admin_key:
             return jsonify({"error": "admin access not configured"}), 403
 
         provided = request.headers.get("X-QC-Admin-Key", "")
-        if provided != admin_key:
+        if not hmac.compare_digest(provided, admin_key):
             return jsonify({"error": "forbidden"}), 403
 
         return fn(*args, **kwargs)
 
     return wrapper
-
