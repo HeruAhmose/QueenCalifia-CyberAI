@@ -24,6 +24,7 @@ spec:
       labels:
         app: qc-frontend
     spec:
+      automountServiceAccountToken: false
       containers:
         - name: frontend
           image: ghcr.io/YOUR_ORG/queencalifia-frontend:TAG
