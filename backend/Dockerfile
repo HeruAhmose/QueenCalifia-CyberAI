@@ -29,12 +29,14 @@ COPY backend/requirements.txt /tmp/requirements.txt
 RUN python -m pip install --upgrade pip setuptools wheel
 RUN git clone --depth=1 --branch "${LIBOQS_VERSION}" https://github.com/open-quantum-safe/liboqs /tmp/liboqs \
     && test "$(git -C /tmp/liboqs describe --tags --exact-match)" = "${LIBOQS_VERSION}" \
+    && git clone --depth=1 --branch "${LIBOQS_PYTHON_VERSION}" https://github.com/open-quantum-safe/liboqs-python /tmp/liboqs-python \
+    && test "$(git -C /tmp/liboqs-python describe --tags --exact-match)" = "${LIBOQS_PYTHON_VERSION}" \
     && cmake -S /tmp/liboqs -B /tmp/liboqs/build -GNinja -DBUILD_SHARED_LIBS=ON -DCMAKE_INSTALL_PREFIX="${OQS_INSTALL_DIR}" \
     && cmake --build /tmp/liboqs/build \
     && cmake --install /tmp/liboqs/build \
     && python -m pip install -r /tmp/requirements.txt \
-    && python -m pip install "liboqs-python==${LIBOQS_PYTHON_VERSION}" \
-    && rm -rf /tmp/liboqs
+    && python -m pip install /tmp/liboqs-python \
+    && rm -rf /tmp/liboqs /tmp/liboqs-python
 
 RUN groupadd --system --gid 10001 queencalifia \
     && useradd --system --uid 10001 --gid 10001 --home-dir /opt/render/project/src --shell /usr/sbin/nologin queencalifia
