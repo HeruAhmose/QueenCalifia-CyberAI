@@ -47,6 +47,19 @@ export function hdrs(adminKey) {
   return h;
 }
 
+/**
+ * Production runtime health contract.
+ * This intentionally targets the unauthenticated WSGI `/healthz` endpoint used
+ * by Gunicorn/container readiness checks rather than the richer `/api/health` API.
+ */
+export async function apiHealthz() {
+  const r = await fetchWithRetry(`${API}/healthz`, { headers: hdrs() });
+  if (!r.ok) throw new Error(`Health check failed: HTTP ${r.status}`);
+
+  const contentType = r.headers.get("content-type") || "";
+  return contentType.includes("application/json") ? r.json() : r.text();
+}
+
 /** GET helper — returns parsed JSON or throws. */
 export async function apiGet(path, adminKey) {
   const r = await fetchWithRetry(`${API}${path}`, { headers: hdrs(adminKey) });
