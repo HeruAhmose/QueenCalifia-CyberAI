@@ -30,6 +30,9 @@ jobs:
       - name: Workflow shell-context guard
         run: python scripts/ci/check_workflow_contexts.py
 
+      - name: Platform toolchain integrity guard
+        run: python scripts/ci/check_platform_toolchain.py
+
       - name: Install backend dependencies
         working-directory: backend
         run: |
@@ -185,11 +188,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Install argocd CLI
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Install verified argocd CLI
+        shell: bash
         run: |
-          curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-          chmod +x argocd
-          sudo mv argocd /usr/local/bin/argocd
+          set -euo pipefail
+          version="$(grep '^ARGOCD_CLI_VERSION=' scripts/bootstrap/versions.env | cut -d= -f2-)"
+          expected_sha="$(grep '^ARGOCD_CLI_SHA256=' scripts/bootstrap/versions.env | cut -d= -f2-)"
+          [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]
+          [[ "$expected_sha" =~ ^[0-9a-f]{64}$ ]]
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output argocd \
+            "https://github.com/argoproj/argo-cd/releases/download/${version}/argocd-linux-amd64"
+          printf '%s  %s\n' "$expected_sha" argocd | sha256sum --check --strict -
+          chmod 0755 argocd
+          sudo install -m 0755 argocd /usr/local/bin/argocd
+          rm -f argocd
           argocd version --client
 
       - name: Gate merge if production is degraded

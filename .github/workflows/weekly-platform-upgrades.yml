@@ -18,13 +18,26 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Read canonical tool versions
+        id: versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          HELM_VERSION="$(grep '^HELM_VERSION=' scripts/bootstrap/versions.env | cut -d= -f2-)"
+          KUBECTL_VERSION="$(grep '^KUBECTL_VERSION=' scripts/bootstrap/versions.env | cut -d= -f2-)"
+          test -n "$HELM_VERSION"
+          test -n "$KUBECTL_VERSION"
+          echo "helm=$HELM_VERSION" >> "$GITHUB_OUTPUT"
+          echo "kubectl=$KUBECTL_VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Setup Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310
         with:
-          version: v3.14.4
+          version: ${{ steps.versions.outputs.helm }}
 
       - name: Install jq
         run: |
+          set -euo pipefail
           sudo apt-get update -y >/dev/null
           sudo apt-get install -y jq >/dev/null
 
@@ -34,7 +47,7 @@ jobs:
           set -euo pipefail
           chmod +x scripts/bootstrap/bump_versions.sh
           out="$(scripts/bootstrap/bump_versions.sh scripts/bootstrap/versions.env)"
-          echo "result=$out" >> "${GITHUB_OUTPUT}"
+          echo "result=$out" >> "$GITHUB_OUTPUT"
           git status --porcelain
 
       - name: Stop if no changes
@@ -46,7 +59,7 @@ jobs:
         uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab
         with:
           cluster_name: qc-upgrades
-          kubectl_version: v1.30.0
+          kubectl_version: ${{ steps.versions.outputs.kubectl }}
 
       - name: Kind bootstrap smoke (core install)
         if: steps.bump.outputs.result == 'UPDATED'
@@ -60,6 +73,7 @@ jobs:
           QC_EMAIL: devnull@example.com
           QC_INSTALL_CLUSTER_ISSUERS: "0"
         run: |
+          set -euo pipefail
           chmod +x scripts/bootstrap/bootstrap_cluster.sh
           scripts/bootstrap/bootstrap_cluster.sh
 
@@ -72,6 +86,6 @@ jobs:
           body: |
             Automated weekly bump of pinned Helm chart versions in scripts/bootstrap/versions.env.
 
-            Includes a kind bootstrap smoke test of core components.
+            Includes a kind bootstrap smoke test of core components using the canonical kubectl and Helm pins.
           branch: "chore/bump-platform-versions"
           delete-branch: true
