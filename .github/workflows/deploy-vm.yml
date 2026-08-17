@@ -17,6 +17,9 @@ on:
         required: false
         default: "22"
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -28,9 +31,15 @@ jobs:
           ref: ${{ inputs.ref }}
 
       - name: Write SSH key
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+        shell: bash
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          set -euo pipefail
+          test -n "${DEPLOY_SSH_PRIVATE_KEY:-}"
+          install -d -m 700 ~/.ssh
+          umask 077
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
       - name: Deploy over SSH
@@ -48,8 +57,23 @@ jobs:
           QC_CORS_ORIGINS: ${{ secrets.QC_CORS_ORIGINS }}
           QC_PROXY_TRUSTED_HOPS: ${{ secrets.QC_PROXY_TRUSTED_HOPS }}
         run: |
+          set -euo pipefail
           bash scripts/deploy/vm_deploy.sh
 
-      - name: Summary
+      - name: Remove SSH key
+        if: always()
+        shell: bash
         run: |
-          echo "Deployed ref '${{ inputs.ref }}' to '${{ secrets.DEPLOY_HOST }}' (acme='${{ inputs.acme }}')" >> "${GITHUB_STEP_SUMMARY}"
+          set -euo pipefail
+          rm -f ~/.ssh/id_ed25519
+
+      - name: Summary
+        if: always()
+        env:
+          DEPLOY_REF: ${{ inputs.ref }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          QC_ACME: ${{ inputs.acme && '1' || '0' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf "Deployed ref '%s' to '%s' (acme='%s')\n" "$DEPLOY_REF" "$DEPLOY_HOST" "$QC_ACME" >> "$GITHUB_STEP_SUMMARY"
