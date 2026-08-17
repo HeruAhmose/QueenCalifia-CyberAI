@@ -67,7 +67,8 @@ jobs:
         working-directory: backend
         run: |
           set -euo pipefail
-          gunicorn --version
+          gunicorn --version | tee /tmp/qc-gunicorn.version
+          grep -Eq 'gunicorn \(version 26\.0\.0\)|gunicorn 26\.0\.0' /tmp/qc-gunicorn.version
           gunicorn app:app \
             --bind 127.0.0.1:18000 \
             --workers 1 \
@@ -132,8 +133,6 @@ jobs:
           npm install
           npm run build
 
-  # Validates docker-compose.prod.yml + frontend/nginx.conf (same-origin /api build). Full API image
-  # build uses backend/Dockerfile (liboqs compile) and is intentionally not run every PR.
   docker-prod-frontend:
     runs-on: ubuntu-latest
     steps:
@@ -179,7 +178,6 @@ jobs:
           OPTS="${ARGOCD_OPTS:-}"
           sudo apt-get update -y >/dev/null
           sudo apt-get install -y jq >/dev/null
-          # shellcheck disable=SC2086
           status="$(argocd app get "$APP_PRODUCTION" --server "$ARGOCD_SERVER" --auth-token "$ARGOCD_AUTH_TOKEN" $OPTS -o json \
             | jq -r '.status.health.status + "/" + .status.sync.status')"
           echo "$APP_PRODUCTION => $status"
