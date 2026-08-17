@@ -14,12 +14,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
 
       - name: Setup Helm
-        uses: azure/setup-helm@v4.3.0
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310
         with:
           version: v3.14.4
 
@@ -43,7 +43,7 @@ jobs:
 
       - name: Create kind cluster
         if: steps.bump.outputs.result == 'UPDATED'
-        uses: helm/kind-action@v1.13.0
+        uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab
         with:
           cluster_name: qc-upgrades
           kubectl_version: v1.30.0
@@ -65,7 +65,7 @@ jobs:
 
       - name: Open PR with bumps
         if: steps.bump.outputs.result == 'UPDATED'
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1
         with:
           commit-message: "chore(platform): bump pinned Helm chart versions"
           title: "chore(platform): bump pinned Helm chart versions"
