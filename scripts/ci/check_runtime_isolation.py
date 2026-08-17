@@ -48,6 +48,7 @@ for path in (
     "helm/queen-califia/templates/api-deployment.yaml",
     "helm/queen-califia/templates/worker-deployment.yaml",
     "helm/queen-califia/templates/frontend-deployment.yaml",
+    "helm/queen-califia/templates/redis.yaml",
     "k8s/api.yaml",
     "k8s/worker.yaml",
     "k8s/frontend.yaml",
