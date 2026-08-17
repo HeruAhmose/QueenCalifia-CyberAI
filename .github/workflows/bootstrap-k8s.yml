@@ -43,7 +43,7 @@ jobs:
   bootstrap:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Read pinned tool versions
         id: versions
@@ -55,12 +55,12 @@ jobs:
           echo "helm=$HELM_VERSION" >> "${GITHUB_OUTPUT}"
 
       - name: Setup kubectl
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede
         with:
           version: ${{ steps.versions.outputs.kubectl }}
 
       - name: Setup Helm
-        uses: azure/setup-helm@v4.3.0
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112
         with:
           version: ${{ steps.versions.outputs.helm }}
 
