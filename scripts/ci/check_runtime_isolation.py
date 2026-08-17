@@ -31,13 +31,16 @@ require(
 require(
     "backend/Dockerfile",
     "ARG LIBOQS_VERSION=0.16.0",
+    "ARG LIBOQS_PYTHON_VERSION=0.16.0",
     'git clone --depth=1 --branch "${LIBOQS_VERSION}"',
-    'liboqs-python==${LIBOQS_PYTHON_VERSION}',
+    'git clone --depth=1 --branch "${LIBOQS_PYTHON_VERSION}"',
+    "python -m pip install /tmp/liboqs-python",
     "USER 10001:10001",
 )
 reject(
     "backend/Dockerfile",
     "git clone --depth=1 https://github.com/open-quantum-safe/liboqs",
+    "git clone --depth=1 https://github.com/open-quantum-safe/liboqs-python",
     "python -m pip install liboqs-python\n",
 )
 
