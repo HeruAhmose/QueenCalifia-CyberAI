@@ -20,6 +20,11 @@ from dotenv import load_dotenv
 from flask_cors import CORS
 
 
+def _validate_production_auth_boundary() -> None:
+    if os.getenv("QC_PRODUCTION", "0") == "1" and os.getenv("QC_NO_AUTH", "0") == "1":
+        raise RuntimeError("QC_NO_AUTH=1 is forbidden when QC_PRODUCTION=1")
+
+
 def _load_root_app():
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     if repo_root in sys.path:
@@ -39,8 +44,10 @@ def _load_root_app():
 
 
 load_dotenv()
+_validate_production_auth_boundary()
 app = _load_root_app()
 
+from core.auth import require_admin
 from core.database import init_db
 from core.settings import get_settings, parse_origins
 
@@ -50,7 +57,7 @@ init_db(settings.db_path)
 # Make settings available to the dashboard route modules.
 app.config["settings"] = settings
 
-# Enable CORS for all dashboard API requests, including admin-gated browser flows.
+# Enable CORS for dashboard API requests only from explicitly configured origins.
 CORS(
     app,
     resources={r"/api/*": {"origins": parse_origins(settings.cors_origins)}},
@@ -60,12 +67,8 @@ CORS(
 )
 
 # Mount the dashboard-friendly blueprints onto the security-gateway app.
-# (The root security app mainly provides vuln routes; the dashboard UI also
-# expects market/forecast/identity endpoints.)
 qc_mount_debug = {"errors": []}
 try:
-    # Ensure `backend/` is on sys.path so imports like `modules.market.routes`
-    # resolve correctly (gunicorn sets rootDir=backend, but local imports may not).
     backend_dir = os.path.dirname(__file__)
     if backend_dir not in sys.path:
         sys.path.insert(0, backend_dir)
@@ -83,14 +86,18 @@ try:
     app.register_blueprint(training_bp, url_prefix="/api/training")
 except Exception:
     import traceback
+
     qc_mount_debug["errors"].append(traceback.format_exc())
 
 app.config["qc_mount_debug"] = qc_mount_debug
 
-# Public dashboard bootstrap config.
+
 @app.get("/api/config")
 def qc_public_config():
-    no_auth = os.getenv("QC_NO_AUTH", "0") == "1"
+    no_auth = (
+        os.getenv("QC_NO_AUTH", "0") == "1"
+        and os.getenv("QC_PRODUCTION", "0") != "1"
+    )
     return {
         "name": settings.name,
         "persona": settings.persona,
@@ -116,8 +123,9 @@ def qc_public_config():
         "no_auth": no_auth,
     }, 200
 
-# Lightweight introspection endpoint (safe; no secrets).
+
 @app.get("/api/debug/mount")
+@require_admin
 def qc_debug_mount():
     rules = [(r.rule, tuple(sorted(r.methods or []))) for r in app.url_map.iter_rules()]
     has_market_sources = any(r[0] == "/api/market/sources" for r in rules)
