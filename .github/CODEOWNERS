@@ -1,0 +1,8 @@
+# Repository ownership
+# Default ownership applies to every file unless a more specific rule is added later.
+* @HeruAhmose
+
+# Security-sensitive repository controls
+/.github/workflows/ @HeruAhmose
+/.github/CODEOWNERS @HeruAhmose
+/.github/SECURITY.md @HeruAhmose
