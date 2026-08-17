@@ -3,8 +3,10 @@ FROM python:3.12-slim
 LABEL maintainer="Tamerian Materials - Jon"
 LABEL description="Queen Califia Quantum CyberAI - Defense-Grade Cybersecurity Platform"
 
-# Security: run as non-root
-RUN groupadd -r queencalifia && useradd -r -g queencalifia -d /app -s /sbin/nologin queencalifia
+# Security: use a deterministic numeric non-root runtime identity so
+# orchestrators can enforce runAsNonRoot without image-user ambiguity.
+RUN groupadd --system --gid 10001 queencalifia \
+    && useradd --system --uid 10001 --gid 10001 --home-dir /app --shell /usr/sbin/nologin queencalifia
 
 WORKDIR /app
 
@@ -22,11 +24,11 @@ RUN if [ "$QC_USE_LOCK" = "1" ]; then \
 # Copy application
 COPY . .
 
-# Set ownership
-RUN chown -R queencalifia:queencalifia /app
+# Runtime state, including the default SQLite path, must remain writable.
+RUN mkdir -p /app/data /app/backend/data \
+    && chown -R 10001:10001 /app
 
-# Switch to non-root user
-USER queencalifia
+USER 10001:10001
 
 # Environment
 ENV QC_PORT=5000
