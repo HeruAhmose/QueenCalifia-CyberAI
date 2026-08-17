@@ -42,17 +42,21 @@ permissions:
 jobs:
   bootstrap:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Read pinned tool versions
         id: versions
+        shell: bash
         run: |
           set -euo pipefail
-          KUBECTL_VERSION="$(grep '^KUBECTL_VERSION=' scripts/bootstrap/versions.env | cut -d= -f2)"
-          HELM_VERSION="$(grep '^HELM_VERSION=' scripts/bootstrap/versions.env | cut -d= -f2)"
-          echo "kubectl=$KUBECTL_VERSION" >> "${GITHUB_OUTPUT}"
-          echo "helm=$HELM_VERSION" >> "${GITHUB_OUTPUT}"
+          KUBECTL_VERSION="$(grep '^KUBECTL_VERSION=' scripts/bootstrap/versions.env | cut -d= -f2-)"
+          HELM_VERSION="$(grep '^HELM_VERSION=' scripts/bootstrap/versions.env | cut -d= -f2-)"
+          test -n "$KUBECTL_VERSION"
+          test -n "$HELM_VERSION"
+          echo "kubectl=$KUBECTL_VERSION" >> "$GITHUB_OUTPUT"
+          echo "helm=$HELM_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Setup kubectl
         uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d
@@ -64,18 +68,25 @@ jobs:
         with:
           version: ${{ steps.versions.outputs.helm }}
 
-      - name: Install Python deps
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install pyyaml
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned Python dependencies
+        run: python -m pip install --disable-pip-version-check -r scripts/bootstrap/requirements.txt
 
       - name: Configure kubeconfig
         env:
           KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+        shell: bash
         run: |
-          test -n "$KUBECONFIG_B64"
-          mkdir -p ~/.kube
-          echo "$KUBECONFIG_B64" | base64 -d > ~/.kube/config
+          set -euo pipefail
+          test -n "${KUBECONFIG_B64:-}"
+          install -d -m 700 ~/.kube
+          umask 077
+          printf '%s' "$KUBECONFIG_B64" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
           kubectl get nodes
 
       - name: Bootstrap cluster
@@ -89,6 +100,7 @@ jobs:
           QC_EMAIL: ${{ inputs.email }}
           QC_INSTALL_CLUSTER_ISSUERS: ${{ inputs.install_cluster_issuers && '1' || '0' }}
         run: |
+          set -euo pipefail
           chmod +x scripts/bootstrap/bootstrap_cluster.sh
           scripts/bootstrap/bootstrap_cluster.sh
 
@@ -101,5 +113,9 @@ jobs:
           QC_FRONTEND_IMAGE: ${{ inputs.frontend_image }}
           QC_STAGING_HOST: ${{ inputs.staging_host }}
           QC_PROD_HOST: ${{ inputs.prod_host }}
-        run: |
-          python scripts/bootstrap/render_and_apply_argocd.py
+        run: python scripts/bootstrap/render_and_apply_argocd.py
+
+      - name: Remove kubeconfig
+        if: always()
+        shell: bash
+        run: rm -f ~/.kube/config
