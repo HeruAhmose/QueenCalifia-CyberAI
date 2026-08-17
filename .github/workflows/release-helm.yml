@@ -17,9 +17,7 @@ on:
           - both
 
 permissions:
-  contents: write
-  packages: write
-  pull-requests: write
+  contents: read
 
 env:
   REGISTRY: ghcr.io
@@ -30,12 +28,15 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     outputs:
       version: ${{ steps.meta.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      - name: Derive version
+      - name: Derive and validate version
         id: meta
         shell: bash
         run: |
@@ -44,6 +45,10 @@ jobs:
             TAG="${GITHUB_REF_NAME}"
           else
             TAG="v0.0.0"
+          fi
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Unsupported release tag: $TAG" >&2
+            exit 1
           fi
           VERSION="${TAG#v}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
@@ -96,10 +101,11 @@ jobs:
 
       - name: Sync chart + values versions
         shell: bash
+        env:
+          QC_RELEASE_VERSION: ${{ needs.build-and-push.outputs.version }}
         run: |
           set -euo pipefail
-          VERSION="${{ needs.build-and-push.outputs.version }}"
-          ./scripts/release/sync_versions.sh "${VERSION}"
+          ./scripts/release/sync_versions.sh "$QC_RELEASE_VERSION"
 
       - name: Create PR for version sync (protected-branch safe)
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1
@@ -123,6 +129,8 @@ jobs:
   chart-package:
     runs-on: ubuntu-latest
     needs: build-and-push
+    permissions:
+      contents: read
     outputs:
       chart_version: ${{ needs.build-and-push.outputs.version }}
     steps:
@@ -135,12 +143,13 @@ jobs:
 
       - name: Package Helm chart
         shell: bash
+        env:
+          QC_RELEASE_VERSION: ${{ needs.build-and-push.outputs.version }}
         run: |
           set -euo pipefail
-          VERSION="${{ needs.build-and-push.outputs.version }}"
           mkdir -p dist
           helm lint ./helm/queen-califia
-          helm package ./helm/queen-califia --destination dist --version "${VERSION}" --app-version "${VERSION}"
+          helm package ./helm/queen-califia --destination dist --version "$QC_RELEASE_VERSION" --app-version "$QC_RELEASE_VERSION"
           ls -lah dist
 
       - name: Upload chart artifact
@@ -154,6 +163,9 @@ jobs:
     needs: [build-and-push, chart-package]
     if: |
       github.ref_type == 'tag' && (github.event_name == 'push' || github.event.inputs.publish == 'oci' || github.event.inputs.publish == 'both')
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
@@ -170,9 +182,12 @@ jobs:
 
       - name: Login Helm registry (OCI)
         shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_ACTOR: ${{ github.actor }}
         run: |
           set -euo pipefail
-          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} -u "${{ github.actor }}" --password-stdin
+          printf '%s\n' "$GHCR_TOKEN" | helm registry login "$REGISTRY" -u "$GHCR_ACTOR" --password-stdin
 
       - name: Push chart to OCI
         shell: bash
@@ -185,12 +200,14 @@ jobs:
             exit 1
           fi
           CHART="${charts[0]}"
-          helm push "${CHART}" "oci://${{ env.OCI_CHART_REPO }}"
+          helm push "$CHART" "oci://$OCI_CHART_REPO"
 
   publish-pages:
     runs-on: ubuntu-latest
     needs: [build-and-push, chart-package]
     if: github.event_name == 'workflow_dispatch' && (github.event.inputs.publish == 'pages' || github.event.inputs.publish == 'both')
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
