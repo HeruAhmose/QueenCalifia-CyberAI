@@ -63,6 +63,30 @@ jobs:
           print('App boots successfully.')
           "
 
+      - name: CORS origin policy smoke
+        working-directory: backend
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, '.')
+          from app import app
+
+          client = app.test_client()
+          approved = "http://localhost:5173"
+          denied = "https://untrusted.example"
+
+          approved_response = client.get("/api/config", headers={"Origin": approved})
+          assert approved_response.status_code == 200, approved_response.status_code
+          assert approved_response.headers.get("Access-Control-Allow-Origin") == approved, approved_response.headers
+          assert approved_response.headers.get("Access-Control-Allow-Credentials") is None, approved_response.headers
+
+          denied_response = client.get("/api/config", headers={"Origin": denied})
+          assert denied_response.status_code == 200, denied_response.status_code
+          assert denied_response.headers.get("Access-Control-Allow-Origin") is None, denied_response.headers
+
+          print("CORS allowlist policy verified for approved and unapproved origins.")
+          PY
+
       - name: Production Gunicorn runtime smoke
         working-directory: backend
         run: |
