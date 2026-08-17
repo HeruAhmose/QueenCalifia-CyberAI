@@ -63,6 +63,50 @@ jobs:
           print('App boots successfully.')
           "
 
+      - name: Production Gunicorn runtime smoke
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          gunicorn --version
+          gunicorn app:app \
+            --bind 127.0.0.1:18000 \
+            --workers 1 \
+            --threads 2 \
+            --timeout 30 \
+            --keep-alive 5 \
+            --graceful-timeout 10 \
+            >/tmp/qc-gunicorn.log 2>&1 &
+          pid=$!
+          cleanup() {
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          ready=0
+          for _ in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18000/healthz >/dev/null; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$pid" 2>/dev/null; then
+              cat /tmp/qc-gunicorn.log
+              exit 1
+            fi
+            sleep 1
+          done
+
+          if [ "$ready" -ne 1 ]; then
+            cat /tmp/qc-gunicorn.log
+            echo "Gunicorn did not become healthy" >&2
+            exit 1
+          fi
+
+          curl --fail --show-error --silent http://127.0.0.1:18000/healthz >/dev/null
+          kill -TERM "$pid"
+          wait "$pid"
+          trap - EXIT
+
       - name: Backend pytest
         working-directory: .
         run: |
