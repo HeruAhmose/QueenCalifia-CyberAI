@@ -77,6 +77,12 @@ class DatabaseConnection:
         finally:
             self.raw.close()
 
+    def __getattr__(self, name: str):
+        # Preserve the existing sqlite3.Connection surface for callers that do
+        # not need cross-database translation. Explicit facade methods below
+        # handle operations whose behavior differs between engines.
+        return getattr(self.raw, name)
+
     def commit(self) -> None:
         self.raw.commit()
 
@@ -90,6 +96,14 @@ class DatabaseConnection:
         if self.dialect == "postgresql":
             sql = _postgres_sql(sql)
         return DatabaseCursor(self.raw.execute(sql, params), self.dialect)
+
+    def executescript(self, script: str):
+        if self.dialect == "sqlite":
+            return self.raw.executescript(script)
+        cursor = None
+        for statement in _schema_statements(script):
+            cursor = self.raw.execute(_postgres_sql(statement))
+        return DatabaseCursor(cursor, self.dialect) if cursor is not None else None
 
 
 def _postgres_sql(sql: str) -> str:
@@ -162,6 +176,7 @@ CREATE TABLE IF NOT EXISTS identity_remediation (id INTEGER PRIMARY KEY AUTOINCR
 POSTGRES_SCHEMA = (
     SQLITE_SCHEMA.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "BIGSERIAL PRIMARY KEY")
     .replace("mission_id INTEGER NOT NULL REFERENCES", "mission_id BIGINT NOT NULL REFERENCES")
+    .replace(" REAL", " DOUBLE PRECISION")
 )
 
 TRUSTED_SOURCES = (
