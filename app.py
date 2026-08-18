@@ -33,12 +33,14 @@ from flask import request
 from core.cors_boundary import CorsOriginBoundaryMiddleware
 from core.tamerian_mesh import TamerianSecurityMesh
 from engines.vulnerability_engine import VulnerabilityEngine
-from engines.incident_response import IncidentResponseOrchestrator
-from engines.auto_remediation import AutoRemediation
-from engines.evolution_engine import EvolutionEngine
+from engines.runtime_state import (
+    build_auto_remediation,
+    build_evolution_engine,
+    build_incident_response_orchestrator,
+    build_threat_intel_engine,
+)
 from engines.zero_day_predictor import ZeroDayPredictor
 from engines.advanced_telemetry import AdvancedTelemetry
-from engines.threat_intel_auto import ThreatIntelEngine
 from core.autonomy_loop import start_autonomy_loop
 
 configure_logging()
@@ -84,11 +86,11 @@ def build_system(no_auth: bool, origins: str) -> dict:
     }
     vuln_engine = VulnerabilityEngine(config=vuln_config)
 
-    incident_orchestrator = IncidentResponseOrchestrator(config={})
-    remediator = AutoRemediation()
-    evolution_engine = EvolutionEngine()
+    incident_orchestrator = build_incident_response_orchestrator(config={})
+    remediator = build_auto_remediation()
+    evolution_engine = build_evolution_engine()
     try:
-        threat_intel = ThreatIntelEngine()
+        threat_intel = build_threat_intel_engine()
     except Exception:
         threat_intel = None
 
