@@ -1,0 +1,221 @@
+name: production-source-capture-observer
+
+on:
+  push:
+    branches:
+      - ops/production-source-capture-observe
+    paths:
+      - .ops/production-source-capture-observe.request
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+concurrency:
+  group: production-source-capture-observer
+  cancel-in-progress: false
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    env:
+      QC_NAMESPACE: queen-califia-production
+      QC_EXPECTED_CAPTURE_SHA: e571d07ea3d0310b8884c7fa0fab00e41dfb513d
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Resolve capture run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/production-source-capture.yml/runs?branch=ops%2Fproduction-live-scanner-capture&event=push&per_page=20")"
+          row="$(printf '%s' "$response" | jq -c --arg sha "$QC_EXPECTED_CAPTURE_SHA" \
+            '[.workflow_runs[] | select(.head_sha == $sha)][0] // empty')"
+          if [ -z "$row" ]; then
+            printf '### Production source capture checkpoint\n\nNo workflow run was found for trigger SHA `%s`. No production capture is being claimed.\n' \
+              "$QC_EXPECTED_CAPTURE_SHA" > /tmp/qc-capture-status.md
+            gh issue comment 72 --repo "$GITHUB_REPOSITORY" --body-file /tmp/qc-capture-status.md
+            exit 1
+          fi
+          run_id="$(printf '%s' "$row" | jq -r '.id')"
+          status="$(printf '%s' "$row" | jq -r '.status')"
+          conclusion="$(printf '%s' "$row" | jq -r '.conclusion // "pending"')"
+          echo "QC_CAPTURE_RUN_ID=$run_id" >> "$GITHUB_ENV"
+          echo "QC_CAPTURE_STATUS=$status" >> "$GITHUB_ENV"
+          echo "QC_CAPTURE_CONCLUSION=$conclusion" >> "$GITHUB_ENV"
+          if [ "$status" != completed ] || [ "$conclusion" != success ]; then
+            printf '### Production source capture checkpoint\n\nCapture workflow run `%s` for trigger SHA `%s` is `%s/%s`. No successful production capture is being claimed; rollout, migration, PVC removal, rootfs changes, and HA remain blocked.\n' \
+              "$run_id" "$QC_EXPECTED_CAPTURE_SHA" "$status" "$conclusion" > /tmp/qc-capture-status.md
+            gh issue comment 72 --repo "$GITHUB_REPOSITORY" --body-file /tmp/qc-capture-status.md
+            exit 1
+          fi
+          mkdir -p /tmp/qc-capture-evidence
+          gh run download "$run_id" -n production-source-capture-evidence -D /tmp/qc-capture-evidence
+          test -s /tmp/qc-capture-evidence/production-source-capture.json
+
+      - name: Validate secret-free capture evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          path = Path('/tmp/qc-capture-evidence/production-source-capture.json')
+          evidence = json.loads(path.read_text(encoding='utf-8'))
+          assert evidence['kind'] == 'queen-califia-production-source-capture'
+          assert evidence['version'] == 1
+          assert evidence['environment'] == 'production'
+          assert evidence['namespace'] == 'queen-califia-production'
+          assert evidence['captured_before_pod_replacement'] is True
+          assert evidence['pod_restarted_or_replaced_during_capture'] is False
+          assert re.fullmatch(r'sha256:[0-9a-f]{64}', evidence['api_image_digest'])
+          sqlite = {item['name']: item for item in evidence['sqlite_sources']}
+          files = {item['name']: item for item in evidence['file_sources']}
+          assert set(sqlite) == {
+              'primary-runtime-db', 'evolution-db',
+              'threat-intelligence-db', 'live-scanner-db',
+          }
+          assert set(files) == {'api-keys', 'audit-log', 'spki'}
+          for item in [*sqlite.values(), *files.values()]:
+              assert item['status'] in {'captured', 'verified-absent'}
+              if item['status'] == 'captured':
+                  assert isinstance(item['bytes'], int) and item['bytes'] >= 0
+                  assert re.fullmatch(r'[0-9a-f]{64}', item['sha256'])
+              else:
+                  assert item.get('checked') is True
+          PY
+
+      - name: Read pinned kubectl version
+        id: versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(grep '^KUBECTL_VERSION=' scripts/bootstrap/versions.env | cut -d= -f2-)"
+          test -n "$version"
+          echo "kubectl=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d
+        with:
+          version: ${{ steps.versions.outputs.kubectl }}
+
+      - name: Configure production kubeconfig
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KUBECONFIG_B64:-}"
+          install -d -m 700 ~/.kube
+          umask 077
+          printf '%s' "$KUBECONFIG_B64" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl auth can-i get pods -n "$QC_NAMESPACE" | grep -qx yes
+          kubectl auth can-i create pods/exec -n "$QC_NAMESPACE" | grep -qx yes
+
+      - name: Prove capture source pod still exists unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          pod="$(python -c "import json; print(json.load(open('/tmp/qc-capture-evidence/production-source-capture.json'))['api_pod'])")"
+          uid_expected="$(python -c "import json; print(json.load(open('/tmp/qc-capture-evidence/production-source-capture.json'))['api_pod_uid'])")"
+          image_expected="$(python -c "import json; print(json.load(open('/tmp/qc-capture-evidence/production-source-capture.json'))['api_image_digest'])")"
+          restarts_expected="$(python -c "import json; print(json.load(open('/tmp/qc-capture-evidence/production-source-capture.json'))['restart_count'])")"
+          uid="$(kubectl -n "$QC_NAMESPACE" get pod "$pod" -o jsonpath='{.metadata.uid}')"
+          image_id="$(kubectl -n "$QC_NAMESPACE" get pod "$pod" -o jsonpath='{.status.containerStatuses[?(@.name=="api")].imageID}')"
+          restarts="$(kubectl -n "$QC_NAMESPACE" get pod "$pod" -o jsonpath='{.status.containerStatuses[?(@.name=="api")].restartCount}')"
+          test "$uid" = "$uid_expected"
+          case "$image_id" in *"$image_expected"*) ;; *) echo 'source pod image changed after capture' >&2; exit 1;; esac
+          test "$restarts" = "$restarts_expected"
+
+      - name: Verify persistent SQLite snapshot digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          pod="$(python -c "import json; print(json.load(open('/tmp/qc-capture-evidence/production-source-capture.json'))['api_pod'])")"
+          evidence_b64="$(base64 -w0 /tmp/qc-capture-evidence/production-source-capture.json)"
+          kubectl -n "$QC_NAMESPACE" exec -i "$pod" -c api -- \
+            env QC_EVIDENCE_B64="$evidence_b64" python - <<'PY'
+          import base64
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          evidence = json.loads(base64.b64decode(os.environ['QC_EVIDENCE_B64']))
+          paths = {
+              'primary-runtime-db': '/var/data/qc-cutover-20260818-primary.db',
+              'evolution-db': '/var/data/qc-cutover-20260818-evolution.db',
+              'threat-intelligence-db': '/var/data/qc-cutover-20260818-threat-intel.db',
+              'live-scanner-db': '/var/data/qc-cutover-20260818-live-scanner.db',
+          }
+          def digest(path: Path) -> str:
+              h = hashlib.sha256()
+              with path.open('rb') as handle:
+                  for chunk in iter(lambda: handle.read(1024 * 1024), b''):
+                      h.update(chunk)
+              return h.hexdigest()
+          for item in evidence['sqlite_sources']:
+              path = Path(paths[item['name']])
+              if item['status'] == 'captured':
+                  if not path.is_file() or path.is_symlink():
+                      raise SystemExit(f"snapshot missing/non-regular: {item['name']}")
+                  if path.stat().st_size != item['bytes'] or digest(path) != item['sha256']:
+                      raise SystemExit(f"snapshot digest mismatch: {item['name']}")
+              elif path.exists():
+                  raise SystemExit(f"verified-absent source unexpectedly has snapshot: {item['name']}")
+          PY
+
+      - name: Publish immutable checkpoint to issue 72
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' > /tmp/qc-capture-comment.md
+          import hashlib
+          import json
+          import os
+
+          raw = open('/tmp/qc-capture-evidence/production-source-capture.json', 'rb').read()
+          evidence = json.loads(raw)
+          print('### Production source capture checkpoint')
+          print()
+          print(f"- capture workflow run: `{os.environ['QC_CAPTURE_RUN_ID']}`")
+          print(f"- capture trigger SHA: `{os.environ['QC_EXPECTED_CAPTURE_SHA']}`")
+          print(f"- source pod UID: `{evidence['api_pod_uid']}`")
+          print(f"- immutable API image: `{evidence['api_image_digest']}`")
+          print(f"- evidence JSON SHA-256: `{hashlib.sha256(raw).hexdigest()}`")
+          print('- pod replacement/restart during capture: **no**')
+          print('- snapshots re-verified on existing API PVC `/var/data`: **yes**')
+          print()
+          print('SQLite sources:')
+          for item in evidence['sqlite_sources']:
+              if item['status'] == 'captured':
+                  print(f"- `{item['name']}`: captured, bytes={item['bytes']}, sha256=`{item['sha256']}`")
+              else:
+                  print(f"- `{item['name']}`: **verified absent**")
+          print()
+          print('File-backed sources at capture time:')
+          for item in evidence['file_sources']:
+              if item['status'] == 'captured':
+                  print(f"- `{item['name']}`: fingerprinted in place, bytes={item['bytes']}, sha256=`{item['sha256']}`")
+              else:
+                  print(f"- `{item['name']}`: **verified absent**")
+          print()
+          print('This proves source capture only. PostgreSQL migration/disposition, production backup→restore, authority cutover/probes, PVC removal, read-only rootfs, rolling validation, and HA remain **not authorized**.')
+          PY
+          gh issue comment 72 --repo "$GITHUB_REPOSITORY" --body-file /tmp/qc-capture-comment.md
+
+      - name: Remove kubeconfig
+        if: always()
+        shell: bash
+        run: rm -f ~/.kube/config
