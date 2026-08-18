@@ -19,11 +19,17 @@ def fail(message: str) -> None:
 
 
 state = json.loads(STATE.read_text(encoding="utf-8"))
-if state.get("target") != "managed-free" or state.get("preferred_target") is not True:
-    fail("managed-free must be the preferred staged target")
+if state.get("target") != "managed-free":
+    fail("managed-free state target is invalid")
+if state.get("preferred_target") is not False:
+    fail("Northflank Developer Sandbox must not be the preferred production target")
+if state.get("deployment_role") != "staging-evaluation" or state.get("production_eligible") is not False:
+    fail("Northflank Developer Sandbox must remain staging/evaluation only")
 app = state.get("application_host", {})
 if app.get("provider") != "northflank" or app.get("api_replicas") != 1 or app.get("worker_replicas") != 1:
-    fail("managed target must declare one Northflank API and one worker")
+    fail("managed staging target must declare one Northflank API and one worker")
+if app.get("plan") != "developer-sandbox" or app.get("production_eligible") is not False:
+    fail("Developer Sandbox must remain explicitly non-production")
 pg = state.get("postgresql", {})
 if pg.get("provider") != "neon" or pg.get("project_name") != "QueenCalifia-CyberAI":
     fail("managed target must use the isolated QueenCalifia Neon project")
@@ -36,6 +42,8 @@ if queue.get("provider") != "aiven-valkey" or queue.get("protocol") != "rediss":
     fail("managed queue must use TLS Aiven Valkey")
 if queue.get("tls_certificate_verification_required") is not True:
     fail("managed queue must require certificate verification")
+if queue.get("production_sla_assumed") is not False:
+    fail("free queue profile must not imply a production SLA")
 for key in (
     "runtime_authorized",
     "ha_authorized",
@@ -52,7 +60,7 @@ if loss.get("status") != "unrecoverable-unverified" or loss.get("verified_absent
 contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
 services = contract.get("services", [])
 if len(services) != 2:
-    fail("Northflank free profile must consume exactly two services")
+    fail("Northflank free staging profile must consume exactly two services")
 by_name = {service.get("name"): service for service in services}
 api = by_name.get("queen-califia-api", {})
 worker = by_name.get("queen-califia-worker", {})
@@ -80,7 +88,7 @@ for needle in (
 
 env_example = ENV_EXAMPLE.read_text(encoding="utf-8")
 if "QC_MANAGED_RUNTIME_AUTHORIZED=AUTHORIZED" in env_example:
-    fail("example environment must not pre-authorize production runtime")
+    fail("example environment must not pre-authorize runtime")
 if "CHANGE_ME" not in env_example:
     fail("example environment must contain placeholders, not live credentials")
 
@@ -95,6 +103,6 @@ for key in (
     "multi_replica_api_enabled",
 ):
     if completion.get(key) is not False:
-        fail(f"managed migration must not prematurely close topology gate: {key}")
+        fail(f"managed staging profile must not prematurely close topology gate: {key}")
 
-print("managed-free deployment guard verified: Neon PG18, TLS Valkey, one API, one worker, runtime/HA gates closed")
+print("managed-free staging guard verified: Northflank sandbox non-production, Neon PG18, TLS Valkey, one API, one worker, all cutover/HA gates closed")
