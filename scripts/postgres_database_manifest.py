@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Emit or verify a secret-free content manifest for the PostgreSQL public schema.
+"""Emit or verify a secret-free manifest for the PostgreSQL public schema.
 
 This is a cutover/restore evidence primitive. It never prints row values or a
-connection URL. Every public base table is covered with schema metadata, row
-count, and a deterministic SHA-256 over canonical JSONB row representations.
+connection URL. Every public base table is covered with column/constraint/index
+schema metadata, row count, and a deterministic SHA-256 over canonical JSONB
+rows. Public sequence definitions and current values are covered as well.
 
 Usage:
   QC_DATABASE_URL=... python scripts/postgres_database_manifest.py > manifest.json
@@ -17,7 +18,7 @@ import json
 import os
 import re
 import sys
-from typing import Any, Iterable
+from typing import Any
 
 ROOT_SCHEMA = "public"
 MANIFEST_KIND = "queen-califia-postgres-database-manifest"
@@ -109,9 +110,53 @@ def _primary_key(conn, table: str) -> list[str]:
     return [row[0] for row in rows]
 
 
-def _schema_sha256(columns: list[dict[str, Any]], primary_key: list[str]) -> str:
+def _constraints(conn, table: str) -> list[dict[str, str]]:
+    rows = conn.execute(
+        """
+        SELECT con.conname, con.contype, pg_get_constraintdef(con.oid, true)
+        FROM pg_constraint AS con
+        JOIN pg_class AS c ON c.oid = con.conrelid
+        JOIN pg_namespace AS n ON n.oid = c.relnamespace
+        WHERE n.nspname = %s AND c.relname = %s
+        ORDER BY con.conname, con.contype
+        """,
+        (ROOT_SCHEMA, table),
+    ).fetchall()
+    return [
+        {"name": name, "type": constraint_type, "definition": definition}
+        for name, constraint_type, definition in rows
+    ]
+
+
+def _indexes(conn, table: str) -> list[dict[str, str]]:
+    rows = conn.execute(
+        """
+        SELECT i.relname, pg_get_indexdef(i.oid, 0, true)
+        FROM pg_index AS x
+        JOIN pg_class AS t ON t.oid = x.indrelid
+        JOIN pg_namespace AS n ON n.oid = t.relnamespace
+        JOIN pg_class AS i ON i.oid = x.indexrelid
+        WHERE n.nspname = %s AND t.relname = %s
+        ORDER BY i.relname
+        """,
+        (ROOT_SCHEMA, table),
+    ).fetchall()
+    return [{"name": name, "definition": definition} for name, definition in rows]
+
+
+def _schema_sha256(
+    columns: list[dict[str, Any]],
+    primary_key: list[str],
+    constraints: list[dict[str, str]],
+    indexes: list[dict[str, str]],
+) -> str:
     payload = json.dumps(
-        {"columns": columns, "primary_key": primary_key},
+        {
+            "columns": columns,
+            "primary_key": primary_key,
+            "constraints": constraints,
+            "indexes": indexes,
+        },
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
@@ -126,8 +171,6 @@ def _row_query(table: str, primary_key: list[str]):
     base = sql.SQL("SELECT to_jsonb(t)::text FROM {} AS t").format(table_ident)
     if primary_key:
         order = sql.SQL(", ").join(sql.Identifier(name) for name in primary_key)
-        # Canonical JSON is a deterministic final tiebreaker even if a malformed
-        # legacy table somehow exposes a non-unique declared key.
         return base + sql.SQL(" ORDER BY {}, to_jsonb(t)::text").format(order)
     return base + sql.SQL(" ORDER BY to_jsonb(t)::text")
 
@@ -152,22 +195,74 @@ def _table_digest(conn, table: str, primary_key: list[str]) -> tuple[int, str]:
     return count, digest.hexdigest()
 
 
+def _sequences(conn) -> dict[str, dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT
+            sequencename,
+            data_type,
+            start_value,
+            min_value,
+            max_value,
+            increment_by,
+            cycle,
+            cache_size,
+            last_value
+        FROM pg_sequences
+        WHERE schemaname = %s
+        ORDER BY sequencename
+        """,
+        (ROOT_SCHEMA,),
+    ).fetchall()
+    return {
+        name: {
+            "data_type": data_type,
+            "start_value": start_value,
+            "min_value": min_value,
+            "max_value": max_value,
+            "increment_by": increment_by,
+            "cycle": bool(cycle),
+            "cache_size": cache_size,
+            "last_value": last_value,
+        }
+        for (
+            name,
+            data_type,
+            start_value,
+            min_value,
+            max_value,
+            increment_by,
+            cycle,
+            cache_size,
+            last_value,
+        ) in rows
+    }
+
+
 def build_database_manifest(database_url: str | None = None) -> dict[str, Any]:
     url = database_url or _database_url()
     conn = _connect(url)
     try:
-        # REPEATABLE READ makes all table digests a single logical snapshot.
+        # REPEATABLE READ makes table data and sequence inventory one logical
+        # evidence snapshot. The connection is read-only: this tool cannot alter
+        # the authority it is fingerprinting.
         conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
         server_version_num = int(conn.execute("SHOW server_version_num").fetchone()[0])
         tables: dict[str, Any] = {}
         for table in _public_tables(conn):
             columns = _columns(conn, table)
             primary_key = _primary_key(conn, table)
+            constraints = _constraints(conn, table)
+            indexes = _indexes(conn, table)
             rows, data_sha256 = _table_digest(conn, table, primary_key)
             tables[table] = {
                 "columns": columns,
                 "primary_key": primary_key,
-                "schema_sha256": _schema_sha256(columns, primary_key),
+                "constraints": constraints,
+                "indexes": indexes,
+                "schema_sha256": _schema_sha256(
+                    columns, primary_key, constraints, indexes
+                ),
                 "rows": rows,
                 "data_sha256": data_sha256,
             }
@@ -177,6 +272,7 @@ def build_database_manifest(database_url: str | None = None) -> dict[str, Any]:
             "postgresql_major": server_version_num // 10000,
             "schema": ROOT_SCHEMA,
             "tables": tables,
+            "sequences": _sequences(conn),
         }
         manifest["database_sha256"] = database_manifest_sha256(manifest)
         return manifest
@@ -185,11 +281,7 @@ def build_database_manifest(database_url: str | None = None) -> dict[str, Any]:
 
 
 def database_manifest_sha256(manifest: dict[str, Any]) -> str:
-    material = {
-        key: value
-        for key, value in manifest.items()
-        if key != "database_sha256"
-    }
+    material = {key: value for key, value in manifest.items() if key != "database_sha256"}
     raw = json.dumps(
         material, sort_keys=True, separators=(",", ":"), ensure_ascii=False
     ).encode("utf-8")
@@ -211,6 +303,8 @@ def _validate_manifest_shape(manifest: Any) -> dict[str, Any]:
     tables = manifest.get("tables")
     if not isinstance(tables, dict):
         raise RuntimeError("manifest tables must be an object")
+    if not isinstance(manifest.get("sequences"), dict):
+        raise RuntimeError("manifest sequences must be an object")
     for table, entry in tables.items():
         if not isinstance(table, str) or not table or not isinstance(entry, dict):
             raise RuntimeError("manifest contains an invalid table entry")
@@ -238,10 +332,19 @@ def verify_database_manifest(
             for table in set(expected_tables) & set(actual_tables)
             if expected_tables[table] != actual_tables[table]
         )
+        expected_sequences = expected["sequences"]
+        actual_sequences = actual["sequences"]
         detail = {
             "missing_tables": missing,
             "unexpected_tables": unexpected,
             "changed_tables": changed,
+            "missing_sequences": sorted(set(expected_sequences) - set(actual_sequences)),
+            "unexpected_sequences": sorted(set(actual_sequences) - set(expected_sequences)),
+            "changed_sequences": sorted(
+                sequence
+                for sequence in set(expected_sequences) & set(actual_sequences)
+                if expected_sequences[sequence] != actual_sequences[sequence]
+            ),
         }
         raise RuntimeError(
             "PostgreSQL restore does not match source database manifest: "
@@ -251,6 +354,7 @@ def verify_database_manifest(
         "verified": True,
         "database_sha256": actual["database_sha256"],
         "tables": len(actual["tables"]),
+        "sequences": len(actual["sequences"]),
     }
 
 
@@ -270,7 +374,8 @@ def main() -> int:
         result = verify_database_manifest(json.load(sys.stdin))
         print(
             "PostgreSQL whole-database restore verified: "
-            f"tables={result['tables']} sha256={result['database_sha256']}"
+            f"tables={result['tables']} sequences={result['sequences']} "
+            f"sha256={result['database_sha256']}"
         )
         return 0
     print(json.dumps(build_database_manifest(), sort_keys=True, indent=2))
