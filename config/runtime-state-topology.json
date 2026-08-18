@@ -72,9 +72,43 @@
     "backup_format": "pg_dump custom",
     "restore_target": "separate PostgreSQL database",
     "post_restore_verification": "runtime-state manifest row counts plus SHA-256 digests",
-    "ci_contract_verified": false,
+    "ci_contract_verified": true,
     "production_backup_restore_tested": false,
-    "note": "CI provides the executable backup/restore contract. Neither flag is true until protected CI runs this branch; production remains false until production-data evidence exists."
+    "note": "Protected CI has executed PostgreSQL 16 pg_dump custom-format backup, restore into a separate database, and manifest count/digest verification. This is not production-data backup/restore evidence."
+  },
+  "historical_state_disposition_contract": {
+    "tool": "scripts/disposition_legacy_runtime_state.py",
+    "stdin_sources": [
+      "QC_API_KEYS_FILE",
+      "QC_AUDIT_LOG_FILE",
+      "QC_SPKI_LOG_FILE"
+    ],
+    "fixed_sqlite_staging": {
+      "vulnerability-scan-job-db": "/tmp/qc-vulnerability-legacy.db",
+      "live-scanner-db": "/tmp/qc-live-scanner-legacy.db"
+    },
+    "targets": {
+      "vulnerability-scan-job-db": "postgresql:qc_legacy_vuln_scan_jobs",
+      "live-scanner-db": [
+        "postgresql:qc_live_scans",
+        "postgresql:qc_live_baselines",
+        "postgresql:qc_live_findings"
+      ],
+      "QC_API_KEYS_FILE": "postgresql:qc_api_keys",
+      "QC_AUDIT_LOG_FILE": "postgresql:qc_request_audit",
+      "QC_SPKI_LOG_FILE": "postgresql:qc_spki_evidence"
+    },
+    "verification": [
+      "read-only fixed-path SQLite staging",
+      "stdin-only file artifact ingestion",
+      "empty target authority requirement",
+      "audit hash/HMAC chain validation",
+      "row-count verification",
+      "deterministic SHA-256 content verification"
+    ],
+    "ci_contract_verified": false,
+    "production_disposition_complete": false,
+    "note": "The repository has a fail-closed preservation path for all remaining historical scanner and file evidence. Production sources must still be captured and the resulting evidence recorded before any PVC/file binding is removed."
   },
   "security_engine_database_contract": {
     "runtime_adapter_module": "engines/runtime_state.py",
@@ -102,8 +136,9 @@
       "authoritative": false,
       "migration_required": true,
       "production_writer_disabled": true,
+      "historical_disposition_target": "qc_legacy_vuln_scan_jobs",
       "environment": ["QC_DB_PATH", "QC_USE_CELERY", "QC_REDIS_URL"],
-      "note": "Production composition requires Celery/Redis and does not initialize qc_vuln_scan_jobs. Historical SQLite rows remain a cutover blocker until explicitly verified empty or otherwise dispositioned."
+      "note": "Production composition requires Celery/Redis and does not initialize qc_vuln_scan_jobs. Historical rows have a fail-closed PostgreSQL preservation path but remain a cutover blocker until production disposition is executed."
     },
     {
       "path": "engines/incident_response.py",
@@ -162,8 +197,9 @@
       "migration_required": true,
       "postgresql_capable": true,
       "production_writer_disabled": true,
+      "historical_disposition_targets": ["qc_live_scans", "qc_live_baselines", "qc_live_findings"],
       "environment": ["QC_DATABASE_URL", "DATABASE_URL"],
-      "note": "Production composition requires PostgreSQL qc_live_scans/qc_live_baselines/qc_live_findings. Legacy scans/baselines/findings_log SQLite remains a historical cutover blocker until explicitly migrated or dispositioned."
+      "note": "Production composition requires PostgreSQL live-scanner tables. Legacy scans/baselines/findings_log have a fail-closed preservation path but remain a cutover blocker until production disposition is executed."
     },
     {
       "path": "sovereignty/audit_chain.py",
@@ -201,6 +237,7 @@
       "environment": "QC_API_KEYS_FILE",
       "path": "/var/data/keys.json",
       "migration_disposition": "postgresql-qc_api_keys-or-external-secret",
+      "disposition_tool": "scripts/disposition_legacy_runtime_state.py api-keys",
       "postgresql_capable": true,
       "production_cutover_complete": false
     },
@@ -208,6 +245,7 @@
       "environment": "QC_AUDIT_LOG_FILE",
       "path": "/var/data/audit.log.jsonl",
       "migration_disposition": "postgresql-qc_request_audit-or-siem-worm",
+      "disposition_tool": "scripts/disposition_legacy_runtime_state.py audit-log",
       "postgresql_capable": true,
       "production_cutover_complete": false
     },
@@ -221,7 +259,8 @@
     {
       "environment": "QC_SPKI_LOG_FILE",
       "path": "/var/data/spki.jsonl",
-      "migration_disposition": "external-siem-or-worm-evidence-store",
+      "migration_disposition": "postgresql-qc_spki_evidence-or-worm-evidence-store",
+      "disposition_tool": "scripts/disposition_legacy_runtime_state.py spki",
       "api_writer": false,
       "production_cutover_complete": false
     }
