@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import copy
-import hashlib
 import os
 
 import pytest
@@ -92,14 +90,15 @@ def test_cutover_evidence_requires_live_scanner_capture_before_replacement():
 def test_cutover_evidence_requires_all_source_authorities():
     bundle = _bundle()
     bundle["source_capture"]["artifacts"] = [
-        item for item in bundle["source_capture"]["artifacts"]
+        item
+        for item in bundle["source_capture"]["artifacts"]
         if item["name"] != "live-scanner-db"
     ]
     with pytest.raises(RuntimeError, match="missing source artifact evidence"):
         verify_evidence_bundle(bundle)
 
 
-def test_cutover_evidence_allows_explicit_verified_absence_without_fake_digest():
+def test_cutover_evidence_preserves_verified_absence_without_fake_disposition():
     bundle = _bundle()
     for item in bundle["source_capture"]["artifacts"]:
         if item["name"] == "spki":
@@ -112,7 +111,30 @@ def test_cutover_evidence_allows_explicit_verified_absence_without_fake_digest()
                     "absence_reason": "SPKI evidence file did not exist in the frozen source pod",
                 }
             )
+    for disposition in bundle["dispositions"]:
+        if disposition["kind"] == "spki":
+            disposition.clear()
+            disposition.update(
+                {"kind": "spki", "status": "not-applicable-source-absent"}
+            )
     assert verify_evidence_bundle(bundle)["verified"] is True
+
+
+def test_cutover_evidence_rejects_fake_disposition_for_absent_source():
+    bundle = _bundle()
+    for item in bundle["source_capture"]["artifacts"]:
+        if item["name"] == "spki":
+            item.clear()
+            item.update(
+                {
+                    "name": "spki",
+                    "status": "verified-absent",
+                    "checked": True,
+                    "absence_reason": "not present",
+                }
+            )
+    with pytest.raises(RuntimeError, match="preserve verified source absence"):
+        verify_evidence_bundle(bundle)
 
 
 def test_cutover_evidence_rejects_restore_manifest_mismatch():
@@ -147,14 +169,23 @@ def test_whole_database_manifest_detects_post_manifest_mutation():
         pytest.skip("QC_TEST_POSTGRES_URL is required for PostgreSQL contract")
 
     import psycopg
+    from psycopg import sql
 
     table = "qc_cutover_manifest_contract"
+    table_ident = sql.Identifier(table)
     with psycopg.connect(url) as conn:
-        conn.execute(f"DROP TABLE IF EXISTS {table}")
+        conn.execute(sql.SQL("DROP TABLE IF EXISTS {}").format(table_ident))
         conn.execute(
-            f"CREATE TABLE {table} (id BIGINT PRIMARY KEY, payload TEXT NOT NULL)"
+            sql.SQL(
+                "CREATE TABLE {} (id BIGINT PRIMARY KEY, payload TEXT NOT NULL)"
+            ).format(table_ident)
         )
-        conn.execute(f"INSERT INTO {table} (id, payload) VALUES (1, 'alpha'), (2, 'beta')")
+        conn.execute(
+            sql.SQL(
+                "INSERT INTO {} (id, payload) VALUES (%s, %s), (%s, %s)"
+            ).format(table_ident),
+            (1, "alpha", 2, "beta"),
+        )
 
     try:
         manifest = build_database_manifest(url)
@@ -163,10 +194,13 @@ def test_whole_database_manifest_detects_post_manifest_mutation():
         assert verify_database_manifest(manifest, url)["verified"] is True
 
         with psycopg.connect(url) as conn:
-            conn.execute(f"UPDATE {table} SET payload='tampered' WHERE id=2")
+            conn.execute(
+                sql.SQL("UPDATE {} SET payload=%s WHERE id=%s").format(table_ident),
+                ("tampered", 2),
+            )
 
         with pytest.raises(RuntimeError, match="does not match source database manifest"):
             verify_database_manifest(manifest, url)
     finally:
         with psycopg.connect(url) as conn:
-            conn.execute(f"DROP TABLE IF EXISTS {table}")
+            conn.execute(sql.SQL("DROP TABLE IF EXISTS {}").format(table_ident))
