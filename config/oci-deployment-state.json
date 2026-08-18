@@ -1,11 +1,12 @@
 {
-  "version": 3,
+  "version": 4,
   "target": "oci-always-free",
-  "deployment_role": "production-candidate",
-  "preferred_production_candidate": true,
+  "deployment_role": "historical-fallback",
+  "preferred_production_candidate": false,
+  "superseded_by": "sovereign-local-edge",
   "production_eligible_by_provider_policy": true,
   "production_authorized": false,
-  "provider_policy_note": "Oracle documents OCI Free Tier as supporting application deployment and Always Free compute resources. This repository still requires all production evidence gates before runtime authorization.",
+  "provider_policy_note": "OCI remains a provider-policy-eligible historical fallback. The preferred production candidate is now the Sovereign Local Edge profile; no OCI resource was ever provisioned or authorized.",
   "supported_platforms": [
     "linux/arm64",
     "linux/amd64"
@@ -39,7 +40,7 @@
   },
   "queue": {
     "provider": "external-tls-redis-compatible",
-    "preferred_service": "aiven-valkey",
+    "preferred_service": "none",
     "protocol": "rediss",
     "tls_certificate_verification_required": true,
     "service_provisioned": false,
