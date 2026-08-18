@@ -79,7 +79,11 @@ def main() -> int:
             fail(f"unpinned PyYAML install found in {path.relative_to(ROOT)}")
 
     subprocess.run([sys.executable, str(ROOT / "scripts/ci/check_oci_deployment.py")], check=True)
-    print(f"platform toolchain guard: {len(REQUIRED_KEYS)} pins valid; {checked} workflows clean; OCI deployment contract clean")
+    subprocess.run([sys.executable, str(ROOT / "scripts/ci/check_managed_free_deployment.py")], check=True)
+    print(
+        f"platform toolchain guard: {len(REQUIRED_KEYS)} pins valid; {checked} workflows clean; "
+        "OCI and managed-free deployment contracts clean"
+    )
     return 0
 
 
