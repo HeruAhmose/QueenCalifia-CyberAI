@@ -1,0 +1,3 @@
+queen-califia production source capture
+approved gate: capture only; no rollout, scale, migration, PVC removal, rootfs change, or HA
+source workflow commit: a2dd08d1980cfc94e9e98a5b5495d0906a6029f4
