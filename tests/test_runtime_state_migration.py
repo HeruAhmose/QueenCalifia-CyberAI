@@ -226,9 +226,12 @@ def test_runtime_state_migration_is_verified_and_cutover_stays_blocked(monkeypat
                 "SELECT plan_id FROM qc_remediation_plans WHERE plan_id=%s",
                 (plan_id,),
             ).fetchone()
+            unresolved_row = conn.execute(
+                "SELECT to_regclass('qc_vuln_scan_jobs') AS relation"
+            ).fetchone()
             assert incident_row["incident_id"] == incident_id
             assert plan_row["plan_id"] == plan_id
-            assert conn.execute("SELECT to_regclass('qc_vuln_scan_jobs')").fetchone()[0] is None
+            assert unresolved_row["relation"] is None
 
         _clean_target(url)
         with pytest.raises(RuntimeError, match="Cutover is not ready"):
