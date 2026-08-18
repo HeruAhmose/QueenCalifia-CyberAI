@@ -19,6 +19,20 @@ concurrency:
 jobs:
   backend-check:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: queen
+          POSTGRES_PASSWORD: queen-ci
+          POSTGRES_DB: queen_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U queen -d queen_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -41,6 +55,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r ../scripts/bootstrap/requirements.txt pytest
+
+      - name: PostgreSQL primary-state contract
+        env:
+          QC_TEST_POSTGRES_URL: postgresql://queen:queen-ci@127.0.0.1:5432/queen_ci
+        run: python -m pytest -q tests/test_primary_database_contract.py
 
       - name: Production immutable image promotion guard
         if: github.event_name == 'pull_request' && github.base_ref == 'production'
