@@ -1,0 +1,130 @@
+services:
+  valkey:
+    image: valkey/valkey:9.1.1-alpine3.24
+    container_name: queen-califia-valkey
+    command: ["valkey-server", "/etc/valkey/valkey.conf"]
+    volumes:
+      - ./valkey.conf:/etc/valkey/valkey.conf:ro
+      - ${QC_EDGE_STATE_ROOT:-/srv/queen-califia}/pki/valkey:/run/valkey-pki:ro
+      - ${QC_EDGE_STATE_ROOT:-/srv/queen-califia}/valkey:/data
+    networks: [queue]
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli --tls --cacert /run/valkey-pki/ca.crt --cert /run/valkey-pki/health.crt --key /run/valkey-pki/health.key -h valkey -p 6379 ping | grep -qx PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  api:
+    container_name: queen-califia-api
+    build:
+      context: ../..
+      dockerfile: deploy/edge/Dockerfile
+    env_file:
+      - ../../.env.edge
+    environment:
+      QC_SERVICE_ROLE: api
+      QC_PRODUCTION: "1"
+      QC_USE_CELERY: "1"
+      QC_REQUIRE_REDIS: "1"
+      QC_EDGE_RUNTIME_GATE: "1"
+      QC_EDGE_RUNTIME_GATE_FILE: /var/lib/queen-califia/cutover/SOVEREIGN_EDGE_RUNTIME_AUTHORIZED
+      QC_EDGE_POSTGRES_PROVIDER: neon
+      QC_DATABASE_CONNECTION_MODE: pooled
+      QC_REDIS_URL: rediss://valkey:6379/0?ssl_cert_reqs=required&ssl_ca_certs=/run/valkey-pki/ca.crt&ssl_certfile=/run/valkey-pki/api.crt&ssl_keyfile=/run/valkey-pki/api.key
+      QC_CELERY_BROKER_URL: rediss://valkey:6379/0?ssl_cert_reqs=required&ssl_ca_certs=/run/valkey-pki/ca.crt&ssl_certfile=/run/valkey-pki/api.crt&ssl_keyfile=/run/valkey-pki/api.key
+      QC_CELERY_RESULT_BACKEND: rediss://valkey:6379/0?ssl_cert_reqs=required&ssl_ca_certs=/run/valkey-pki/ca.crt&ssl_certfile=/run/valkey-pki/api.crt&ssl_keyfile=/run/valkey-pki/api.key
+      QC_API_KEYS_FILE: /var/lib/queen-califia/legacy/keys.json
+      QC_AUDIT_LOG_FILE: /var/lib/queen-califia/legacy/audit.log.jsonl
+      QC_SPKI_LOG_FILE: /var/lib/queen-califia/legacy/spki.jsonl
+      QC_MEMORY_BACKUP_DIR: /var/lib/queen-califia/legacy/memory-backups
+      QC_DENY_PUBLIC_TARGETS: ${QC_DENY_PUBLIC_TARGETS:-1}
+      QC_SCAN_ALLOWLIST: ${QC_SCAN_ALLOWLIST:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8}
+    volumes:
+      - ${QC_EDGE_STATE_ROOT:-/srv/queen-califia}/app:/var/lib/queen-califia
+      - ${QC_EDGE_STATE_ROOT:-/srv/queen-califia}/pki/valkey:/run/valkey-pki:ro
+    networks: [edge, queue]
+    depends_on:
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/readyz', timeout=3)"]
+      interval: 20s
+      timeout: 5s
+      retries: 8
+      start_period: 90s
+    restart: unless-stopped
+
+  worker:
+    container_name: queen-califia-worker
+    build:
+      context: ../..
+      dockerfile: deploy/edge/Dockerfile
+    command: ["celery", "-A", "celery_app.celery_app", "worker", "-l", "INFO", "--concurrency", "1", "-Q", "scans"]
+    env_file:
+      - ../../.env.edge
+    environment:
+      QC_SERVICE_ROLE: worker
+      QC_PRODUCTION: "1"
+      QC_USE_CELERY: "1"
+      QC_REQUIRE_REDIS: "1"
+      QC_EDGE_RUNTIME_GATE: "1"
+      QC_EDGE_RUNTIME_GATE_FILE: /var/lib/queen-califia/cutover/SOVEREIGN_EDGE_RUNTIME_AUTHORIZED
+      QC_EDGE_POSTGRES_PROVIDER: neon
+      QC_DATABASE_CONNECTION_MODE: pooled
+      QC_REDIS_URL: rediss://valkey:6379/0?ssl_cert_reqs=required&ssl_ca_certs=/run/valkey-pki/ca.crt&ssl_certfile=/run/valkey-pki/worker.crt&ssl_keyfile=/run/valkey-pki/worker.key
+      QC_CELERY_BROKER_URL: rediss://valkey:6379/0?ssl_cert_reqs=required&ssl_ca_certs=/run/valkey-pki/ca.crt&ssl_certfile=/run/valkey-pki/worker.crt&ssl_keyfile=/run/valkey-pki/worker.key
+      QC_CELERY_RESULT_BACKEND: rediss://valkey:6379/0?ssl_cert_reqs=required&ssl_ca_certs=/run/valkey-pki/ca.crt&ssl_certfile=/run/valkey-pki/worker.crt&ssl_keyfile=/run/valkey-pki/worker.key
+      QC_DENY_PUBLIC_TARGETS: ${QC_DENY_PUBLIC_TARGETS:-1}
+      QC_SCAN_ALLOWLIST: ${QC_SCAN_ALLOWLIST:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8}
+    volumes:
+      - ${QC_EDGE_STATE_ROOT:-/srv/queen-califia}/app:/var/lib/queen-califia:ro
+      - ${QC_EDGE_STATE_ROOT:-/srv/queen-califia}/pki/valkey:/run/valkey-pki:ro
+    networks: [edge, queue]
+    depends_on:
+      valkey:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    container_name: queen-califia-frontend
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_SAME_ORIGIN_API: "1"
+        VITE_API_URL: ""
+        VITE_QC_API_URL: ""
+    networks: [edge]
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    container_name: queen-califia-caddy
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    networks: [edge]
+    depends_on:
+      frontend:
+        condition: service_started
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.7.3
+    container_name: queen-califia-cloudflared
+    command: ["tunnel", "--no-autoupdate", "run", "--token", "${CF_TUNNEL_TOKEN:?CF_TUNNEL_TOKEN is required}"]
+    networks: [edge]
+    depends_on:
+      caddy:
+        condition: service_started
+    restart: unless-stopped
+
+networks:
+  edge:
+    name: queen-califia-edge
+  queue:
+    name: queen-califia-queue
+    internal: true
