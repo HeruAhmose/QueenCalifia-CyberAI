@@ -127,7 +127,8 @@ require(
     WATCHDOG.read_text(encoding="utf-8"),
     "authorization gate closed; no runtime recovery attempted",
     "never creates, edits, or repairs the authorization marker",
-    "queen-califia-cloudflared",
+    "for service in worker frontend caddy cloudflared",
+    'container="queen-califia-${service}"',
 )
 require(WATCHDOG_SERVICE.read_text(encoding="utf-8"), "NoNewPrivileges=true", "ProtectSystem=strict", "/run/docker.sock")
 require(WATCHDOG_TIMER.read_text(encoding="utf-8"), "OnBootSec=2min", "OnUnitActiveSec=1min", "Persistent=true")
