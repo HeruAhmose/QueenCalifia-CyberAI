@@ -1,7 +1,10 @@
 {
-  "version": 1,
+  "version": 2,
   "target": "managed-free",
-  "preferred_target": true,
+  "preferred_target": false,
+  "deployment_role": "staging-evaluation",
+  "production_eligible": false,
+  "production_eligibility_reason": "Northflank Developer Sandbox is explicitly documented by the provider as not for production applications. Retain this profile only for staging/evaluation unless a production-eligible Northflank plan is selected and separately evidenced.",
   "application_host": {
     "provider": "northflank",
     "plan": "developer-sandbox",
@@ -10,7 +13,8 @@
     "worker_replicas": 1,
     "frontend_service_consumed": false,
     "runtime_authorized": false,
-    "public_api_authorized": false
+    "public_api_authorized": false,
+    "production_eligible": false
   },
   "postgresql": {
     "provider": "neon",
@@ -36,6 +40,7 @@
     "tls_certificate_verification_required": true,
     "service_provisioned": false,
     "celery_worker_enabled": true,
+    "production_sla_assumed": false,
     "upstash_free_primary": false,
     "upstash_note": "Upstash remains a compatible alternative, but its command-metered free tier is not the preferred always-on Celery broker because worker polling can consume the monthly command allowance."
   },
