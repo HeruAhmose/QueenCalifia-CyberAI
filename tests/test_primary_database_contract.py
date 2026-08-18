@@ -36,6 +36,16 @@ def test_sqlite_primary_contract_remains_default(monkeypatch, tmp_path: Path):
     }
 
 
+def test_sqlite_primary_contract_rejects_untrusted_filesystem_path(monkeypatch):
+    _clear_database_env(monkeypatch)
+    forbidden = Path("/etc") / f"queen-califia-{uuid.uuid4().hex}.db"
+
+    with pytest.raises(ValueError, match="trusted storage roots"):
+        database.get_db(forbidden)
+
+    assert not forbidden.exists()
+
+
 def test_postgres_sql_translation_preserves_existing_call_surface():
     translated = database._postgres_sql(
         "INSERT OR IGNORE INTO memories (user_id,key,value) VALUES (?,?,?)"
