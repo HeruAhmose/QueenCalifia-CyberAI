@@ -1,21 +1,19 @@
 #!/usr/bin/env python3
 """Preserve legacy scanner and file-backed state before PostgreSQL cutover.
 
-This tool is deliberately narrow and fail-closed:
-
 stdin modes (no caller-controlled path):
   api-keys   < keys.json
   audit-log  < audit.log.jsonl
   spki       < spki.jsonl
 
-SQLite modes use fixed staging paths only. An operator must copy production
-sources into these exact paths before execution:
-  vulnerability  -> /tmp/qc-vulnerability-legacy.db
-  live-scanner   -> /tmp/qc-live-scanner-legacy.db
+SQLite modes use fixed staging paths only:
+  vulnerability -> /tmp/qc-vulnerability-legacy.db
+  live-scanner  -> /tmp/qc-live-scanner-legacy.db
 
-All targets must be empty. Source SQLite is read-only. Every mode verifies row
-counts and deterministic SHA-256 content digests before committing. This script
-does not delete source state, change deployment configuration, or authorize HA.
+Every SQLite source is read-only. Every PostgreSQL target must be empty. Every
+copy is verified by row count and deterministic SHA-256 before commit. This
+script never deletes a source, changes deployment configuration, or authorizes
+HA/read-only-rootfs.
 """
 from __future__ import annotations
 
@@ -91,6 +89,13 @@ def _source_tables(conn: sqlite3.Connection) -> set[str]:
     return {str(row[0]) for row in rows if not str(row[0]).startswith("sqlite_")}
 
 
+def _executemany(target, statement: str, rows: Sequence[Sequence[Any]]) -> None:
+    if not rows:
+        return
+    with target.cursor() as cursor:
+        cursor.executemany(statement, rows)
+
+
 def _require_empty_pg(target, table: str) -> None:
     from psycopg import sql
 
@@ -100,30 +105,43 @@ def _require_empty_pg(target, table: str) -> None:
         ).fetchone()["n"]
     )
     if count:
-        raise RuntimeError(f"target table {table} is not empty ({count} rows); refusing authority merge")
+        raise RuntimeError(
+            f"target table {table} is not empty ({count} rows); refusing authority merge"
+        )
 
 
-def _pg_rows(target, table: str, columns: Sequence[str], keys: Sequence[str]) -> list[tuple[Any, ...]]:
+def _pg_rows(
+    target, table: str, columns: Sequence[str], keys: Sequence[str]
+) -> list[tuple[Any, ...]]:
     from psycopg import sql
 
     query = sql.SQL("SELECT {} FROM {} ORDER BY {}").format(
-        sql.SQL(", ").join(sql.Identifier(c) for c in columns),
+        sql.SQL(", ").join(sql.Identifier(column) for column in columns),
         sql.Identifier(table),
-        sql.SQL(", ").join(sql.Identifier(k) for k in keys),
+        sql.SQL(", ").join(sql.Identifier(key) for key in keys),
     )
     rows = target.execute(query).fetchall()
-    return [tuple(row[c] for c in columns) for row in rows]
+    return [tuple(row[column] for column in columns) for row in rows]
 
 
-def _verify(target, table: str, columns: Sequence[str], keys: Sequence[str], expected: Sequence[Sequence[Any]]) -> dict[str, Any]:
+def _verify(
+    target,
+    table: str,
+    columns: Sequence[str],
+    keys: Sequence[str],
+    expected: Sequence[Sequence[Any]],
+) -> dict[str, Any]:
     actual = _pg_rows(target, table, columns, keys)
     expected_digest = _digest_rows(expected)
     actual_digest = _digest_rows(actual)
     if len(actual) != len(expected):
-        raise RuntimeError(f"verification failed for {table}: source={len(expected)} target={len(actual)}")
+        raise RuntimeError(
+            f"verification failed for {table}: source={len(expected)} target={len(actual)}"
+        )
     if actual_digest != expected_digest:
         raise RuntimeError(
-            f"verification failed for {table}: source_sha256={expected_digest} target_sha256={actual_digest}"
+            f"verification failed for {table}: "
+            f"source_sha256={expected_digest} target_sha256={actual_digest}"
         )
     return {"rows": len(actual), "sha256": actual_digest}
 
@@ -131,7 +149,9 @@ def _verify(target, table: str, columns: Sequence[str], keys: Sequence[str], exp
 def _reset_sequence(target, table: str, column: str) -> None:
     from psycopg import sql
 
-    row = target.execute("SELECT pg_get_serial_sequence(%s, %s) AS seq", (table, column)).fetchone()
+    row = target.execute(
+        "SELECT pg_get_serial_sequence(%s, %s) AS seq", (table, column)
+    ).fetchone()
     sequence = row["seq"] if row else None
     if not sequence:
         return
@@ -155,18 +175,39 @@ def _read_stdin_text() -> tuple[str, str]:
     return raw, hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def dispose_api_keys(url: str) -> dict[str, Any]:
     raw, source_digest = _read_stdin_text()
     data = json.loads(raw)
-    if not isinstance(data, dict) or data.get("version") != API_KEY_STORE_VERSION or data.get("hash_scheme") != API_KEY_HASH_SCHEME:
-        raise RuntimeError(f"API-key JSON must use {API_KEY_HASH_SCHEME} version {API_KEY_STORE_VERSION}")
+    if (
+        not isinstance(data, dict)
+        or data.get("version") != API_KEY_STORE_VERSION
+        or data.get("hash_scheme") != API_KEY_HASH_SCHEME
+    ):
+        raise RuntimeError(
+            f"API-key JSON must use {API_KEY_HASH_SCHEME} version {API_KEY_STORE_VERSION}"
+        )
     keys = data.get("keys")
     if not isinstance(keys, list):
         raise RuntimeError("API-key JSON must contain a keys list")
 
     columns = (
-        "key_hash", "role", "permissions_json", "rate_limit", "created_at",
-        "description", "budget_capacity", "budget_refill_per_minute", "revoked",
+        "key_hash",
+        "role",
+        "permissions_json",
+        "rate_limit",
+        "created_at",
+        "description",
+        "budget_capacity",
+        "budget_refill_per_minute",
+        "revoked",
     )
     rows: list[tuple[Any, ...]] = []
     seen: set[str] = set()
@@ -177,12 +218,11 @@ def dispose_api_keys(url: str) -> dict[str, Any]:
         if key_hash in seen:
             raise RuntimeError(f"duplicate API-key fingerprint: {key_hash}")
         seen.add(key_hash)
-        permissions = list(item.get("permissions", ["read"]))
         rows.append(
             (
                 key_hash,
                 str(item.get("role", "reader")),
-                json.dumps(permissions),
+                json.dumps(list(item.get("permissions", ["read"]))),
                 int(item.get("rate_limit", 60)),
                 str(item.get("created_at") or _utcnow()),
                 str(item.get("description", "")),
@@ -212,16 +252,16 @@ def dispose_api_keys(url: str) -> dict[str, Any]:
                 """
             )
             _require_empty_pg(target, "qc_api_keys")
-            if rows:
-                target.executemany(
-                    """
-                    INSERT INTO qc_api_keys (
-                        key_hash, role, permissions_json, rate_limit, created_at,
-                        description, budget_capacity, budget_refill_per_minute, revoked
-                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                    """,
-                    rows,
-                )
+            _executemany(
+                target,
+                """
+                INSERT INTO qc_api_keys (
+                    key_hash, role, permissions_json, rate_limit, created_at,
+                    description, budget_capacity, budget_refill_per_minute, revoked
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                """,
+                rows,
+            )
             verified = _verify(target, "qc_api_keys", columns, ("key_hash",), rows)
         return {"kind": "api-keys", "source_sha256": source_digest, "target": verified}
     finally:
@@ -238,7 +278,7 @@ def _validate_audit_records(raw: str, hmac_key: str) -> list[dict[str, Any]]:
         record = json.loads(line)
         if not isinstance(record, dict):
             raise RuntimeError(f"audit line {line_number} is not an object")
-        entry = {k: v for k, v in record.items() if k not in {"hash", "hmac"}}
+        entry = {key: value for key, value in record.items() if key not in {"hash", "hmac"}}
         expected_hash = hashlib.sha256(_canonical(entry).encode("utf-8")).hexdigest()
         expected_hmac = hmac.new(
             key, (expected_hash + previous).encode("utf-8"), hashlib.sha256
@@ -260,11 +300,22 @@ def dispose_audit_log(url: str) -> dict[str, Any]:
     raw, source_digest = _read_stdin_text()
     hmac_key = (os.getenv("QC_AUDIT_HMAC_KEY") or "").strip()
     if not hmac_key:
-        raise RuntimeError("QC_AUDIT_HMAC_KEY is required to validate historical audit evidence")
+        raise RuntimeError(
+            "QC_AUDIT_HMAC_KEY is required to validate historical audit evidence"
+        )
     records = _validate_audit_records(raw, hmac_key)
     columns = (
-        "sequence", "ts", "request_id", "action", "source_ip", "user_role",
-        "status_code", "details_json", "previous_hash", "record_hash", "record_hmac",
+        "sequence",
+        "ts",
+        "request_id",
+        "action",
+        "source_ip",
+        "user_role",
+        "status_code",
+        "details_json",
+        "previous_hash",
+        "record_hash",
+        "record_hmac",
     )
     rows = [
         (
@@ -304,7 +355,8 @@ def dispose_audit_log(url: str) -> dict[str, Any]:
                 """
             )
             _require_empty_pg(target, "qc_request_audit")
-            target.executemany(
+            _executemany(
+                target,
                 """
                 INSERT INTO qc_request_audit (
                     sequence, ts, request_id, action, source_ip, user_role,
@@ -314,7 +366,9 @@ def dispose_audit_log(url: str) -> dict[str, Any]:
                 rows,
             )
             _reset_sequence(target, "qc_request_audit", "sequence")
-            verified = _verify(target, "qc_request_audit", columns, ("sequence",), rows)
+            verified = _verify(
+                target, "qc_request_audit", columns, ("sequence",), rows
+            )
         return {"kind": "audit-log", "source_sha256": source_digest, "target": verified}
     finally:
         target.close()
@@ -331,22 +385,26 @@ def dispose_spki(url: str) -> dict[str, Any]:
             raise RuntimeError(f"SPKI line {line_number} is not an object")
         event_type = str(record.get("event_type") or "")
         if not event_type.startswith("qc.redis.spki_pin"):
-            raise RuntimeError(f"SPKI line {line_number} has unsupported event_type {event_type!r}")
+            raise RuntimeError(
+                f"SPKI line {line_number} has unsupported event_type {event_type!r}"
+            )
         records.append(record)
     if not records:
         raise RuntimeError("SPKI evidence has no records")
 
     rows: list[tuple[Any, ...]] = []
     seen: set[str] = set()
-    for index, record in enumerate(records, start=1):
+    sequence = 0
+    for record in records:
         canonical = _canonical(record)
         event_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         if event_hash in seen:
             continue
         seen.add(event_hash)
+        sequence += 1
         rows.append(
             (
-                index,
+                sequence,
                 str(record.get("event_type")),
                 canonical,
                 event_hash,
@@ -370,7 +428,8 @@ def dispose_spki(url: str) -> dict[str, Any]:
                 """
             )
             _require_empty_pg(target, "qc_spki_evidence")
-            target.executemany(
+            _executemany(
+                target,
                 """
                 INSERT INTO qc_spki_evidence (
                     sequence, event_type, event_json, event_hash, recorded_at
@@ -385,22 +444,32 @@ def dispose_spki(url: str) -> dict[str, Any]:
         target.close()
 
 
-def dispose_vulnerability_sqlite(url: str, source_path: Path = VULNERABILITY_STAGE) -> dict[str, Any]:
+def dispose_vulnerability_sqlite(
+    url: str, source_path: Path = VULNERABILITY_STAGE
+) -> dict[str, Any]:
     source = _connect_sqlite_readonly(source_path)
     target = _connect_pg(url)
     columns = (
-        "scan_id", "target", "scan_type", "status", "created_at", "started_at",
-        "completed_at", "error", "result_json",
+        "scan_id",
+        "target",
+        "scan_type",
+        "status",
+        "created_at",
+        "started_at",
+        "completed_at",
+        "error",
+        "result_json",
     )
     try:
-        tables = _source_tables(source)
-        if "qc_vuln_scan_jobs" not in tables:
-            raise RuntimeError("staged vulnerability SQLite has no qc_vuln_scan_jobs table")
+        if "qc_vuln_scan_jobs" not in _source_tables(source):
+            raise RuntimeError(
+                "staged vulnerability SQLite has no qc_vuln_scan_jobs table"
+            )
         rows = [
             tuple(row[column] for column in columns)
             for row in source.execute(
-                "SELECT scan_id, target, scan_type, status, created_at, started_at, completed_at, error, result_json "
-                "FROM qc_vuln_scan_jobs ORDER BY scan_id"
+                "SELECT scan_id, target, scan_type, status, created_at, started_at, "
+                "completed_at, error, result_json FROM qc_vuln_scan_jobs ORDER BY scan_id"
             ).fetchall()
         ]
         with target.transaction():
@@ -420,16 +489,16 @@ def dispose_vulnerability_sqlite(url: str, source_path: Path = VULNERABILITY_STA
                 """
             )
             _require_empty_pg(target, "qc_legacy_vuln_scan_jobs")
-            if rows:
-                target.executemany(
-                    """
-                    INSERT INTO qc_legacy_vuln_scan_jobs (
-                        scan_id, target, scan_type, status, created_at, started_at,
-                        completed_at, error, result_json
-                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                    """,
-                    rows,
-                )
+            _executemany(
+                target,
+                """
+                INSERT INTO qc_legacy_vuln_scan_jobs (
+                    scan_id, target, scan_type, status, created_at, started_at,
+                    completed_at, error, result_json
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                """,
+                rows,
+            )
             verified = _verify(
                 target, "qc_legacy_vuln_scan_jobs", columns, ("scan_id",), rows
             )
@@ -444,51 +513,57 @@ def dispose_vulnerability_sqlite(url: str, source_path: Path = VULNERABILITY_STA
         target.close()
 
 
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def dispose_live_scanner_sqlite(url: str, source_path: Path = LIVE_SCANNER_STAGE) -> dict[str, Any]:
+def dispose_live_scanner_sqlite(
+    url: str, source_path: Path = LIVE_SCANNER_STAGE
+) -> dict[str, Any]:
     source = _connect_sqlite_readonly(source_path)
     target = _connect_pg(url)
-    expected_tables = {"scans", "baselines", "findings_log"}
     try:
-        tables = _source_tables(source)
-        missing = sorted(expected_tables - tables)
+        missing = sorted(
+            {"scans", "baselines", "findings_log"} - _source_tables(source)
+        )
         if missing:
-            raise RuntimeError("staged live-scanner SQLite missing tables: " + ", ".join(missing))
+            raise RuntimeError(
+                "staged live-scanner SQLite missing tables: " + ", ".join(missing)
+            )
 
-        specs = {
-            "scans": (
-                "qc_live_scans",
-                ("scan_id", "target", "scan_type", "start_time", "end_time", "total_hosts", "total_findings", "critical", "high", "risk_score", "report_json"),
-                ("scan_id",),
-            ),
-            "baselines": (
-                "qc_live_baselines",
-                ("host_ip", "open_ports", "services", "os_guess", "first_seen", "last_seen", "scan_count"),
-                ("host_ip",),
-            ),
-            "findings_log": (
-                "qc_live_findings",
-                ("finding_id", "scan_id", "host_ip", "title", "severity", "cve_id", "cvss_score", "status", "remediated_at", "created_at"),
-                ("finding_id",),
-            ),
-        }
-        source_rows: dict[str, list[tuple[Any, ...]]] = {}
-        for source_table, (_, columns, keys) in specs.items():
-            order = ", ".join(keys)
-            selected = ", ".join(columns)
-            source_rows[source_table] = [
-                tuple(row[column] for column in columns)
-                for row in source.execute(
-                    f"SELECT {selected} FROM {source_table} ORDER BY {order}"
-                ).fetchall()
-            ]
+        scans_columns = (
+            "scan_id", "target", "scan_type", "start_time", "end_time",
+            "total_hosts", "total_findings", "critical", "high", "risk_score",
+            "report_json",
+        )
+        baseline_columns = (
+            "host_ip", "open_ports", "services", "os_guess", "first_seen",
+            "last_seen", "scan_count",
+        )
+        finding_columns = (
+            "finding_id", "scan_id", "host_ip", "title", "severity", "cve_id",
+            "cvss_score", "status", "remediated_at", "created_at",
+        )
+        scans = [
+            tuple(row[column] for column in scans_columns)
+            for row in source.execute(
+                "SELECT scan_id,target,scan_type,start_time,end_time,total_hosts,"
+                "total_findings,critical,high,risk_score,report_json "
+                "FROM scans ORDER BY scan_id"
+            ).fetchall()
+        ]
+        baselines = [
+            tuple(row[column] for column in baseline_columns)
+            for row in source.execute(
+                "SELECT host_ip,open_ports,services,os_guess,first_seen,last_seen,scan_count "
+                "FROM baselines ORDER BY host_ip"
+            ).fetchall()
+        ]
+        findings = [
+            tuple(row[column] for column in finding_columns)
+            for row in source.execute(
+                "SELECT finding_id,scan_id,host_ip,title,severity,cve_id,cvss_score,"
+                "status,remediated_at,created_at FROM findings_log ORDER BY finding_id"
+            ).fetchall()
+        ]
+        if any(row[-1] is None for row in scans):
+            raise RuntimeError("legacy live-scanner scan has null report_json")
 
         with target.transaction():
             target.execute(
@@ -520,43 +595,58 @@ def dispose_live_scanner_sqlite(url: str, source_path: Path = LIVE_SCANNER_STAGE
                 )
                 """
             )
+            for table in ("qc_live_scans", "qc_live_baselines", "qc_live_findings"):
+                _require_empty_pg(target, table)
 
-            for _, (target_table, _, _) in specs.items():
-                _require_empty_pg(target, target_table)
-
-            target.executemany(
+            _executemany(
+                target,
                 """
                 INSERT INTO qc_live_scans (
                     scan_id,target,scan_type,start_time,end_time,total_hosts,
                     total_findings,critical,high,risk_score,report_json
                 ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """,
-                source_rows["scans"],
+                scans,
             )
-            target.executemany(
+            _executemany(
+                target,
                 """
                 INSERT INTO qc_live_baselines (
                     host_ip,open_ports,services,os_guess,first_seen,last_seen,scan_count
                 ) VALUES (%s,%s,%s,%s,%s,%s,%s)
                 """,
-                source_rows["baselines"],
+                baselines,
             )
-            target.executemany(
+            _executemany(
+                target,
                 """
                 INSERT INTO qc_live_findings (
                     finding_id,scan_id,host_ip,title,severity,cve_id,cvss_score,
                     status,remediated_at,created_at
                 ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """,
-                source_rows["findings_log"],
+                findings,
             )
 
-            verified: dict[str, Any] = {}
-            for source_table, (target_table, columns, keys) in specs.items():
-                verified[target_table] = _verify(
-                    target, target_table, columns, keys, source_rows[source_table]
-                )
-
+            verified = {
+                "qc_live_scans": _verify(
+                    target, "qc_live_scans", scans_columns, ("scan_id",), scans
+                ),
+                "qc_live_baselines": _verify(
+                    target,
+                    "qc_live_baselines",
+                    baseline_columns,
+                    ("host_ip",),
+                    baselines,
+                ),
+                "qc_live_findings": _verify(
+                    target,
+                    "qc_live_findings",
+                    finding_columns,
+                    ("finding_id",),
+                    findings,
+                ),
+            }
         return {
             "kind": "live-scanner",
             "source_path": str(source_path),
