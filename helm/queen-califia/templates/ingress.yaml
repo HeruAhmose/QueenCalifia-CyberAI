@@ -35,13 +35,9 @@ spec:
                 name: api
                 port:
                   number: {{ .Values.api.service.port }}
-          - path: /metrics
-            pathType: Prefix
-            backend:
-              service:
-                name: api
-                port:
-                  number: {{ .Values.api.service.port }}
+          # /metrics is deliberately not exposed through the public ingress.
+          # Scrapers should use the internal qc-api Service and a production
+          # QC_METRICS_TOKEN instead of publishing operational telemetry.
           - path: /
             pathType: Prefix
             backend:

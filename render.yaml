@@ -54,7 +54,7 @@ services:
         value: /var/data/audit.log.jsonl
       - key: QC_AUDIT_CHAIN_DB
         value: /var/data/queen.db
-      # Exact Origins (scheme+host). Gateway also allows Firebase preview *.web.app, GCS *.storage.googleapis.com, localhost via regex.
+      # Exact browser origins. Additional production origins must be explicitly added here.
       - key: QC_CORS_ORIGINS
         value: https://queencalifia-cyberai.web.app,https://queencalifia-cyberai.firebaseapp.com,https://queencalifia.tamerian.com
       - key: QC_REDIS_URL
@@ -83,6 +83,9 @@ services:
       - key: QC_API_KEY_PEPPER
         sync: false
       - key: QC_AUDIT_HMAC_KEY
+        sync: false
+      # Required to access /metrics when QC_PRODUCTION=1. Keep as a Render secret.
+      - key: QC_METRICS_TOKEN
         sync: false
       # Production auth must be explicit. Leave QC_NO_AUTH unset unless you are
       # intentionally running a development-only deployment.
