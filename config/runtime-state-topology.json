@@ -71,10 +71,11 @@
     "postgresql_major": 16,
     "backup_format": "pg_dump custom",
     "restore_target": "separate PostgreSQL database",
-    "post_restore_verification": "runtime-state manifest row counts plus SHA-256 digests",
+    "post_restore_verification": "targeted runtime manifest plus whole public-table schema/data/sequence manifest",
+    "whole_database_manifest_tool": "scripts/postgres_database_manifest.py",
     "ci_contract_verified": true,
     "production_backup_restore_tested": false,
-    "note": "Protected CI has executed PostgreSQL 16 pg_dump custom-format backup, restore into a separate database, and manifest count/digest verification. This is not production-data backup/restore evidence."
+    "note": "Protected CI executes PostgreSQL 16 pg_dump custom-format backup, restore into a separate database, targeted runtime verification, and whole public-table schema/data/sequence verification. This is not production-data backup/restore evidence."
   },
   "historical_state_disposition_contract": {
     "tool": "scripts/disposition_legacy_runtime_state.py",
@@ -114,6 +115,33 @@
     "ci_contract_verified": true,
     "production_disposition_complete": false,
     "note": "The repository has a fail-closed preservation path for all remaining historical scanner and file evidence. Production sources must still be captured and the resulting evidence recorded before any PVC/file binding is removed."
+  },
+  "production_cutover_evidence_contract": {
+    "runbook": "docs/PRODUCTION_CUTOVER_EVIDENCE.md",
+    "database_manifest_tool": "scripts/postgres_database_manifest.py",
+    "evidence_verifier": "scripts/verify_production_cutover_evidence.py",
+    "required_evidence": [
+      "source pod UID and immutable image digest",
+      "capture-before-replacement proof for container-local live-scanner state",
+      "source artifact SHA-256 or explicit verified absence",
+      "runtime migration verification digest",
+      "historical disposition verification or source-absence propagation",
+      "whole PostgreSQL public-table schema/data/sequence manifest",
+      "production-data pg_dump SHA-256",
+      "separate restore database manifest equality",
+      "PostgreSQL and Celery/Redis authority probes",
+      "legacy write authority disabled probe",
+      "legacy source retention before binding removal"
+    ],
+    "ci_contract_verified": true,
+    "production_source_capture_complete": false,
+    "production_migration_verified": false,
+    "production_disposition_complete": false,
+    "production_backup_restore_verified": false,
+    "production_authority_probes_verified": false,
+    "immutable_evidence_recorded": false,
+    "legacy_binding_removal_eligible": false,
+    "note": "CI can prove the evidence machinery only. Real production source capture, migration, separate restore, authority probes, and immutable evidence are required before legacy PVC/file bindings may be reviewed for removal. This contract never authorizes HA."
   },
   "security_engine_database_contract": {
     "runtime_adapter_module": "engines/runtime_state.py",

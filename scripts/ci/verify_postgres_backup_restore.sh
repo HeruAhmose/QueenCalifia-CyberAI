@@ -3,9 +3,10 @@ set -euo pipefail
 
 # Real PostgreSQL 16 backup/restore contract:
 #   representative migrated SQLite state -> PostgreSQL source DB
+#   runtime migration manifest + whole-public-schema/database fingerprint
 #   pg_dump --format=custom
 #   pg_restore into a separate DB
-#   deterministic migration-manifest verification against the restored DB
+#   both targeted runtime and whole-database verification against the restore
 
 BASE_URL="${QC_TEST_POSTGRES_URL:?QC_TEST_POSTGRES_URL is required}"
 if [[ "$BASE_URL" != "postgresql://queen:queen-ci@127.0.0.1:5432/queen_ci" ]]; then
@@ -16,10 +17,11 @@ fi
 SOURCE_URL="postgresql://queen:queen-ci@127.0.0.1:5432/queen_backup_ci"
 RESTORE_URL="postgresql://queen:queen-ci@127.0.0.1:5432/queen_restore_ci"
 CONTRACT_DIR="/tmp/qc-postgres-backup-contract"
-MANIFEST="$CONTRACT_DIR/manifest.json"
+RUNTIME_MANIFEST="$CONTRACT_DIR/runtime-manifest.json"
+DATABASE_MANIFEST="$CONTRACT_DIR/database-manifest.json"
 DUMP="$CONTRACT_DIR/runtime-state.dump"
 mkdir -p "$CONTRACT_DIR"
-rm -f "$MANIFEST" "$DUMP"
+rm -f "$RUNTIME_MANIFEST" "$DATABASE_MANIFEST" "$DUMP"
 
 cleanup() {
   QC_TEST_POSTGRES_URL="$BASE_URL" python - <<'PY'
@@ -50,8 +52,12 @@ with psycopg.connect(url, autocommit=True) as conn:
 PY
 
 QC_BACKUP_SOURCE_URL="$SOURCE_URL" \
-  python scripts/ci/seed_backup_restore_contract.py > "$MANIFEST"
-test -s "$MANIFEST"
+  python scripts/ci/seed_backup_restore_contract.py > "$RUNTIME_MANIFEST"
+test -s "$RUNTIME_MANIFEST"
+
+QC_DATABASE_URL="$SOURCE_URL" \
+  python scripts/postgres_database_manifest.py > "$DATABASE_MANIFEST"
+test -s "$DATABASE_MANIFEST"
 
 # Use the exact PostgreSQL major version used by the CI service. Network and
 # filesystem locations are fixed by this script rather than caller supplied.
@@ -75,6 +81,10 @@ docker run --rm --network host \
 
 python scripts/migrate_runtime_state_to_postgres.py \
   --database-url "$RESTORE_URL" \
-  --verify-manifest-stdin < "$MANIFEST"
+  --verify-manifest-stdin < "$RUNTIME_MANIFEST"
 
-echo "PostgreSQL 16 pg_dump -> pg_restore -> runtime-state manifest verification passed."
+QC_DATABASE_URL="$RESTORE_URL" \
+  python scripts/postgres_database_manifest.py --verify-stdin \
+  < "$DATABASE_MANIFEST"
+
+echo "PostgreSQL 16 pg_dump -> separate pg_restore -> targeted and whole-database verification passed."
