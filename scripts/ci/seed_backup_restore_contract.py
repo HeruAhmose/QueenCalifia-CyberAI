@@ -9,14 +9,23 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
-from core import database
-from engines.auto_remediation import AutoRemediation
-from engines.incident_response import IncidentCategory, IncidentResponseOrchestrator, IncidentSeverity
-from scripts.migrate_runtime_state_to_postgres import SourceSpec, migrate_runtime_state
-from sovereignty.approvals import SQLiteApprovalStore
-from sovereignty.audit_chain import SQLiteAuditChain
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from core import database  # noqa: E402
+from engines.auto_remediation import AutoRemediation  # noqa: E402
+from engines.incident_response import (  # noqa: E402
+    IncidentCategory,
+    IncidentResponseOrchestrator,
+    IncidentSeverity,
+)
+from scripts.migrate_runtime_state_to_postgres import SourceSpec, migrate_runtime_state  # noqa: E402
+from sovereignty.approvals import SQLiteApprovalStore  # noqa: E402
+from sovereignty.audit_chain import SQLiteAuditChain  # noqa: E402
 
 
 def _clean_target(url: str) -> None:
@@ -39,8 +48,6 @@ def main() -> int:
         raise RuntimeError("QC_BACKUP_SOURCE_URL is required")
     _clean_target(url)
 
-    # Reuse the primary DB contract's trusted test resolver. Caller input is not
-    # part of the generated physical path.
     os.environ["PYTEST_CURRENT_TEST"] = "ci-backup-restore-contract"
     requested_primary = Path("data/queen.db")
     database.init_db(requested_primary)
@@ -84,7 +91,7 @@ def main() -> int:
     manifest = migrate_runtime_state(
         sources=[SourceSpec("primary+sovereignty+incident+remediation", primary)],
         database_url=url,
-        topology_path=Path("config/runtime-state-topology.json"),
+        topology_path=ROOT / "config" / "runtime-state-topology.json",
         require_cutover_ready=False,
     )
 
