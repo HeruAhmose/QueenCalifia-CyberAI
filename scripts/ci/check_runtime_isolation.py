@@ -72,6 +72,8 @@ require(
     "runAsNonRoot: true",
     "runAsUser: 10001",
     "runAsGroup: 10001",
+    "fsGroup: 10001",
+    "fsGroupChangePolicy: OnRootMismatch",
     "type: RuntimeDefault",
     "allowPrivilegeEscalation: false",
     'drop: ["ALL"]',
@@ -85,6 +87,75 @@ require(
     "gt (int .Values.api.replicaCount) 1",
     ".Values.api.autoscaling.enabled",
     "multi-replica/autoscaling is unsupported while authoritative runtime state is local SQLite/file-backed",
+    "name: api-state",
+    "mountPath: /var/data",
+    "claimName: qc-api-state",
+    "name: QC_DB_PATH",
+    "value: /var/data/queen.db",
+    "name: QC_EVOLUTION_DB",
+    "value: /var/data/qc_evolution.db",
+    "name: QC_MEMORY_BACKUP_DIR",
+    "value: /var/data/memory-backups",
+    "name: QC_THREAT_INTEL_DB",
+    "value: /var/data/qc_threat_intel.db",
+    "name: QC_API_KEYS_FILE",
+    "value: /var/data/keys.json",
+    "name: QC_AUDIT_LOG_FILE",
+    "value: /var/data/audit.log.jsonl",
+    "name: QC_AUDIT_CHAIN_DB",
+    "name: QC_APPROVALS_DB",
+    "name: QC_SPKI_LOG_FILE",
+    "value: /var/data/spki.jsonl",
 )
+
+require(
+    "helm/queen-califia/templates/api-pvc.yaml",
+    "kind: PersistentVolumeClaim",
+    "name: qc-api-state",
+    "ReadWriteOnce",
+    "storage: 10Gi",
+)
+
+require(
+    "k8s/api.yaml",
+    "replicas: 1",
+    "fsGroup: 10001",
+    "fsGroupChangePolicy: OnRootMismatch",
+    "name: api-state",
+    "mountPath: /var/data",
+    "claimName: qc-api-state",
+    "name: QC_DB_PATH",
+    "value: /var/data/queen.db",
+    "name: QC_EVOLUTION_DB",
+    "value: /var/data/qc_evolution.db",
+    "name: QC_MEMORY_BACKUP_DIR",
+    "value: /var/data/memory-backups",
+    "name: QC_THREAT_INTEL_DB",
+    "value: /var/data/qc_threat_intel.db",
+    "name: QC_API_KEYS_FILE",
+    "value: /var/data/keys.json",
+    "name: QC_AUDIT_LOG_FILE",
+    "value: /var/data/audit.log.jsonl",
+    "name: QC_AUDIT_CHAIN_DB",
+    "name: QC_APPROVALS_DB",
+    "name: QC_SPKI_LOG_FILE",
+    "value: /var/data/spki.jsonl",
+)
+
+require(
+    "k8s/api-pvc.yaml",
+    "kind: PersistentVolumeClaim",
+    "name: qc-api-state",
+    "ReadWriteOnce",
+    "storage: 10Gi",
+)
+
+# The worker's distributed result channel is Redis/Celery. Never attach the
+# single-writer API SQLite volume to a different pod while #72 remains open.
+for path in (
+    "helm/queen-califia/templates/worker-deployment.yaml",
+    "k8s/worker.yaml",
+):
+    reject(path, "api-state", "qc-api-state", "mountPath: /var/data")
 
 print("Container and Kubernetes runtime-isolation invariants verified.")
