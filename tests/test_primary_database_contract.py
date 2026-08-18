@@ -14,6 +14,7 @@ from core import database
 def _clear_database_env(monkeypatch):
     monkeypatch.delenv("QC_DATABASE_URL", raising=False)
     monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("QC_DB_PATH", raising=False)
 
 
 def test_sqlite_primary_contract_remains_default(monkeypatch, tmp_path: Path):
@@ -38,9 +39,11 @@ def test_sqlite_primary_contract_remains_default(monkeypatch, tmp_path: Path):
 
 def test_sqlite_primary_contract_rejects_untrusted_filesystem_path(monkeypatch):
     _clear_database_env(monkeypatch)
+    # Exercise the runtime branch rather than pytest's isolated tempfile mapper.
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
     forbidden = Path("/etc") / f"queen-califia-{uuid.uuid4().hex}.db"
 
-    with pytest.raises(ValueError, match="trusted storage roots"):
+    with pytest.raises(ValueError, match="not approved"):
         database.get_db(forbidden)
 
     assert not forbidden.exists()
@@ -72,8 +75,6 @@ def _postgres_url() -> str:
 def test_postgresql_migration_identity_and_concurrent_writes(monkeypatch, tmp_path: Path):
     url = _postgres_url()
 
-    # Create a real SQLite source with both static and dynamic primary-state
-    # tables, then migrate it into the fresh CI PostgreSQL service.
     _clear_database_env(monkeypatch)
     source_path = tmp_path / "migration-source.db"
     database.init_db(source_path)
@@ -91,8 +92,6 @@ def test_postgresql_migration_identity_and_concurrent_writes(monkeypatch, tmp_pa
     assert copied["telemetry_events"] == 1
     assert copied["qc_autonomy_lease"] == 1
 
-    # The source remains usable and unchanged because the migrator opens it
-    # read-only and commits only the PostgreSQL target transaction.
     with database.get_db(source_path) as source:
         source_count = source.execute(
             "SELECT COUNT(*) AS n FROM telemetry_events WHERE subject=?",
@@ -116,8 +115,6 @@ def test_postgresql_migration_identity_and_concurrent_writes(monkeypatch, tmp_pa
         ).fetchone()["n"]
     assert migrated_count == 1
 
-    # Identity-store inserts depend on cursor.lastrowid. Exercise that existing
-    # calling surface against PostgreSQL instead of rewriting route code here.
     from backend.modules.identity import store
 
     marker = f"pg-contract-{uuid.uuid4()}"
@@ -135,8 +132,6 @@ def test_postgresql_migration_identity_and_concurrent_writes(monkeypatch, tmp_pa
     promoted = store.promote_proposal_to_memory(tmp_path / "ignored.db", proposal["id"])
     assert promoted["status"] == "approved"
 
-    # Exercise the former SQLite-only auto-learning gate SQL. PostgreSQL uses a
-    # transaction-scoped advisory lock plus a normal UPSERT.
     with database.get_db(tmp_path / "ignored.db") as connection:
         connection.execute("BEGIN IMMEDIATE")
         connection.execute(
@@ -175,7 +170,6 @@ def test_postgresql_migration_identity_and_concurrent_writes(monkeypatch, tmp_pa
             "SELECT value FROM memories WHERE user_id='qc_identity' AND value=?",
             (marker,),
         ).fetchone()
-        # Clear the migrated lease before the fresh simultaneous-owner race.
         connection.execute("DELETE FROM qc_autonomy_lease WHERE lease_name='autonomy_loop'")
 
     assert count == 12
