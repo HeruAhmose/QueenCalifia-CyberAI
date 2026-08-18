@@ -73,7 +73,15 @@ DYNAMIC_TABLES = {
             id INTEGER PRIMARY KEY CHECK (id = 1),
             last_auto_at TEXT NOT NULL
         )
-    """
+    """,
+    "qc_autonomy_lease": """
+        CREATE TABLE IF NOT EXISTS qc_autonomy_lease (
+            lease_name TEXT PRIMARY KEY,
+            owner_id TEXT NOT NULL,
+            acquired_at DOUBLE PRECISION NOT NULL,
+            expires_at DOUBLE PRECISION NOT NULL
+        )
+    """,
 }
 
 
