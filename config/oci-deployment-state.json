@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "target": "oci-always-free",
+  "supported_platforms": [
+    "linux/arm64",
+    "linux/amd64"
+  ],
+  "default_platform": "linux/arm64",
+  "production_compose": "deploy/oci/docker-compose.oci.yml",
+  "state_root": "/srv/queen-califia",
+  "postgresql_major": 16,
+  "api_replicas": 1,
+  "celery_worker_enabled": true,
+  "redis_enabled": true,
+  "caddy_tls_enabled": true,
+  "runtime_authorized": false,
+  "runtime_authorization_gate": "/srv/queen-califia/app/cutover/OCI_RUNTIME_AUTHORIZED",
+  "ha_authorized": false,
+  "read_only_root_filesystem_authorized": false,
+  "legacy_storage_retirement_authorized": false,
+  "render_blueprint_retained": true,
+  "historical_sources": {
+    "render_live_scanner_qc_scans_db": {
+      "former_path": "/opt/render/project/src/backend/data/qc_scans.db",
+      "status": "unrecoverable-unverified",
+      "verified_absent": false,
+      "captured": false,
+      "reason": "Render workspace was suspended before the container-local source could be captured or verified absent.",
+      "policy": "Do not synthesize absence, do not delete related retained evidence, and revise status only if provider-backed recovery evidence becomes available."
+    }
+  }
+}

@@ -1,0 +1,134 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    platform: ${QC_PLATFORM:-linux/arm64}
+    profiles: ["state", "runtime"]
+    environment:
+      POSTGRES_USER: ${QC_POSTGRES_USER:-queen}
+      POSTGRES_PASSWORD: ${QC_POSTGRES_PASSWORD:?QC_POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${QC_POSTGRES_DB:-queen}
+    volumes:
+      - ${QC_OCI_STATE_ROOT:-/srv/queen-califia}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${QC_POSTGRES_USER:-queen} -d ${QC_POSTGRES_DB:-queen}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    platform: ${QC_PLATFORM:-linux/arm64}
+    profiles: ["state", "runtime"]
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - ${QC_OCI_STATE_ROOT:-/srv/queen-califia}/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    container_name: queen-califia-api
+    platform: ${QC_PLATFORM:-linux/arm64}
+    profiles: ["runtime"]
+    build:
+      context: ../..
+      dockerfile: deploy/oci/Dockerfile
+    env_file:
+      - ../../.env.oci
+    environment:
+      QC_PRODUCTION: "1"
+      QC_USE_CELERY: "1"
+      QC_REQUIRE_REDIS: "1"
+      QC_REDIS_URL: redis://redis:6379/0
+      QC_DATABASE_URL: postgresql://${QC_POSTGRES_USER:-queen}:${QC_POSTGRES_PASSWORD}@postgres:5432/${QC_POSTGRES_DB:-queen}
+      DATABASE_URL: postgresql://${QC_POSTGRES_USER:-queen}:${QC_POSTGRES_PASSWORD}@postgres:5432/${QC_POSTGRES_DB:-queen}
+      QC_OCI_RUNTIME_GATE: "1"
+      QC_OCI_RUNTIME_GATE_FILE: /var/lib/queen-califia/cutover/OCI_RUNTIME_AUTHORIZED
+      QC_API_KEYS_FILE: /var/lib/queen-califia/legacy/keys.json
+      QC_AUDIT_LOG_FILE: /var/lib/queen-califia/legacy/audit.log.jsonl
+      QC_SPKI_LOG_FILE: /var/lib/queen-califia/legacy/spki.jsonl
+      QC_MEMORY_BACKUP_DIR: /var/lib/queen-califia/legacy/memory-backups
+      QC_DENY_PUBLIC_TARGETS: ${QC_DENY_PUBLIC_TARGETS:-1}
+      QC_SCAN_ALLOWLIST: ${QC_SCAN_ALLOWLIST:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8}
+    volumes:
+      - ${QC_OCI_STATE_ROOT:-/srv/queen-califia}/app:/var/lib/queen-califia
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/readyz', timeout=3)"]
+      interval: 20s
+      timeout: 5s
+      retries: 8
+      start_period: 90s
+    restart: unless-stopped
+
+  worker:
+    container_name: queen-califia-worker
+    platform: ${QC_PLATFORM:-linux/arm64}
+    profiles: ["runtime"]
+    build:
+      context: ../..
+      dockerfile: deploy/oci/Dockerfile
+    command: ["celery", "-A", "celery_app.celery_app", "worker", "-l", "INFO", "--concurrency", "2", "-Q", "scans"]
+    env_file:
+      - ../../.env.oci
+    environment:
+      QC_PRODUCTION: "1"
+      QC_USE_CELERY: "1"
+      QC_REQUIRE_REDIS: "1"
+      QC_REDIS_URL: redis://redis:6379/0
+      QC_DATABASE_URL: postgresql://${QC_POSTGRES_USER:-queen}:${QC_POSTGRES_PASSWORD}@postgres:5432/${QC_POSTGRES_DB:-queen}
+      DATABASE_URL: postgresql://${QC_POSTGRES_USER:-queen}:${QC_POSTGRES_PASSWORD}@postgres:5432/${QC_POSTGRES_DB:-queen}
+      QC_OCI_RUNTIME_GATE: "1"
+      QC_OCI_RUNTIME_GATE_FILE: /var/lib/queen-califia/cutover/OCI_RUNTIME_AUTHORIZED
+      QC_DENY_PUBLIC_TARGETS: ${QC_DENY_PUBLIC_TARGETS:-1}
+      QC_SCAN_ALLOWLIST: ${QC_SCAN_ALLOWLIST:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8}
+    volumes:
+      - ${QC_OCI_STATE_ROOT:-/srv/queen-califia}/app:/var/lib/queen-califia:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    container_name: queen-califia-frontend
+    platform: ${QC_PLATFORM:-linux/arm64}
+    profiles: ["runtime"]
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_SAME_ORIGIN_API: "1"
+        VITE_API_URL: ""
+        VITE_QC_API_URL: ""
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    platform: ${QC_PLATFORM:-linux/arm64}
+    profiles: ["runtime"]
+    environment:
+      QC_DOMAIN: ${QC_DOMAIN:?QC_DOMAIN is required for runtime}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${QC_OCI_STATE_ROOT:-/srv/queen-califia}/caddy/data:/data
+      - ${QC_OCI_STATE_ROOT:-/srv/queen-califia}/caddy/config:/config
+    depends_on:
+      frontend:
+        condition: service_started
+    restart: unless-stopped
