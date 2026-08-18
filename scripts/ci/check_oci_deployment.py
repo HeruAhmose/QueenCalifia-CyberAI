@@ -72,6 +72,14 @@ for key in (
 state = json.loads(OCI_STATE.read_text(encoding="utf-8"))
 if state.get("target") != "oci-always-free":
     raise SystemExit("OCI deployment state target must be oci-always-free")
+if state.get("deployment_role") != "production-candidate":
+    raise SystemExit("OCI profile must be classified as production-candidate")
+if state.get("preferred_production_candidate") is not True:
+    raise SystemExit("OCI must remain the preferred free-tier production candidate")
+if state.get("production_eligible_by_provider_policy") is not True:
+    raise SystemExit("OCI provider-policy eligibility must remain explicitly recorded")
+if state.get("production_authorized") is not False:
+    raise SystemExit("production candidate status must not imply production authorization")
 if state.get("supported_platforms") != ["linux/arm64", "linux/amd64"]:
     raise SystemExit("OCI deployment must explicitly support arm64 and amd64")
 if state.get("api_replicas") != 1:
@@ -92,4 +100,4 @@ if not isinstance(render_loss, dict) or render_loss.get("status") != "unrecovera
 if render_loss.get("verified_absent") is not False or render_loss.get("captured") is not False:
     raise SystemExit("Render qc_scans.db must not be represented as captured or verified absent")
 
-print("OCI deployment guard verified: staged state, single API, PostgreSQL/Celery, runtime gate closed, HA gates closed.")
+print("OCI deployment guard verified: production candidate only, single API, PostgreSQL/Celery, runtime authorization closed, HA gates closed.")
