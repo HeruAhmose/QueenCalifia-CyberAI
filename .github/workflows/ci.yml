@@ -42,6 +42,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r ../scripts/bootstrap/requirements.txt pytest
 
+      - name: Production immutable image promotion guard
+        if: github.event_name == 'pull_request' && github.base_ref == 'production'
+        run: python scripts/ci/check_production_image_promotion.py
+
       - name: Python syntax check
         working-directory: backend
         run: |
