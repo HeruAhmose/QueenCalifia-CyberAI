@@ -34,10 +34,11 @@ REQUIRED_DISPOSITIONS = {
     "vulnerability",
     "live-scanner",
 }
-OPTIONAL_FILE_DISPOSITION_SOURCE = {
+ABSENCE_PROPAGATING_DISPOSITION_SOURCE = {
     "api-keys": "api-keys",
     "audit-log": "audit-log",
     "spki": "spki",
+    "live-scanner": "live-scanner-db",
 }
 FORBIDDEN_KEY_FRAGMENTS = (
     "password",
@@ -153,7 +154,7 @@ def _validate_dispositions(
         if kind not in REQUIRED_DISPOSITIONS:
             _fail(f"unrecognized disposition evidence: {kind}")
 
-        source_name = OPTIONAL_FILE_DISPOSITION_SOURCE.get(kind)
+        source_name = ABSENCE_PROPAGATING_DISPOSITION_SOURCE.get(kind)
         source_absent = bool(
             source_name and sources[source_name].get("status") == "verified-absent"
         )
