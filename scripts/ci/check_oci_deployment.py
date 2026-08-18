@@ -34,14 +34,12 @@ require(
     "QC_OCI_POSTGRES_PROVIDER: neon",
     "QC_DATABASE_CONNECTION_MODE: pooled",
     "QC_OCI_RUNTIME_GATE: \"1\"",
-    "80:80",
-    "443:443",
 )
 for forbidden in ("postgres:16-alpine", "redis:7-alpine", "redis://redis:6379", "container_name: queen-califia-postgres"):
     if forbidden in compose:
-        raise SystemExit(f"OCI production candidate must not embed local state authority: {forbidden}")
+        raise SystemExit(f"OCI fallback must not embed local state authority: {forbidden}")
 if "replicas:" in compose or "scale:" in compose:
-    raise SystemExit("OCI Compose must not introduce replica/scale settings while #72 is open")
+    raise SystemExit("OCI fallback must not introduce replica/scale settings while #72 is open")
 if "/opt/render/" in compose:
     raise SystemExit("OCI deployment must be independent from Render runtime paths")
 
@@ -65,40 +63,38 @@ require(BACKUP.read_text(encoding="utf-8"), "postgres:18-alpine", "QC_DATABASE_D
 require(RESTORE.read_text(encoding="utf-8"), "postgres:18-alpine", "QC_RESTORE_DATABASE_URL", "zero public base tables")
 
 topology = json.loads(TOPOLOGY.read_text(encoding="utf-8"))
-if topology.get("architecture_state") != "sqlite-single-writer":
-    raise SystemExit("#72 topology must remain sqlite-single-writer before production evidence closes")
 if topology.get("multi_replica_api_permitted") is not False:
-    raise SystemExit("OCI migration must not enable multi-replica API")
+    raise SystemExit("#72 topology must remain single-replica before production evidence closes")
 completion = topology.get("completion_gate", {})
 for key in ("read_only_root_filesystem_enabled", "multi_replica_api_enabled", "backup_restore_tested", "rolling_update_tested"):
     if completion.get(key) is not False:
-        raise SystemExit(f"OCI migration must not prematurely close topology gate: {key}")
+        raise SystemExit(f"OCI fallback must not prematurely close topology gate: {key}")
 
 state = json.loads(OCI_STATE.read_text(encoding="utf-8"))
-if state.get("target") != "oci-always-free" or state.get("deployment_role") != "production-candidate":
-    raise SystemExit("OCI profile must remain the production candidate")
-if state.get("preferred_production_candidate") is not True or state.get("production_authorized") is not False:
-    raise SystemExit("OCI candidacy must not imply production authorization")
+if state.get("target") != "oci-always-free" or state.get("deployment_role") != "historical-fallback":
+    raise SystemExit("OCI profile must be retained only as a historical fallback")
+if state.get("preferred_production_candidate") is not False:
+    raise SystemExit("OCI must not remain the preferred production candidate")
+if state.get("superseded_by") != "sovereign-local-edge":
+    raise SystemExit("OCI fallback must identify the Sovereign Local Edge successor")
+if state.get("production_authorized") is not False:
+    raise SystemExit("OCI fallback must remain unauthorized")
 app = state.get("application_host", {})
-if app.get("role") != "compute-edge-only" or app.get("provisioned") is not False:
-    raise SystemExit("OCI host must remain unprovisioned compute/edge only until provider evidence exists")
+if app.get("provisioned") is not False or app.get("instance_identity_verified") is not False:
+    raise SystemExit("OCI host must remain unprovisioned/unverified")
 if app.get("api_replicas") != 1 or app.get("worker_replicas") != 1:
-    raise SystemExit("OCI candidate must keep exactly one API and one worker")
+    raise SystemExit("OCI fallback must keep exactly one API and one worker")
 pg = state.get("postgresql", {})
 if pg.get("provider") != "neon" or pg.get("project_id") != "delicate-poetry-25758881" or pg.get("postgresql_major") != 18:
-    raise SystemExit("OCI candidate must use the verified isolated Neon PostgreSQL 18 authority")
-if pg.get("application_connection_mode") != "pooled" or pg.get("migration_and_pg_dump_connection_mode") != "direct" or pg.get("tls_required") is not True:
-    raise SystemExit("Neon pooled/direct TLS connection contract is invalid")
+    raise SystemExit("OCI fallback must retain the isolated Neon PostgreSQL 18 contract")
 queue = state.get("queue", {})
-if queue.get("protocol") != "rediss" or queue.get("tls_certificate_verification_required") is not True:
-    raise SystemExit("external queue must be TLS Redis-compatible with certificate verification")
 if queue.get("service_provisioned") is not False or queue.get("authority_verified") is not False:
-    raise SystemExit("queue must not be represented as provisioned/verified without provider evidence")
+    raise SystemExit("OCI fallback must not claim a provisioned queue")
 for key in ("runtime_authorized", "production_cutover_complete", "ha_authorized", "read_only_root_filesystem_authorized", "legacy_storage_retirement_authorized"):
     if state.get(key) is not False:
-        raise SystemExit(f"OCI deployment safety gate must remain false: {key}")
+        raise SystemExit(f"OCI fallback safety gate must remain false: {key}")
 loss = state.get("historical_sources", {}).get("render_live_scanner_qc_scans_db", {})
 if loss.get("status") != "unrecoverable-unverified" or loss.get("verified_absent") is not False or loss.get("captured") is not False:
     raise SystemExit("Render qc_scans.db evidence truth must remain unrecoverable-unverified")
 
-print("OCI deployment guard verified: compute/edge only, external Neon PG18 + TLS queue authority, runtime/cutover/HA gates closed")
+print("OCI deployment guard verified: historical fallback only; no provisioned authority; all production gates closed")
