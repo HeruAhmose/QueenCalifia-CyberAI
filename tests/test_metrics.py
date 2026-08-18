@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from core.metrics import require_metrics_bearer_token
@@ -34,3 +36,10 @@ def test_metrics_token_is_not_required_for_local_development(monkeypatch):
     monkeypatch.delenv("QC_METRICS_TOKEN", raising=False)
 
     assert require_metrics_bearer_token(production=False) is None
+
+
+def test_public_helm_ingress_does_not_publish_metrics():
+    ingress = Path("helm/queen-califia/templates/ingress.yaml").read_text(encoding="utf-8")
+
+    assert "- path: /metrics" not in ingress
+    assert "- path: /api" in ingress
