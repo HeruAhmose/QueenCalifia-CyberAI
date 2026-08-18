@@ -1,0 +1,17 @@
+[Unit]
+Description=Queen Califia Sovereign Edge health watchdog
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+Environment=QC_EDGE_REPO_ROOT=/opt/queen-califia
+ExecStart=/opt/queen-califia/scripts/edge/health-watchdog.sh
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/srv/queen-califia /run/docker.sock
+
+[Install]
+WantedBy=multi-user.target
