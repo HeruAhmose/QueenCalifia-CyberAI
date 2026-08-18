@@ -6,14 +6,14 @@ stdin modes (no caller-controlled path):
   audit-log  < audit.log.jsonl
   spki       < spki.jsonl
 
-SQLite modes use fixed staging paths only:
-  vulnerability -> /tmp/qc-vulnerability-legacy.db
-  live-scanner  -> /tmp/qc-live-scanner-legacy.db
+SQLite modes use repository-local, git-ignored staging only:
+  vulnerability -> .cutover-staging/qc-vulnerability-legacy.db
+  live-scanner  -> .cutover-staging/qc-live-scanner-legacy.db
 
-Every SQLite source is read-only. Every PostgreSQL target must be empty. Every
-copy is verified by row count and deterministic SHA-256 before commit. This
-script never deletes a source, changes deployment configuration, or authorizes
-HA/read-only-rootfs.
+Every SQLite source is a non-symlink regular file opened read-only. Every
+PostgreSQL target must be empty. Every copy is verified by row count and
+SHA-256 before commit. This script never deletes a source, changes deployment
+configuration, or authorizes HA/read-only-rootfs.
 """
 from __future__ import annotations
 
@@ -34,8 +34,9 @@ if str(ROOT) not in sys.path:
 
 from core.api_key_crypto import API_KEY_HASH_SCHEME, API_KEY_STORE_VERSION  # noqa: E402
 
-VULNERABILITY_STAGE = Path("/tmp/qc-vulnerability-legacy.db")
-LIVE_SCANNER_STAGE = Path("/tmp/qc-live-scanner-legacy.db")
+STAGING_ROOT = ROOT / ".cutover-staging"
+VULNERABILITY_STAGE = STAGING_ROOT / "qc-vulnerability-legacy.db"
+LIVE_SCANNER_STAGE = STAGING_ROOT / "qc-live-scanner-legacy.db"
 ZERO_HASH = "0" * 64
 
 
@@ -73,12 +74,25 @@ def _database_url() -> str:
     return url
 
 
-def _connect_sqlite_readonly(path: Path) -> sqlite3.Connection:
+def _approved_stage(path: Path) -> Path:
     if path not in {VULNERABILITY_STAGE, LIVE_SCANNER_STAGE}:
-        raise RuntimeError("legacy SQLite source path is not an approved staging path")
-    if not path.is_file():
-        raise RuntimeError(f"staged legacy SQLite source does not exist: {path}")
-    conn = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+        raise RuntimeError("legacy SQLite source is not an approved staging file")
+    if path.is_symlink():
+        raise RuntimeError(f"refusing symlinked staged SQLite source: {path}")
+    try:
+        resolved = path.resolve(strict=True)
+    except FileNotFoundError as exc:
+        raise RuntimeError(f"staged legacy SQLite source does not exist: {path}") from exc
+    if resolved.parent != STAGING_ROOT.resolve():
+        raise RuntimeError("staged SQLite source escaped the repository cutover directory")
+    if not resolved.is_file():
+        raise RuntimeError(f"staged legacy SQLite source is not a regular file: {path}")
+    return resolved
+
+
+def _connect_sqlite_readonly(path: Path) -> sqlite3.Connection:
+    resolved = _approved_stage(path)
+    conn = sqlite3.connect(f"file:{resolved.as_posix()}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA query_only=ON")
     return conn
@@ -175,9 +189,10 @@ def _read_stdin_text() -> tuple[str, str]:
     return raw, hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def _sha256_file(path: Path) -> str:
+def _sha256_stage(path: Path) -> str:
+    resolved = _approved_stage(path)
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
+    with resolved.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
@@ -199,15 +214,8 @@ def dispose_api_keys(url: str) -> dict[str, Any]:
         raise RuntimeError("API-key JSON must contain a keys list")
 
     columns = (
-        "key_hash",
-        "role",
-        "permissions_json",
-        "rate_limit",
-        "created_at",
-        "description",
-        "budget_capacity",
-        "budget_refill_per_minute",
-        "revoked",
+        "key_hash", "role", "permissions_json", "rate_limit", "created_at",
+        "description", "budget_capacity", "budget_refill_per_minute", "revoked",
     )
     rows: list[tuple[Any, ...]] = []
     seen: set[str] = set()
@@ -271,17 +279,19 @@ def dispose_api_keys(url: str) -> dict[str, Any]:
 def _validate_audit_records(raw: str, hmac_key: str) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     previous = ZERO_HASH
-    key = hmac_key.encode("utf-8")
+    secret = hmac_key.encode("utf-8")
     for line_number, line in enumerate(raw.splitlines(), start=1):
         if not line.strip():
             continue
         record = json.loads(line)
         if not isinstance(record, dict):
             raise RuntimeError(f"audit line {line_number} is not an object")
-        entry = {key: value for key, value in record.items() if key not in {"hash", "hmac"}}
+        entry = {
+            key: value for key, value in record.items() if key not in {"hash", "hmac"}
+        }
         expected_hash = hashlib.sha256(_canonical(entry).encode("utf-8")).hexdigest()
         expected_hmac = hmac.new(
-            key, (expected_hash + previous).encode("utf-8"), hashlib.sha256
+            secret, (expected_hash + previous).encode("utf-8"), hashlib.sha256
         ).hexdigest()
         if record.get("previous_hash") != previous:
             raise RuntimeError(f"audit chain predecessor mismatch at line {line_number}")
@@ -305,17 +315,8 @@ def dispose_audit_log(url: str) -> dict[str, Any]:
         )
     records = _validate_audit_records(raw, hmac_key)
     columns = (
-        "sequence",
-        "ts",
-        "request_id",
-        "action",
-        "source_ip",
-        "user_role",
-        "status_code",
-        "details_json",
-        "previous_hash",
-        "record_hash",
-        "record_hmac",
+        "sequence", "ts", "request_id", "action", "source_ip", "user_role",
+        "status_code", "details_json", "previous_hash", "record_hash", "record_hmac",
     )
     rows = [
         (
@@ -444,21 +445,12 @@ def dispose_spki(url: str) -> dict[str, Any]:
         target.close()
 
 
-def dispose_vulnerability_sqlite(
-    url: str, source_path: Path = VULNERABILITY_STAGE
-) -> dict[str, Any]:
-    source = _connect_sqlite_readonly(source_path)
+def dispose_vulnerability_sqlite(url: str) -> dict[str, Any]:
+    source = _connect_sqlite_readonly(VULNERABILITY_STAGE)
     target = _connect_pg(url)
     columns = (
-        "scan_id",
-        "target",
-        "scan_type",
-        "status",
-        "created_at",
-        "started_at",
-        "completed_at",
-        "error",
-        "result_json",
+        "scan_id", "target", "scan_type", "status", "created_at", "started_at",
+        "completed_at", "error", "result_json",
     )
     try:
         if "qc_vuln_scan_jobs" not in _source_tables(source):
@@ -504,8 +496,8 @@ def dispose_vulnerability_sqlite(
             )
         return {
             "kind": "vulnerability",
-            "source_path": str(source_path),
-            "source_sha256": _sha256_file(source_path),
+            "source_path": str(VULNERABILITY_STAGE.relative_to(ROOT)),
+            "source_sha256": _sha256_stage(VULNERABILITY_STAGE),
             "target": verified,
         }
     finally:
@@ -513,10 +505,8 @@ def dispose_vulnerability_sqlite(
         target.close()
 
 
-def dispose_live_scanner_sqlite(
-    url: str, source_path: Path = LIVE_SCANNER_STAGE
-) -> dict[str, Any]:
-    source = _connect_sqlite_readonly(source_path)
+def dispose_live_scanner_sqlite(url: str) -> dict[str, Any]:
+    source = _connect_sqlite_readonly(LIVE_SCANNER_STAGE)
     target = _connect_pg(url)
     try:
         missing = sorted(
@@ -649,8 +639,8 @@ def dispose_live_scanner_sqlite(
             }
         return {
             "kind": "live-scanner",
-            "source_path": str(source_path),
-            "source_sha256": _sha256_file(source_path),
+            "source_path": str(LIVE_SCANNER_STAGE.relative_to(ROOT)),
+            "source_sha256": _sha256_stage(LIVE_SCANNER_STAGE),
             "target": verified,
         }
     finally:
