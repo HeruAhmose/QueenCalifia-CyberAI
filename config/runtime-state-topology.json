@@ -13,13 +13,43 @@
     "postgresql_capable": true,
     "production_cutover_complete": false
   },
+  "runtime_state_migration_contract": {
+    "migration_tool": "scripts/migrate_runtime_state_to_postgres.py",
+    "restore_verification": "scripts/migrate_runtime_state_to_postgres.py --verify-manifest",
+    "source_authorities": [
+      "primary-runtime-db",
+      "sovereignty-audit-chain-db",
+      "sovereignty-approvals-db",
+      "incident-response-db",
+      "auto-remediation-db",
+      "evolution-db",
+      "threat-intelligence-db"
+    ],
+    "unresolved_writer_blockers": [
+      "vulnerability-scan-job-db",
+      "live-scanner-db"
+    ],
+    "verification": [
+      "read-only SQLite source inventory",
+      "source semantic invariants",
+      "empty PostgreSQL target authority",
+      "transactional copy",
+      "serial sequence reset",
+      "row-count verification",
+      "deterministic table content SHA-256",
+      "manifest-based PostgreSQL restore verification"
+    ],
+    "postgresql_capable": true,
+    "production_cutover_complete": false,
+    "note": "The orchestrator can stage and verify recognized authoritative SQLite state in PostgreSQL. It refuses strict cutover readiness while unresolved SQLite writers, file-backed API state, or incomplete topology gates remain. Successful staging migration does not itself authorize HA, read-only rootfs, or production cutover."
+  },
   "security_engine_database_contract": {
     "runtime_adapter_module": "engines/runtime_state.py",
     "production_composition": "app.py",
     "postgresql_environment": ["QC_DATABASE_URL", "DATABASE_URL"],
     "postgresql_capable": true,
     "production_cutover_complete": false,
-    "note": "Incident response, remediation, evolution, and threat-intelligence runtime composition can use PostgreSQL with replica-aware mutation controls. Historical SQLite migration, backup/restore validation, rolling-update validation, and remaining writable-path removal are still required before HA."
+    "note": "Incident response, remediation, evolution, and threat-intelligence runtime composition can use PostgreSQL with replica-aware mutation controls. Historical state now has a verified staging migration path, but production data execution, backup/restore evidence, rolling-update validation, remaining writable-path removal, and explicit cutover are still required before HA."
   },
   "sqlite_connectors": [
     {
@@ -38,7 +68,7 @@
       "authoritative": false,
       "migration_required": true,
       "environment": ["QC_DB_PATH"],
-      "note": "When Celery is enabled, distributed task results are authoritative in the Redis-backed Celery result backend; local scan-job SQLite remains a runtime writer and must still be removed or explicitly scoped before read-only/multi-replica completion."
+      "note": "When Celery is enabled, distributed task results are authoritative in the Redis-backed Celery result backend; local scan-job SQLite remains a runtime writer and is an explicit runtime-state migration cutover blocker until removed or explicitly scoped."
     },
     {
       "path": "engines/incident_response.py",
@@ -50,7 +80,7 @@
       "postgresql_capable": true,
       "production_cutover_complete": false,
       "environment": ["QC_DB_PATH", "QC_DATABASE_URL", "DATABASE_URL"],
-      "note": "PostgreSQL mode refreshes DB authority and serializes per-incident mutations across replicas; SQLite remains the local/single-writer fallback until migration and production validation are complete."
+      "note": "PostgreSQL mode refreshes DB authority and serializes per-incident mutations across replicas; historical SQLite incidents can be staged with attack-chain identity materialized and verified, but production cutover remains incomplete."
     },
     {
       "path": "engines/auto_remediation.py",
@@ -62,7 +92,7 @@
       "postgresql_capable": true,
       "production_cutover_complete": false,
       "environment": ["QC_DB_PATH", "QC_DATABASE_URL", "DATABASE_URL"],
-      "note": "PostgreSQL mode claims each plan under an advisory lock before execution so replicas cannot execute the same remediation plan concurrently."
+      "note": "PostgreSQL mode claims each plan under an advisory lock before execution so replicas cannot execute the same remediation plan concurrently; historical plan/action state now has a verified staging migration path."
     },
     {
       "path": "engines/evolution_engine.py",
@@ -74,7 +104,7 @@
       "postgresql_capable": true,
       "production_cutover_complete": false,
       "environment": ["QC_EVOLUTION_DB", "QC_DATABASE_URL", "DATABASE_URL"],
-      "note": "PostgreSQL mode provides exactly-once completed-scan learning across replicas. SQLite file backups are not represented as PostgreSQL backups; external backup/restore validation remains an open gate."
+      "note": "PostgreSQL mode provides exactly-once completed-scan learning across replicas and historical evolution state now has a verified staging migration path. SQLite file backups are not represented as PostgreSQL backups; external backup/restore validation remains an open gate."
     },
     {
       "path": "engines/threat_intel_auto.py",
@@ -86,7 +116,7 @@
       "postgresql_capable": true,
       "production_cutover_complete": false,
       "environment": ["QC_THREAT_INTEL_DB", "QC_EVOLUTION_DB", "QC_DATABASE_URL", "DATABASE_URL"],
-      "note": "PostgreSQL mode serializes scheduler lease acquisition and per-indicator merge updates across replicas; SQLite remains supported until historical state migration and production validation are complete."
+      "note": "PostgreSQL mode serializes scheduler lease acquisition and per-indicator merge updates across replicas; historical threat-intelligence state now has a verified staging migration path, but production cutover and restore evidence remain incomplete."
     },
     {
       "path": "engines/live_scanner.py",
@@ -94,7 +124,8 @@
       "scope": "optional-runtime",
       "authoritative": false,
       "migration_required": true,
-      "environment": []
+      "environment": [],
+      "note": "The live scanner still writes scans, baselines, and findings_log to local SQLite. Those tables are explicitly recognized as cutover blockers and are not silently migrated or abandoned."
     },
     {
       "path": "sovereignty/audit_chain.py",
@@ -105,7 +136,7 @@
       "postgresql_capable": true,
       "production_cutover_complete": false,
       "environment": ["QC_AUDIT_CHAIN_DB", "QC_DB_PATH", "QC_DATABASE_URL", "DATABASE_URL"],
-      "note": "PostgreSQL mode serializes append sequence and predecessor state across replicas; SQLite remains supported until migration and production validation are complete."
+      "note": "PostgreSQL mode serializes append sequence and predecessor state across replicas; migration verifies the historical chain's sequence, record hashes, predecessor links, and chain hashes before staging it in PostgreSQL. Production cutover remains incomplete."
     },
     {
       "path": "sovereignty/approvals.py",
@@ -116,7 +147,7 @@
       "postgresql_capable": true,
       "production_cutover_complete": false,
       "environment": ["QC_APPROVALS_DB", "QC_DB_PATH", "QC_DATABASE_URL", "DATABASE_URL"],
-      "note": "PostgreSQL mode provides row-locked approval mutations and atomic nonce replay protection across replicas; SQLite remains supported until migration and production validation are complete."
+      "note": "PostgreSQL mode provides row-locked approval mutations and atomic nonce replay protection across replicas; migration validates persisted approval identity before staging records/nonces in PostgreSQL. Production cutover remains incomplete."
     },
     {
       "path": "cli.py",
