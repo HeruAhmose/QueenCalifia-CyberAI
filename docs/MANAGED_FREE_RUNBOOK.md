@@ -1,15 +1,18 @@
-# Managed Free Deployment Runbook
+# Managed Free Staging Runbook
 
-This is the preferred staged replacement target for the suspended Render deployment. It uses external managed state and deliberately keeps production authorization closed until real cutover evidence is reviewed.
+This profile is retained for **staging and evaluation only**. Northflank's current Developer Sandbox documentation explicitly says the free tier should not be used for production applications. Therefore this profile must not be treated as the preferred production target or used to close any production cutover gate.
+
+Official provider policy reference (verified 2026-08-18):
+- Northflank pricing documentation: https://northflank.com/docs/v1/application/billing/pricing-on-northflank
 
 ## Target topology
 
-- Northflank Developer Sandbox: one API service and one Celery worker service.
+- Northflank Developer Sandbox: one API service and one Celery worker service, staging/evaluation only.
 - Neon: isolated `QueenCalifia-CyberAI` PostgreSQL project, application traffic through the pooled TLS endpoint.
-- Aiven Valkey Free: Redis-compatible TLS queue/result backend for Celery.
+- Aiven Valkey Free: Redis-compatible TLS queue/result backend for Celery. No production SLA is assumed by this profile.
 - Existing static frontend hosting remains independent and is not migrated by this profile.
 
-The OCI and Render deployment files are retained as historical/alternative deployment context. This profile does not authorize deleting them.
+The OCI and Render deployment files remain retained. The OCI profile is the safer current free-tier production candidate because Oracle documents Always Free compute for deploying applications, but it still remains fail-closed until real production evidence is complete.
 
 ## Current evidence state
 
@@ -17,15 +20,15 @@ The historical Render live-scanner database formerly expected at `/opt/render/pr
 
 ## 1. Database
 
-Use only the isolated Neon project named `QueenCalifia-CyberAI`. Do not reuse TechBridge or Peoples Portfolio databases.
+Use only the isolated Neon project named `QueenCalifia-CyberAI`. Do not reuse unrelated databases.
 
-Application services must use Neon's pooled endpoint with `sslmode=require` in both `QC_DATABASE_URL` and `DATABASE_URL`. Migration, `pg_dump`, restore verification, and whole-database evidence should use a direct Neon endpoint rather than the pooler when the PostgreSQL operation requires session-level behavior.
+Application services must use Neon's pooled endpoint with `sslmode=require` in both `QC_DATABASE_URL` and `DATABASE_URL`. Migration, `pg_dump`, restore verification, and whole-database evidence should use a direct Neon endpoint when session-level behavior is required.
 
-Do not commit the connection URI. Store it in the application host's secret environment.
+Do not commit the connection URI. Store it only in provider secret storage.
 
 ## 2. Queue
 
-Create a free Aiven Valkey service and obtain its TLS Redis-compatible URI. Convert/configure the Celery URI as `rediss://...` and append `ssl_cert_reqs=required` if the provider URI does not already carry Celery's TLS verification parameter.
+For staging, create an Aiven Valkey Free service and obtain its TLS Redis-compatible URI. Configure Celery with `rediss://...` and `ssl_cert_reqs=required`.
 
 Use the exact same TLS URI for:
 
@@ -35,18 +38,18 @@ Use the exact same TLS URI for:
 
 The managed runtime gate refuses plaintext `redis://`, certificate verification weaker than `required`, or broker/backend URLs that diverge from `QC_REDIS_URL`.
 
-Upstash remains protocol-compatible, but its command-metered free tier is not the preferred always-on Celery broker for this profile.
+Do not infer production availability, durability, or SLA guarantees from a successful free-tier staging test.
 
-## 3. Northflank services
+## 3. Northflank staging services
 
-Create exactly two services from this GitHub repository using `deploy/managed/Dockerfile`.
+Create exactly two services from this GitHub repository using `deploy/managed/Dockerfile` only for staging/evaluation.
 
 ### API
 
 - service name: `queen-califia-api`
 - instances: exactly 1
 - internal port: 5000
-- public HTTP/S: enabled only after staged validation
+- public HTTP/S: staging only
 - `QC_SERVICE_ROLE=api`
 - liveness: `/healthz`
 - readiness: `/readyz`
@@ -76,7 +79,7 @@ QC_ALLOW_INSECURE_BOOTSTRAP=0
 QC_DENY_PUBLIC_TARGETS=1
 ```
 
-Keep `QC_MANAGED_RUNTIME_AUTHORIZED=NOT_AUTHORIZED` during staging. The containers are expected to fail closed while this value is not `AUTHORIZED`.
+Keep `QC_MANAGED_RUNTIME_AUTHORIZED=NOT_AUTHORIZED` unless running an explicitly bounded staging authorization test. A staging authorization is not production authorization and must not change repository production-completion flags.
 
 ## 5. Secret environment
 
@@ -91,43 +94,31 @@ Provision provider secrets, never repository variables containing credentials:
 - `QC_AUDIT_HMAC_KEY`
 - `QC_METRICS_TOKEN`
 
-Retain any additional LLM/market/provider keys required by application features as secrets.
+Retain any additional application provider keys as secrets.
 
-## 6. Migration and evidence
+## 6. Evidence boundary
 
-Before runtime authorization:
+This profile can validate application compatibility with Neon PostgreSQL 18 and a TLS Redis-compatible Celery queue. It cannot by itself prove production cutover readiness.
+
+Before any real production authorization on a production-eligible host:
 
 1. Inventory every actually recoverable historical source.
-2. Run the existing SQLite/file migration and disposition tools only against authentic recovered evidence.
-3. Verify the Neon target was empty before import where required by the migration contract.
+2. Run existing SQLite/file migration and disposition tools only against authentic recovered evidence.
+3. Verify the real production PostgreSQL target was empty before import where required.
 4. Generate the whole PostgreSQL database manifest.
-5. Produce a PostgreSQL dump from the real managed target.
+5. Produce a PostgreSQL dump from the real production target.
 6. Restore into a separate verification database/branch and require manifest equality.
-7. Verify PostgreSQL authority and Celery/Valkey task completion.
+7. Verify PostgreSQL authority and Celery/queue task completion.
 8. Verify legacy production writers are disabled.
 9. Preserve the `unrecoverable-unverified` Render scanner status unless provider-backed recovery evidence appears.
+10. Run restart/redeploy persistence and health/readiness probes on the actual production host.
 
-CI compatibility evidence is not production-data migration evidence.
+CI and staging compatibility evidence are not production-data migration evidence.
 
-## 7. Authorization
+## 7. Production routing
 
-Only after the evidence above is reviewed should both services receive:
-
-```text
-QC_MANAGED_RUNTIME_AUTHORIZED=AUTHORIZED
-```
-
-That value authorizes only this single-API/single-worker managed runtime. It does not authorize HA, autoscaling, read-only-rootfs conversion, or legacy evidence deletion.
-
-## 8. Cutover
-
-After authorized services pass `/healthz`, `/readyz`, authenticated API behavior, PostgreSQL writes, Celery task completion, scanner writes, and restart/redeploy persistence checks:
-
-- point the existing frontend API configuration to the managed API URL;
-- update the explicit CORS allowlist if a new browser origin is introduced;
-- record immutable deploy/git/provider identities in the production evidence record;
-- keep issue #72 open until all existing completion gates are actually satisfied.
+Do **not** point the production frontend at the Northflank Developer Sandbox. Use a production-eligible deployment target and keep issue #72 open until all existing completion gates are actually satisfied.
 
 ## Rollback
 
-If validation fails, set `QC_MANAGED_RUNTIME_AUTHORIZED=NOT_AUTHORIZED` or stop the application services. Do not delete the Neon project, Valkey service, recovered historical artifacts, manifests, dumps, or evidence while investigating.
+If staging validation fails, set `QC_MANAGED_RUNTIME_AUTHORIZED=NOT_AUTHORIZED` or stop the staging services. Do not delete the Neon project, queue evidence, recovered historical artifacts, manifests, dumps, or evidence while investigating.
