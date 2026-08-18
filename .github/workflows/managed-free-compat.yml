@@ -1,0 +1,60 @@
+name: managed-free-compat
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: managed-free-compat-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  managed-free-compat:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: queen
+          POSTGRES_PASSWORD: queen-ci
+          POSTGRES_DB: queen_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U queen -d queen_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt -r scripts/bootstrap/requirements.txt pytest
+
+      - name: Managed deployment invariants
+        run: |
+          python scripts/ci/check_managed_free_deployment.py
+          python -m pytest -q tests/test_managed_runtime_gate.py tests/test_celery_redis_compat.py
+
+      - name: PostgreSQL 18 runtime compatibility
+        env:
+          QC_TEST_POSTGRES_URL: postgresql://queen:queen-ci@127.0.0.1:5432/queen_ci
+        run: |
+          python -m pytest -q \
+            tests/test_primary_database_contract.py \
+            tests/test_sovereignty_postgres_state.py \
+            tests/test_security_engine_postgres_state.py \
+            tests/test_externalized_scanner_state.py \
+            tests/test_externalized_gateway_artifacts.py
