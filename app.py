@@ -6,17 +6,7 @@ Production notes (defense-oriented defaults):
 - Keep API replicas at one until the explicit HA completion gate is satisfied.
 - Secrets MUST be injected via environment variables or a secret manager.
 - Production async vulnerability jobs use Celery/Redis authority.
-- Production live-scanner persistence requires PostgreSQL authority.
-
-Environment:
-- QC_PORT / QC_HOST
-- QC_PRODUCTION=1 (enables stricter headers/HSTS behavior)
-- QC_API_KEYS_FILE (JSON) or QC_API_KEYS_JSON (JSON string)
-- QC_API_KEY_PEPPER (recommended) and QC_AUDIT_HMAC_KEY (recommended)
-- QC_SCAN_ALLOWLIST (comma-separated CIDRs, e.g. "10.0.0.0/8,192.168.0.0/16")
-- QC_THREAT_INTEL_AUTO_SYNC / QC_PRODUCTION — threat-feed sync defaults on in production when unset
-- QC_AUTONOMY_* — background identity learning + optional 127.0.0.1 quick scans (core/autonomy_loop.py)
-- QC_AUTO_LEARNING_INTERVAL_MINUTES — throttle for biomimetic identity cycle
+- Production live-scanner, API-key, and request-audit state require PostgreSQL.
 """
 
 from __future__ import annotations
@@ -27,10 +17,14 @@ import logging
 import os
 import sys
 
-from core.logging_setup import configure_logging
 from api.gateway import create_security_api, SecurityConfig
+from core.autonomy_loop import start_autonomy_loop
 from core.cors_boundary import CorsOriginBoundaryMiddleware
+from core.database import database_backend
+from core.externalized_artifacts import PostgresAPIKeyStore, PostgresAuditLog
+from core.logging_setup import configure_logging
 from core.tamerian_mesh import TamerianSecurityMesh
+from engines.advanced_telemetry import AdvancedTelemetry
 from engines.externalized_scanners import build_live_scanner, build_vulnerability_engine
 from engines.runtime_state import (
     build_auto_remediation,
@@ -39,12 +33,9 @@ from engines.runtime_state import (
     build_threat_intel_engine,
 )
 from engines.zero_day_predictor import ZeroDayPredictor
-from engines.advanced_telemetry import AdvancedTelemetry
-from core.autonomy_loop import start_autonomy_loop
 
 configure_logging()
 logger = logging.getLogger("queencalifia")
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -63,17 +54,15 @@ def _parse_origins(origins_str: str) -> list[str]:
     return [o.strip() for o in origins_str.split(",") if o.strip()]
 
 
-def _install_gateway_live_scanner_factory() -> None:
-    """Route the gateway's legacy constructor call through the backend selector.
-
-    The gateway historically imports ``LiveScanner`` inside its factory. Keeping
-    that public surface stable avoids a broad route rewrite while production
-    composition replaces only the constructor with a backend-aware factory.
-    The factory itself retains the original class for local/dev fallback.
-    """
+def _install_gateway_external_state_factories() -> None:
+    """Replace legacy gateway constructors only when shared authority is active."""
+    import api.gateway as gateway_module
     import engines.live_scanner as live_scanner_module
 
     live_scanner_module.LiveScanner = build_live_scanner  # type: ignore[assignment]
+    if database_backend() == "postgresql":
+        gateway_module.APIKeyStore = PostgresAPIKeyStore  # type: ignore[assignment]
+        gateway_module.AuditLog = PostgresAuditLog  # type: ignore[assignment]
 
 
 def build_system(no_auth: bool, origins: str) -> dict:
@@ -102,19 +91,18 @@ def build_system(no_auth: bool, origins: str) -> dict:
     except Exception:
         threat_intel = None
 
-    predictor_config = {
-        "anomaly_z_threshold": float(os.environ.get("QC_ANOMALY_Z", 3.0)),
-    }
-    zero_day_predictor = ZeroDayPredictor(config=predictor_config)
-
-    telemetry_config = {
-        "dns_qps_threshold": int(os.environ.get("QC_DNS_QPS_THRESHOLD", 50)),
-        "injection_syscall_threshold": int(os.environ.get("QC_INJECTION_THRESHOLD", 10)),
-        "blast_radius_threshold": int(os.environ.get("QC_BLAST_THRESHOLD", 20)),
-        "off_hours_start": int(os.environ.get("QC_OFF_HOURS_START", 22)),
-        "off_hours_end": int(os.environ.get("QC_OFF_HOURS_END", 5)),
-    }
-    advanced_telemetry = AdvancedTelemetry(config=telemetry_config)
+    zero_day_predictor = ZeroDayPredictor(
+        config={"anomaly_z_threshold": float(os.environ.get("QC_ANOMALY_Z", 3.0))}
+    )
+    advanced_telemetry = AdvancedTelemetry(
+        config={
+            "dns_qps_threshold": int(os.environ.get("QC_DNS_QPS_THRESHOLD", 50)),
+            "injection_syscall_threshold": int(os.environ.get("QC_INJECTION_THRESHOLD", 10)),
+            "blast_radius_threshold": int(os.environ.get("QC_BLAST_THRESHOLD", 20)),
+            "off_hours_start": int(os.environ.get("QC_OFF_HOURS_START", 22)),
+            "off_hours_end": int(os.environ.get("QC_OFF_HOURS_END", 5)),
+        }
+    )
 
     def _probe(fn, name: str) -> dict:
         try:
@@ -262,9 +250,7 @@ def build_system(no_auth: bool, origins: str) -> dict:
         enforce_https=os.environ.get("QC_ENFORCE_HTTPS", "0") == "1",
     )
 
-    # The gateway retains its historical internal LiveScanner constructor; make
-    # that constructor backend-aware before the API factory executes.
-    _install_gateway_live_scanner_factory()
+    _install_gateway_external_state_factories()
 
     app = create_security_api(
         security_mesh=security_mesh,
@@ -329,36 +315,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Queen Califia Quantum CyberAI — Defense-Grade Cybersecurity Platform"
     )
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=int(os.environ.get("QC_PORT", 5000)),
-        help="API port (default: 5000)",
-    )
-    parser.add_argument(
-        "--host",
-        default=os.environ.get("QC_HOST", "0.0.0.0"),
-        help="Bind address (default: 0.0.0.0)",
-    )
-    parser.add_argument(
-        "--no-auth",
-        action="store_true",
-        help="Disable API key authentication (development only!)",
-    )
-    parser.add_argument(
-        "--origins",
-        default=os.environ.get("QC_CORS_ORIGINS", ""),
-        help="Comma-separated CORS origins",
-    )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Enable debug mode (NEVER in production!)",
-    )
+    parser.add_argument("--port", type=int, default=int(os.environ.get("QC_PORT", 5000)), help="API port (default: 5000)")
+    parser.add_argument("--host", default=os.environ.get("QC_HOST", "0.0.0.0"), help="Bind address (default: 0.0.0.0)")
+    parser.add_argument("--no-auth", action="store_true", help="Disable API key authentication (development only!)")
+    parser.add_argument("--origins", default=os.environ.get("QC_CORS_ORIGINS", ""), help="Comma-separated CORS origins")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode (NEVER in production!)")
     args = parser.parse_args()
 
     _print_banner()
-
     if args.no_auth:
         logger.warning("⚠️  API AUTHENTICATION DISABLED — DEVELOPMENT ONLY")
     if args.debug:
@@ -366,7 +330,6 @@ def main() -> None:
 
     system = build_system(no_auth=args.no_auth, origins=args.origins)
     wsgi_app = system["app"]
-
     logger.info("🚀 Queen Califia CyberAI starting (dev server)")
     print(f"* Running on http://{args.host}:{args.port}")
     wsgi_app.run(host=args.host, port=args.port, debug=False, use_reloader=False)
