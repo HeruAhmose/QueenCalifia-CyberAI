@@ -86,8 +86,6 @@ THREAT_TABLES = (
     "threat_scheduler_lease",
 )
 
-# These are intentionally NOT migration targets. Their runtime writers must be
-# removed/externalized/scoped before an HA cutover can be declared safe.
 UNRESOLVED_WRITER_TABLES = {
     "qc_vuln_scan_jobs": "vulnerability-scan-job-db",
     "scans": "live-scanner-db",
@@ -330,10 +328,6 @@ def _incident_row(row: Mapping[str, Any]) -> tuple[Any, ...]:
 
 def _build_specs() -> dict[str, TableSpec]:
     specs: dict[str, TableSpec] = {}
-
-    # Primary tables are introspected because their canonical schema already
-    # exists in core.database. Their key ordering is only needed for digesting;
-    # SQLite rowid is a deterministic fallback when no declared PK is present.
     for table in set(PRIMARY_TABLES) | set(DYNAMIC_TABLES):
         specs[table] = TableSpec((), ())
 
@@ -417,7 +411,7 @@ def _connect_postgres(url: str):
     try:
         import psycopg
         from psycopg.rows import dict_row
-    except ImportError as exc:  # pragma: no cover
+    except ImportError as exc:
         raise RuntimeError("psycopg is required; install backend/requirements.txt") from exc
     return psycopg.connect(url, row_factory=dict_row)
 
@@ -437,19 +431,11 @@ def _primary_spec(conn: sqlite3.Connection, table: str) -> TableSpec:
     if not columns:
         raise RuntimeError(f"source table {table} has no columns")
     info = conn.execute(f"PRAGMA table_info({_quote_identifier(table)})").fetchall()
-    keys = tuple(str(row[1]) for row in sorted(info, key=lambda r: int(r[5])) if int(row_or_zero(r, 5)) > 0)
+    pk_rows = sorted((row for row in info if int(row[5] or 0) > 0), key=lambda row: int(row[5]))
+    keys = tuple(str(row[1]) for row in pk_rows)
     if not keys:
-        # Every canonical primary table currently has a stable PK/id. Refuse
-        # future schema drift rather than digesting in unspecified row order.
         raise RuntimeError(f"source table {table} has no declared primary key; update migration contract")
     return TableSpec(columns, keys, _identity(columns))
-
-
-def row_or_zero(row: Sequence[Any], index: int) -> Any:
-    try:
-        return row[index]
-    except Exception:
-        return 0
 
 
 def _table_spec(conn: sqlite3.Connection, table: str) -> TableSpec:
@@ -459,7 +445,6 @@ def _table_spec(conn: sqlite3.Connection, table: str) -> TableSpec:
     source_columns = set(_source_columns(conn, table))
     required = set(spec.columns)
     if table == "qc_ir_incidents":
-        # SQLite does not have the materialized attack_chain_id column.
         required.discard("attack_chain_id")
     missing = sorted(required - source_columns)
     if missing:
@@ -473,8 +458,6 @@ def _normalize(value: Any) -> Any:
     if isinstance(value, bytes):
         return value.hex()
     if isinstance(value, float):
-        # SQLite REAL and PostgreSQL DOUBLE PRECISION round-trip through Python;
-        # repr supplies a deterministic exact-enough canonical representation.
         return {"__float__": repr(value)}
     return value
 
@@ -528,9 +511,7 @@ def _validate_semantic_invariants(conn: sqlite3.Connection, tables: set[str]) ->
         for row in conn.execute("SELECT plan_id, plan_json FROM qc_remediation_plans").fetchall():
             payload = json.loads(row["plan_json"])
             if str(payload.get("plan_id") or "") != str(row["plan_id"]):
-                raise RuntimeError(
-                    f"qc_remediation_plans identity mismatch for {row['plan_id']!r}"
-                )
+                raise RuntimeError(f"qc_remediation_plans identity mismatch for {row['plan_id']!r}")
 
     if "qc_audit_chain" in tables:
         rows = conn.execute(
@@ -570,10 +551,7 @@ def _dedupe_sources(sources: Sequence[SourceSpec]) -> list[SourceSpec]:
     for source in sources:
         resolved = source.path.expanduser().resolve()
         by_path.setdefault(resolved, []).append(source.role)
-    return [
-        SourceSpec(role="+".join(sorted(roles)), path=path)
-        for path, roles in by_path.items()
-    ]
+    return [SourceSpec(role="+".join(sorted(roles)), path=path) for path, roles in by_path.items()]
 
 
 def _inventory_sources(sources: Sequence[SourceSpec]) -> tuple[dict[str, tuple[SourceSpec, sqlite3.Connection, TableSpec]], list[dict[str, Any]], list[str]]:
@@ -661,9 +639,7 @@ def _copy_table(target, table: str, spec: TableSpec, rows: Sequence[Sequence[Any
 
 
 def _reset_sequence(target, table: str, column: str) -> None:
-    row = target.execute(
-        "SELECT pg_get_serial_sequence(%s, %s) AS seq", (table, column)
-    ).fetchone()
+    row = target.execute("SELECT pg_get_serial_sequence(%s, %s) AS seq", (table, column)).fetchone()
     sequence = row["seq"] if row else None
     if not sequence:
         return
@@ -682,9 +658,7 @@ def _target_rows(target, table: str, spec: TableSpec) -> list[tuple[Any, ...]]:
     columns = spec.columns
     column_sql = ", ".join(f'"{column}"' for column in columns)
     key_sql = ", ".join(f'"{column}"' for column in spec.key_columns)
-    rows = target.execute(
-        f'SELECT {column_sql} FROM "{table}" ORDER BY {key_sql}'
-    ).fetchall()
+    rows = target.execute(f'SELECT {column_sql} FROM "{table}" ORDER BY {key_sql}').fetchall()
     return [tuple(row[column] for column in columns) for row in rows]
 
 
@@ -727,11 +701,7 @@ def migrate_runtime_state(
     target = None
     try:
         ownership, source_meta, source_blockers = _inventory_sources(sources)
-        topology_blockers = (
-            _topology_cutover_blockers(topology_path)
-            if topology_path is not None
-            else []
-        )
+        topology_blockers = _topology_cutover_blockers(topology_path) if topology_path is not None else []
         blockers = source_blockers + topology_blockers
         if require_cutover_ready and blockers:
             raise RuntimeError(
@@ -757,8 +727,7 @@ def migrate_runtime_state(
             _assert_target_empty(target, ownership)
 
             for table in sorted(ownership):
-                spec = ownership[table][2]
-                _copy_table(target, table, spec, source_rows_by_table[table])
+                _copy_table(target, table, ownership[table][2], source_rows_by_table[table])
 
             for table, column in SERIAL_COLUMNS.items():
                 if table in ownership:
@@ -806,9 +775,7 @@ def verify_postgres_manifest(database_url: str, manifest: Mapping[str, Any]) -> 
     try:
         verified: dict[str, Any] = {}
         for table, expected in sorted(manifest.get("tables", {}).items()):
-            columns = tuple(expected["columns"])
-            keys = tuple(expected["key_columns"])
-            spec = TableSpec(columns, keys)
+            spec = TableSpec(tuple(expected["columns"]), tuple(expected["key_columns"]))
             rows = _target_rows(target, table, spec)
             actual = {"rows": len(rows), "sha256": _digest_rows(rows)}
             if actual["rows"] != int(expected["rows"]):
