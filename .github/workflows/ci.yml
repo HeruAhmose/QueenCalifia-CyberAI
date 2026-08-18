@@ -63,7 +63,8 @@ jobs:
           python -m pytest -q \
             tests/test_primary_database_contract.py \
             tests/test_sovereignty_postgres_state.py \
-            tests/test_security_engine_postgres_state.py
+            tests/test_security_engine_postgres_state.py \
+            tests/test_runtime_state_migration.py
 
       - name: Production immutable image promotion guard
         if: github.event_name == 'pull_request' && github.base_ref == 'production'
