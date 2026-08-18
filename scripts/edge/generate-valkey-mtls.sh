@@ -23,7 +23,7 @@ openssl req -x509 -new -sha256 -key "$PKI/ca.key" -days "$DAYS" \
   -subj "/CN=QueenCalifia Sovereign Edge Valkey CA" -out "$PKI/ca.crt"
 
 issue_cert() {
-  local name="$1" usage="$2" owner="$3" san="$4"
+  local name="$1" usage="$2" san="$3"
   openssl genrsa -out "$PKI/${name}.key" 3072
   openssl req -new -sha256 -key "$PKI/${name}.key" -subj "/CN=queen-califia-${name}" -out "$PKI/${name}.csr"
   cat >"$PKI/${name}.ext" <<EOF
@@ -35,16 +35,16 @@ EOF
   openssl x509 -req -sha256 -in "$PKI/${name}.csr" -CA "$PKI/ca.crt" -CAkey "$PKI/ca.key" \
     -CAcreateserial -days "$DAYS" -extfile "$PKI/${name}.ext" -out "$PKI/${name}.crt"
   rm -f "$PKI/${name}.csr" "$PKI/${name}.ext"
-  chown "$owner" "$PKI/${name}.key" "$PKI/${name}.crt"
+  chown 10001:10001 "$PKI/${name}.key" "$PKI/${name}.crt"
   chmod 0440 "$PKI/${name}.key"
   chmod 0444 "$PKI/${name}.crt"
 }
 
-# Official Valkey images currently run the daemon as UID/GID 999; application containers use 10001.
-issue_cert server serverAuth 999:999 "subjectAltName=DNS:valkey"
-issue_cert health clientAuth 999:999 "subjectAltName=DNS:queen-califia-valkey-health"
-issue_cert api clientAuth 10001:10001 "subjectAltName=DNS:queen-califia-api"
-issue_cert worker clientAuth 10001:10001 "subjectAltName=DNS:queen-califia-worker"
+# All runtime containers use the fixed non-root UID/GID 10001 in the Sovereign Edge profile.
+issue_cert server serverAuth "subjectAltName=DNS:valkey"
+issue_cert health clientAuth "subjectAltName=DNS:queen-califia-valkey-health"
+issue_cert api clientAuth "subjectAltName=DNS:queen-califia-api"
+issue_cert worker clientAuth "subjectAltName=DNS:queen-califia-worker"
 
 chown root:root "$PKI/ca.key" "$PKI/ca.crt" "$PKI/ca.srl"
 chmod 0400 "$PKI/ca.key"
@@ -53,7 +53,7 @@ chmod 0400 "$PKI/ca.srl"
 
 for cert in ca server health api worker; do
   openssl x509 -in "$PKI/${cert}.crt" -noout -subject -issuer -dates -fingerprint -sha256
- done
+done
 
 echo "Valkey mTLS PKI created at $PKI"
 echo "CA private key remains host-root-only and must be backed up encrypted; never commit this directory."
