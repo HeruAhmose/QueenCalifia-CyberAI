@@ -6,7 +6,8 @@ Metrics are intentionally minimal and stable:
 - Budget cost totals
 
 Security:
-- /metrics can be protected via QC_METRICS_TOKEN (Bearer token).
+- /metrics requires QC_METRICS_TOKEN in production.
+- Missing production token configuration fails closed instead of exposing telemetry.
 """
 
 from __future__ import annotations
@@ -82,11 +83,18 @@ def render_latest() -> Tuple[bytes, str]:
 
 
 def require_metrics_bearer_token(production: bool) -> Optional[str]:
-    """Return required token if one should be enforced."""
+    """Return the production metrics bearer token, failing closed if absent.
+
+    Development keeps the existing unauthenticated local metrics behavior. In
+    production, silently treating an unset token as "no auth required" would
+    expose operational telemetry, so configuration absence is an error.
+    """
     token = (os.environ.get("QC_METRICS_TOKEN") or "").strip()
-    if not token:
+    if not production:
         return None
-    return token if production else None
+    if not token:
+        raise RuntimeError("QC_METRICS_TOKEN is required for production metrics access")
+    return token
 
 
 def parse_bearer(auth_header: str) -> Optional[str]:
