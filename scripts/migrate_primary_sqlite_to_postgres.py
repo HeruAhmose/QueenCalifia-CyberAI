@@ -3,7 +3,7 @@
 
 Safety properties:
 - source SQLite database is opened read-only;
-- target must be empty (trusted_sources seed rows are the only tolerated rows);
+- target must be empty;
 - copy + sequence reset + count verification happen in one PostgreSQL transaction;
 - any mismatch rolls the PostgreSQL transaction back;
 - the script does not change deployment configuration or delete the SQLite source.
@@ -158,7 +158,9 @@ def _copy_table(source: sqlite3.Connection, target, table: str) -> int:
     column_sql = ", ".join(f'"{column}"' for column in columns)
     placeholders = ", ".join(["%s"] * len(columns))
     insert_sql = f'INSERT INTO "{table}" ({column_sql}) VALUES ({placeholders})'
-    target.executemany(insert_sql, [tuple(row[column] for column in columns) for row in rows])
+    values = [tuple(row[column] for column in columns) for row in rows]
+    with target.cursor() as cursor:
+        cursor.executemany(insert_sql, values)
     return len(rows)
 
 
