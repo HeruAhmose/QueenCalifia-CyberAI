@@ -66,7 +66,8 @@ jobs:
             tests/test_security_engine_postgres_state.py \
             tests/test_runtime_state_migration.py \
             tests/test_externalized_scanner_state.py \
-            tests/test_externalized_gateway_artifacts.py
+            tests/test_externalized_gateway_artifacts.py \
+            tests/test_legacy_state_disposition.py
 
       - name: PostgreSQL backup and restore contract
         env:
@@ -81,7 +82,7 @@ jobs:
         working-directory: backend
         run: |
           python -c "
-          import ast, os, sys
+          import ast, os
           ok = 0
           for root, dirs, files in os.walk('.'):
               for f in files:
