@@ -41,7 +41,40 @@
     ],
     "postgresql_capable": true,
     "production_cutover_complete": false,
-    "note": "The orchestrator can stage and verify recognized authoritative SQLite state in PostgreSQL. It refuses strict cutover readiness while unresolved SQLite writers, file-backed API state, or incomplete topology gates remain. Successful staging migration does not itself authorize HA, read-only rootfs, or production cutover."
+    "note": "The orchestrator can stage and verify recognized authoritative SQLite state in PostgreSQL. Historical vulnerability/live-scanner SQLite remains an explicit cutover blocker until production data disposition is evidenced."
+  },
+  "scanner_externalization_contract": {
+    "module": "engines/externalized_scanners.py",
+    "production_composition": "app.py",
+    "worker_composition": "tasks.py",
+    "vulnerability_job_authority": "celery-redis",
+    "live_scanner_authority": "postgresql",
+    "live_scanner_tables": ["qc_live_scans", "qc_live_baselines", "qc_live_findings"],
+    "postgresql_capable": true,
+    "production_cutover_complete": false,
+    "note": "Production composition refuses non-Celery vulnerability scan jobs and non-PostgreSQL live-scanner state. Original SQLite implementations remain local/dev fallback. Historical SQLite rows must still be dispositioned before cutover."
+  },
+  "gateway_artifact_contract": {
+    "module": "core/externalized_artifacts.py",
+    "auth_integration": "core/auth.py",
+    "production_composition": "app.py",
+    "api_key_authority": "postgresql:qc_api_keys",
+    "request_audit_authority": "postgresql:qc_request_audit",
+    "api_key_cross_replica_revocation": true,
+    "request_audit_global_chain_lock": true,
+    "postgresql_capable": true,
+    "production_cutover_complete": false,
+    "note": "PostgreSQL mode removes mutable API-key JSON and request-audit JSONL as production authorities. Production deployment cutover and historical artifact disposition remain unverified."
+  },
+  "postgresql_backup_restore_contract": {
+    "ci_script": "scripts/ci/verify_postgres_backup_restore.sh",
+    "postgresql_major": 16,
+    "backup_format": "pg_dump custom",
+    "restore_target": "separate PostgreSQL database",
+    "post_restore_verification": "runtime-state manifest row counts plus SHA-256 digests",
+    "ci_contract_verified": false,
+    "production_backup_restore_tested": false,
+    "note": "CI provides the executable backup/restore contract. Neither flag is true until protected CI runs this branch; production remains false until production-data evidence exists."
   },
   "security_engine_database_contract": {
     "runtime_adapter_module": "engines/runtime_state.py",
@@ -49,7 +82,7 @@
     "postgresql_environment": ["QC_DATABASE_URL", "DATABASE_URL"],
     "postgresql_capable": true,
     "production_cutover_complete": false,
-    "note": "Incident response, remediation, evolution, and threat-intelligence runtime composition can use PostgreSQL with replica-aware mutation controls. Historical state now has a verified staging migration path, but production data execution, backup/restore evidence, rolling-update validation, remaining writable-path removal, and explicit cutover are still required before HA."
+    "note": "Incident response, remediation, evolution, and threat-intelligence runtime composition can use PostgreSQL with replica-aware mutation controls. Historical state has a verified staging migration path, but production execution, restore evidence, rolling validation, remaining writable-path removal, and explicit cutover are still required before HA."
   },
   "sqlite_connectors": [
     {
@@ -63,12 +96,14 @@
     },
     {
       "path": "engines/vulnerability_engine.py",
+      "runtime_adapter": "engines/externalized_scanners.py:CeleryVulnerabilityEngine",
       "store": "vulnerability-scan-job-db",
       "scope": "api-worker",
       "authoritative": false,
       "migration_required": true,
-      "environment": ["QC_DB_PATH"],
-      "note": "When Celery is enabled, distributed task results are authoritative in the Redis-backed Celery result backend; local scan-job SQLite remains a runtime writer and is an explicit runtime-state migration cutover blocker until removed or explicitly scoped."
+      "production_writer_disabled": true,
+      "environment": ["QC_DB_PATH", "QC_USE_CELERY", "QC_REDIS_URL"],
+      "note": "Production composition requires Celery/Redis and does not initialize qc_vuln_scan_jobs. Historical SQLite rows remain a cutover blocker until explicitly verified empty or otherwise dispositioned."
     },
     {
       "path": "engines/incident_response.py",
@@ -92,7 +127,7 @@
       "postgresql_capable": true,
       "production_cutover_complete": false,
       "environment": ["QC_DB_PATH", "QC_DATABASE_URL", "DATABASE_URL"],
-      "note": "PostgreSQL mode claims each plan under an advisory lock before execution so replicas cannot execute the same remediation plan concurrently; historical plan/action state now has a verified staging migration path."
+      "note": "PostgreSQL mode claims each plan under an advisory lock before execution so replicas cannot execute the same remediation plan concurrently; historical plan/action state has a verified staging migration path."
     },
     {
       "path": "engines/evolution_engine.py",
@@ -104,7 +139,7 @@
       "postgresql_capable": true,
       "production_cutover_complete": false,
       "environment": ["QC_EVOLUTION_DB", "QC_DATABASE_URL", "DATABASE_URL"],
-      "note": "PostgreSQL mode provides exactly-once completed-scan learning across replicas and historical evolution state now has a verified staging migration path. SQLite file backups are not represented as PostgreSQL backups; external backup/restore validation remains an open gate."
+      "note": "PostgreSQL mode provides exactly-once completed-scan learning. SQLite memory snapshots are not considered PostgreSQL backups; the pg_dump/restore contract is the external backup path."
     },
     {
       "path": "engines/threat_intel_auto.py",
@@ -116,16 +151,19 @@
       "postgresql_capable": true,
       "production_cutover_complete": false,
       "environment": ["QC_THREAT_INTEL_DB", "QC_EVOLUTION_DB", "QC_DATABASE_URL", "DATABASE_URL"],
-      "note": "PostgreSQL mode serializes scheduler lease acquisition and per-indicator merge updates across replicas; historical threat-intelligence state now has a verified staging migration path, but production cutover and restore evidence remain incomplete."
+      "note": "PostgreSQL mode serializes scheduler lease acquisition and per-indicator merge updates across replicas; production cutover and restore evidence remain incomplete."
     },
     {
       "path": "engines/live_scanner.py",
+      "runtime_adapter": "engines/externalized_scanners.py:PostgresLiveScanner",
       "store": "live-scanner-db",
-      "scope": "optional-runtime",
+      "scope": "api",
       "authoritative": false,
       "migration_required": true,
-      "environment": [],
-      "note": "The live scanner still writes scans, baselines, and findings_log to local SQLite. Those tables are explicitly recognized as cutover blockers and are not silently migrated or abandoned."
+      "postgresql_capable": true,
+      "production_writer_disabled": true,
+      "environment": ["QC_DATABASE_URL", "DATABASE_URL"],
+      "note": "Production composition requires PostgreSQL qc_live_scans/qc_live_baselines/qc_live_findings. Legacy scans/baselines/findings_log SQLite remains a historical cutover blocker until explicitly migrated or dispositioned."
     },
     {
       "path": "sovereignty/audit_chain.py",
@@ -136,7 +174,7 @@
       "postgresql_capable": true,
       "production_cutover_complete": false,
       "environment": ["QC_AUDIT_CHAIN_DB", "QC_DB_PATH", "QC_DATABASE_URL", "DATABASE_URL"],
-      "note": "PostgreSQL mode serializes append sequence and predecessor state across replicas; migration verifies the historical chain's sequence, record hashes, predecessor links, and chain hashes before staging it in PostgreSQL. Production cutover remains incomplete."
+      "note": "PostgreSQL mode serializes append sequence and predecessor state across replicas; migration verifies the historical chain before staging it in PostgreSQL."
     },
     {
       "path": "sovereignty/approvals.py",
@@ -147,7 +185,7 @@
       "postgresql_capable": true,
       "production_cutover_complete": false,
       "environment": ["QC_APPROVALS_DB", "QC_DB_PATH", "QC_DATABASE_URL", "DATABASE_URL"],
-      "note": "PostgreSQL mode provides row-locked approval mutations and atomic nonce replay protection across replicas; migration validates persisted approval identity before staging records/nonces in PostgreSQL. Production cutover remains incomplete."
+      "note": "PostgreSQL mode provides row-locked approval mutations and atomic nonce replay protection across replicas; migration validates persisted approval identity before staging."
     },
     {
       "path": "cli.py",
@@ -162,22 +200,30 @@
     {
       "environment": "QC_API_KEYS_FILE",
       "path": "/var/data/keys.json",
-      "migration_disposition": "external-secret-or-durable-volume"
+      "migration_disposition": "postgresql-qc_api_keys-or-external-secret",
+      "postgresql_capable": true,
+      "production_cutover_complete": false
     },
     {
       "environment": "QC_AUDIT_LOG_FILE",
       "path": "/var/data/audit.log.jsonl",
-      "migration_disposition": "siem-or-worm-object-storage"
+      "migration_disposition": "postgresql-qc_request_audit-or-siem-worm",
+      "postgresql_capable": true,
+      "production_cutover_complete": false
     },
     {
       "environment": "QC_MEMORY_BACKUP_DIR",
       "path": "/var/data/memory-backups",
-      "migration_disposition": "object-storage-backup-target"
+      "migration_disposition": "postgresql-pg_dump-object-storage-backup",
+      "postgresql_capable": true,
+      "production_cutover_complete": false
     },
     {
       "environment": "QC_SPKI_LOG_FILE",
       "path": "/var/data/spki.jsonl",
-      "migration_disposition": "durable-audit-evidence-store"
+      "migration_disposition": "external-siem-or-worm-evidence-store",
+      "api_writer": false,
+      "production_cutover_complete": false
     }
   ],
   "completion_gate": {
