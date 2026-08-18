@@ -15,7 +15,7 @@
   },
   "runtime_state_migration_contract": {
     "migration_tool": "scripts/migrate_runtime_state_to_postgres.py",
-    "restore_verification": "scripts/migrate_runtime_state_to_postgres.py --verify-manifest",
+    "restore_verification": "scripts/migrate_runtime_state_to_postgres.py --verify-manifest-stdin < runtime-state-migration-manifest.json",
     "source_authorities": [
       "primary-runtime-db",
       "sovereignty-audit-chain-db",
