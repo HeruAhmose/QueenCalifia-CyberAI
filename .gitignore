@@ -26,3 +26,7 @@ Thumbs.db
 # Clone/develop it only outside this tree (e.g. its own folder / remote).
 /peoples-portfolio/
 *.bootstrap.json
+
+# Production cutover staging may contain historical credentials/scanner state.
+# It must never be committed.
+/.cutover-staging/
