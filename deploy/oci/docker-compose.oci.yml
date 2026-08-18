@@ -1,35 +1,4 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    platform: ${QC_PLATFORM:-linux/arm64}
-    profiles: ["state", "runtime"]
-    environment:
-      POSTGRES_USER: ${QC_POSTGRES_USER:-queen}
-      POSTGRES_PASSWORD: ${QC_POSTGRES_PASSWORD:?QC_POSTGRES_PASSWORD is required}
-      POSTGRES_DB: ${QC_POSTGRES_DB:-queen}
-    volumes:
-      - ${QC_OCI_STATE_ROOT:-/srv/queen-califia}/postgres:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${QC_POSTGRES_USER:-queen} -d ${QC_POSTGRES_DB:-queen}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    platform: ${QC_PLATFORM:-linux/arm64}
-    profiles: ["state", "runtime"]
-    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
-    volumes:
-      - ${QC_OCI_STATE_ROOT:-/srv/queen-califia}/redis:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 10
-    restart: unless-stopped
-
   api:
     container_name: queen-califia-api
     platform: ${QC_PLATFORM:-linux/arm64}
@@ -40,14 +9,14 @@ services:
     env_file:
       - ../../.env.oci
     environment:
+      QC_SERVICE_ROLE: api
       QC_PRODUCTION: "1"
       QC_USE_CELERY: "1"
       QC_REQUIRE_REDIS: "1"
-      QC_REDIS_URL: redis://redis:6379/0
-      QC_DATABASE_URL: postgresql://${QC_POSTGRES_USER:-queen}:${QC_POSTGRES_PASSWORD}@postgres:5432/${QC_POSTGRES_DB:-queen}
-      DATABASE_URL: postgresql://${QC_POSTGRES_USER:-queen}:${QC_POSTGRES_PASSWORD}@postgres:5432/${QC_POSTGRES_DB:-queen}
       QC_OCI_RUNTIME_GATE: "1"
       QC_OCI_RUNTIME_GATE_FILE: /var/lib/queen-califia/cutover/OCI_RUNTIME_AUTHORIZED
+      QC_OCI_POSTGRES_PROVIDER: neon
+      QC_DATABASE_CONNECTION_MODE: pooled
       QC_API_KEYS_FILE: /var/lib/queen-califia/legacy/keys.json
       QC_AUDIT_LOG_FILE: /var/lib/queen-califia/legacy/audit.log.jsonl
       QC_SPKI_LOG_FILE: /var/lib/queen-califia/legacy/spki.jsonl
@@ -56,11 +25,6 @@ services:
       QC_SCAN_ALLOWLIST: ${QC_SCAN_ALLOWLIST:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8}
     volumes:
       - ${QC_OCI_STATE_ROOT:-/srv/queen-califia}/app:/var/lib/queen-califia
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/readyz', timeout=3)"]
       interval: 20s
@@ -76,27 +40,22 @@ services:
     build:
       context: ../..
       dockerfile: deploy/oci/Dockerfile
-    command: ["celery", "-A", "celery_app.celery_app", "worker", "-l", "INFO", "--concurrency", "2", "-Q", "scans"]
+    command: ["celery", "-A", "celery_app.celery_app", "worker", "-l", "INFO", "--concurrency", "1", "-Q", "scans"]
     env_file:
       - ../../.env.oci
     environment:
+      QC_SERVICE_ROLE: worker
       QC_PRODUCTION: "1"
       QC_USE_CELERY: "1"
       QC_REQUIRE_REDIS: "1"
-      QC_REDIS_URL: redis://redis:6379/0
-      QC_DATABASE_URL: postgresql://${QC_POSTGRES_USER:-queen}:${QC_POSTGRES_PASSWORD}@postgres:5432/${QC_POSTGRES_DB:-queen}
-      DATABASE_URL: postgresql://${QC_POSTGRES_USER:-queen}:${QC_POSTGRES_PASSWORD}@postgres:5432/${QC_POSTGRES_DB:-queen}
       QC_OCI_RUNTIME_GATE: "1"
       QC_OCI_RUNTIME_GATE_FILE: /var/lib/queen-califia/cutover/OCI_RUNTIME_AUTHORIZED
+      QC_OCI_POSTGRES_PROVIDER: neon
+      QC_DATABASE_CONNECTION_MODE: pooled
       QC_DENY_PUBLIC_TARGETS: ${QC_DENY_PUBLIC_TARGETS:-1}
       QC_SCAN_ALLOWLIST: ${QC_SCAN_ALLOWLIST:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8}
     volumes:
       - ${QC_OCI_STATE_ROOT:-/srv/queen-califia}/app:/var/lib/queen-califia:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     restart: unless-stopped
 
   frontend:
