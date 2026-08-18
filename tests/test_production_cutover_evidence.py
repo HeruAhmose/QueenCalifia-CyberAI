@@ -72,6 +72,29 @@ def _bundle():
     }
 
 
+def _mark_source_absent(bundle, source_name: str, disposition_kind: str) -> None:
+    for item in bundle["source_capture"]["artifacts"]:
+        if item["name"] == source_name:
+            item.clear()
+            item.update(
+                {
+                    "name": source_name,
+                    "status": "verified-absent",
+                    "checked": True,
+                    "absence_reason": f"{source_name} did not exist in the frozen source pod",
+                }
+            )
+    for disposition in bundle["dispositions"]:
+        if disposition["kind"] == disposition_kind:
+            disposition.clear()
+            disposition.update(
+                {
+                    "kind": disposition_kind,
+                    "status": "not-applicable-source-absent",
+                }
+            )
+
+
 def test_cutover_evidence_accepts_complete_secret_free_bundle():
     result = verify_evidence_bundle(_bundle())
     assert result["verified"] is True
@@ -98,26 +121,18 @@ def test_cutover_evidence_requires_all_source_authorities():
         verify_evidence_bundle(bundle)
 
 
-def test_cutover_evidence_preserves_verified_absence_without_fake_disposition():
+def test_cutover_evidence_preserves_verified_file_absence_without_fake_disposition():
     bundle = _bundle()
-    for item in bundle["source_capture"]["artifacts"]:
-        if item["name"] == "spki":
-            item.clear()
-            item.update(
-                {
-                    "name": "spki",
-                    "status": "verified-absent",
-                    "checked": True,
-                    "absence_reason": "SPKI evidence file did not exist in the frozen source pod",
-                }
-            )
-    for disposition in bundle["dispositions"]:
-        if disposition["kind"] == "spki":
-            disposition.clear()
-            disposition.update(
-                {"kind": "spki", "status": "not-applicable-source-absent"}
-            )
+    _mark_source_absent(bundle, "spki", "spki")
     assert verify_evidence_bundle(bundle)["verified"] is True
+
+
+def test_cutover_evidence_preserves_verified_live_scanner_absence():
+    bundle = _bundle()
+    _mark_source_absent(bundle, "live-scanner-db", "live-scanner")
+    result = verify_evidence_bundle(bundle)
+    assert result["verified"] is True
+    assert result["ha_authorized"] is False
 
 
 def test_cutover_evidence_rejects_fake_disposition_for_absent_source():
