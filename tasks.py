@@ -7,13 +7,14 @@ Safety:
 - Targets are policy-checked by VulnerabilityEngine (deny public unless allowlisted).
 - A Redis-backed semaphore caps concurrent scans across the cluster.
 - Trace context is propagated from HTTP -> Celery via W3C TraceContext headers when enabled.
-
+- Celery/Redis is the authoritative async scan-job/result store; workers never
+  initialize or write the legacy qc_vuln_scan_jobs SQLite table.
 """
 
 from __future__ import annotations
 
-import os
 import logging
+import os
 from functools import lru_cache
 from typing import Any, Dict
 
@@ -24,7 +25,7 @@ from core.scan_semaphore import ScanSemaphore
 from core.log_context import set_request_id, clear_request_id
 from core.logging_setup import configure_logging
 from core.otel import start_span, attach_extracted_context, detach
-from engines.vulnerability_engine import VulnerabilityEngine
+from engines.externalized_scanners import CeleryVulnerabilityEngine
 
 configure_logging()
 logger = logging.getLogger("queencalifia.tasks")
@@ -35,29 +36,20 @@ class ScanCapacityError(RuntimeError):
 
 
 @lru_cache(maxsize=1)
-def _engine() -> VulnerabilityEngine:
-    """Singleton engine per worker process."""
+def _engine() -> CeleryVulnerabilityEngine:
+    """Singleton scan engine per worker process with no local job-store writer."""
     config = {
         "scan_threads": int(os.environ.get("QC_SCAN_THREADS", "32")),
         "max_scans_per_minute": int(os.environ.get("QC_MAX_SCANS", "10")),
         "target_allowlist": os.environ.get("QC_SCAN_ALLOWLIST", ""),
         "deny_public_targets": os.environ.get("QC_DENY_PUBLIC_TARGETS", "1") == "1",
     }
-    return VulnerabilityEngine(config=config)
+    return CeleryVulnerabilityEngine(config=config)
 
 
 @celery_app.task(bind=True, name="qc.run_vuln_scan", queue="scans")
 def run_vuln_scan(self, target: str, scan_type: str = "full", request_id: str | None = None) -> Dict[str, Any]:
-    """Execute a vulnerability scan and return JSON-serializable results.
-
-    Args:
-        target: IP/host/CIDR target (policy-checked by VulnerabilityEngine).
-        scan_type: "full"|"quick"|...
-        request_id: Correlation id propagated from the HTTP request when available.
-
-    Retry behavior:
-        If global scan capacity is full, task retries until max wait is exceeded.
-    """
+    """Execute a vulnerability scan and return JSON-serializable results."""
     set_request_id(request_id or getattr(self.request, "id", None))
 
     otel_token = None
@@ -103,14 +95,8 @@ def run_vuln_scan(self, target: str, scan_type: str = "full", request_id: str | 
             self.update_state(state="RUNNING", meta={"target": target, "scan_type": scan_type})
 
             if os.environ.get("QC_SCAN_DRY_RUN", "0").strip() == "1":
-                # Load-test/benchmark mode: enforce policy but avoid real network activity.
-                # This is OFF by default and should remain OFF in production.
-                try:
-                    # Policy check occurs inside the engine's resolver.
-                    _engine()._resolve_targets(target)  # type: ignore[attr-defined]
-                except Exception as e:
-                    raise
-                result = {
+                _engine()._resolve_targets(target)  # type: ignore[attr-defined]
+                return {
                     "scan_id": getattr(self.request, "id", None),
                     "target": target,
                     "scan_type": scan_type,
@@ -122,7 +108,7 @@ def run_vuln_scan(self, target: str, scan_type: str = "full", request_id: str | 
                     "summary": {"critical": 0, "high": 0, "medium": 0, "low": 0},
                     "notes": ["QC_SCAN_DRY_RUN enabled"],
                 }
-                return result
+
             scan = _engine().scan_target(
                 target=target,
                 scan_type=scan_type,
