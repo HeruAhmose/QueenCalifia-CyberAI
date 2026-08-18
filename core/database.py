@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sqlite3
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -132,6 +133,51 @@ def _postgres_sql(sql: str) -> str:
     return statement
 
 
+def _is_within(candidate: Path, root: Path) -> bool:
+    try:
+        candidate.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _resolve_sqlite_path(db_path: Path | str) -> Path:
+    """Resolve a SQLite path only inside explicitly trusted storage roots.
+
+    Runtime state belongs in the configured QC_DB_PATH directory or the local
+    application data directory. Pytest may additionally use its temporary root.
+    This prevents request-controlled values from turning database creation into
+    an arbitrary filesystem write primitive.
+    """
+    raw = os.fspath(db_path)
+    if not raw or "\x00" in raw:
+        raise ValueError("SQLite database path is empty or invalid")
+
+    candidate = Path(raw).expanduser()
+    if not candidate.is_absolute():
+        candidate = Path.cwd() / candidate
+    candidate = candidate.resolve(strict=False)
+
+    trusted_roots: list[Path] = [(Path.cwd() / "data").resolve(strict=False)]
+    configured = (os.getenv("QC_DB_PATH") or "").strip()
+    if configured:
+        configured_path = Path(configured).expanduser()
+        if not configured_path.is_absolute():
+            configured_path = Path.cwd() / configured_path
+        trusted_roots.append(configured_path.resolve(strict=False).parent)
+
+    # pytest exposes this variable only while a test is executing. Restricting
+    # temp-root access to tests keeps production/runtime callers on durable,
+    # explicitly configured storage while preserving isolated tmp_path tests.
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        trusted_roots.append(Path(tempfile.gettempdir()).resolve(strict=False))
+
+    if not any(_is_within(candidate, root) for root in trusted_roots):
+        roots = ", ".join(str(root) for root in trusted_roots)
+        raise ValueError(f"SQLite database path must stay within trusted storage roots: {roots}")
+    return candidate
+
+
 def get_db(db_path: Path | str) -> DatabaseConnection:
     if database_backend() == "postgresql":
         try:
@@ -142,7 +188,7 @@ def get_db(db_path: Path | str) -> DatabaseConnection:
         raw = psycopg.connect(database_url(), row_factory=dict_row)
         return DatabaseConnection(raw, "postgresql")
 
-    path = Path(db_path)
+    path = _resolve_sqlite_path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     raw = sqlite3.connect(str(path))
     raw.row_factory = sqlite3.Row
