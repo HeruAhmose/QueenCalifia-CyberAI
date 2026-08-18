@@ -34,6 +34,11 @@ REQUIRED_DISPOSITIONS = {
     "vulnerability",
     "live-scanner",
 }
+OPTIONAL_FILE_DISPOSITION_SOURCE = {
+    "api-keys": "api-keys",
+    "audit-log": "audit-log",
+    "spki": "spki",
+}
 FORBIDDEN_KEY_FRAGMENTS = (
     "password",
     "passwd",
@@ -95,7 +100,7 @@ def _reject_secrets(value: Any, path: str = "$") -> None:
                 _fail(f"evidence contains forbidden credential/connection material at {path}")
 
 
-def _validate_sources(source_capture: dict[str, Any]) -> None:
+def _validate_sources(source_capture: dict[str, Any]) -> dict[str, dict[str, Any]]:
     _require_true(
         source_capture.get("captured_before_pod_replacement"),
         "source_capture.captured_before_pod_replacement",
@@ -132,9 +137,12 @@ def _validate_sources(source_capture: dict[str, Any]) -> None:
     missing = sorted(REQUIRED_SOURCES - set(by_name))
     if missing:
         _fail(f"missing source artifact evidence: {', '.join(missing)}")
+    return by_name
 
 
-def _validate_dispositions(dispositions: Any) -> None:
+def _validate_dispositions(
+    dispositions: Any, sources: dict[str, dict[str, Any]]
+) -> None:
     records = _require_list(dispositions, "dispositions")
     seen: set[str] = set()
     for raw in records:
@@ -144,8 +152,23 @@ def _validate_dispositions(dispositions: Any) -> None:
             _fail(f"duplicate disposition evidence: {kind}")
         if kind not in REQUIRED_DISPOSITIONS:
             _fail(f"unrecognized disposition evidence: {kind}")
-        _require_true(entry.get("verified"), f"disposition {kind}.verified")
-        _require_sha256(entry.get("evidence_sha256"), f"disposition {kind}.evidence_sha256")
+
+        source_name = OPTIONAL_FILE_DISPOSITION_SOURCE.get(kind)
+        source_absent = bool(
+            source_name and sources[source_name].get("status") == "verified-absent"
+        )
+        if source_absent:
+            if entry.get("status") != "not-applicable-source-absent":
+                _fail(
+                    f"disposition {kind} must preserve verified source absence rather than claim migration"
+                )
+            if "evidence_sha256" in entry or entry.get("verified") is True:
+                _fail(f"absent disposition {kind} must not claim migration evidence")
+        else:
+            _require_true(entry.get("verified"), f"disposition {kind}.verified")
+            _require_sha256(
+                entry.get("evidence_sha256"), f"disposition {kind}.evidence_sha256"
+            )
         seen.add(kind)
     missing = sorted(REQUIRED_DISPOSITIONS - seen)
     if missing:
@@ -160,13 +183,15 @@ def _validate_bundle(bundle: Any) -> dict[str, Any]:
     if bundle.get("environment") != "production":
         _fail("evidence.environment must be production")
 
-    _validate_sources(_require_dict(bundle.get("source_capture"), "source_capture"))
+    sources = _validate_sources(
+        _require_dict(bundle.get("source_capture"), "source_capture")
+    )
 
     migration = _require_dict(bundle.get("runtime_migration"), "runtime_migration")
     _require_true(migration.get("verified"), "runtime_migration.verified")
     _require_sha256(migration.get("manifest_sha256"), "runtime_migration.manifest_sha256")
 
-    _validate_dispositions(bundle.get("dispositions"))
+    _validate_dispositions(bundle.get("dispositions"), sources)
 
     target = _require_dict(bundle.get("target_database"), "target_database")
     _require_true(target.get("empty_before_import"), "target_database.empty_before_import")
@@ -176,7 +201,10 @@ def _validate_bundle(bundle: Any) -> dict[str, Any]:
     )
 
     restore = _require_dict(bundle.get("backup_restore"), "backup_restore")
-    _require_true(restore.get("separate_restore_database"), "backup_restore.separate_restore_database")
+    _require_true(
+        restore.get("separate_restore_database"),
+        "backup_restore.separate_restore_database",
+    )
     _require_true(restore.get("restore_verified"), "backup_restore.restore_verified")
     _require_sha256(restore.get("dump_sha256"), "backup_restore.dump_sha256")
     source_manifest = _require_sha256(
@@ -199,9 +227,14 @@ def _validate_bundle(bundle: Any) -> dict[str, Any]:
         _require_true(probes.get(field), f"post_cutover_authority.{field}")
 
     retention = _require_dict(bundle.get("source_retention"), "source_retention")
-    _require_true(retention.get("legacy_sources_preserved"), "source_retention.legacy_sources_preserved")
+    _require_true(
+        retention.get("legacy_sources_preserved"),
+        "source_retention.legacy_sources_preserved",
+    )
     if retention.get("legacy_bindings_removed") is not False:
-        _fail("source_retention.legacy_bindings_removed must remain false at this evidence gate")
+        _fail(
+            "source_retention.legacy_bindings_removed must remain false at this evidence gate"
+        )
 
     return bundle
 
