@@ -2,6 +2,7 @@ services:
   valkey:
     image: valkey/valkey:9.1.1-alpine3.24
     container_name: queen-califia-valkey
+    user: "10001:10001"
     command: ["valkey-server", "/etc/valkey/valkey.conf"]
     volumes:
       - ./valkey.conf:/etc/valkey/valkey.conf:ro
