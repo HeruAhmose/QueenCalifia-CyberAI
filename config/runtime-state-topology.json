@@ -84,9 +84,14 @@
       "QC_SPKI_LOG_FILE"
     ],
     "fixed_sqlite_staging": {
-      "vulnerability-scan-job-db": "/tmp/qc-vulnerability-legacy.db",
-      "live-scanner-db": "/tmp/qc-live-scanner-legacy.db"
+      "vulnerability-scan-job-db": ".cutover-staging/qc-vulnerability-legacy.db",
+      "live-scanner-db": ".cutover-staging/qc-live-scanner-legacy.db"
     },
+    "staging_constraints": [
+      "repository-local git-ignored directory",
+      "non-symlink regular files only",
+      "read-only SQLite connection"
+    ],
     "targets": {
       "vulnerability-scan-job-db": "postgresql:qc_legacy_vuln_scan_jobs",
       "live-scanner-db": [
@@ -99,7 +104,7 @@
       "QC_SPKI_LOG_FILE": "postgresql:qc_spki_evidence"
     },
     "verification": [
-      "read-only fixed-path SQLite staging",
+      "fixed repository-local SQLite staging",
       "stdin-only file artifact ingestion",
       "empty target authority requirement",
       "audit hash/HMAC chain validation",
