@@ -23,7 +23,9 @@ from engines.threat_intel_auto import ThreatIndicator
 
 @pytest.fixture()
 def postgres_url(monkeypatch):
-    url = os.environ["QC_TEST_POSTGRES_URL"]
+    url = os.environ.get("QC_TEST_POSTGRES_URL", "").strip()
+    if not url:
+        pytest.skip("QC_TEST_POSTGRES_URL is required for PostgreSQL integration tests")
     monkeypatch.setenv("QC_DATABASE_URL", url)
     monkeypatch.delenv("DATABASE_URL", raising=False)
     tables = [
