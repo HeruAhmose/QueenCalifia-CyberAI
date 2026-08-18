@@ -12,6 +12,14 @@ ENTRYPOINT = ROOT / "scripts/edge/container-entrypoint.sh"
 VALIDATOR = ROOT / "scripts/edge/validate-runtime-env.py"
 BOOTSTRAP = ROOT / "scripts/edge/bootstrap-ubuntu.sh"
 PKI = ROOT / "scripts/edge/generate-valkey-mtls.sh"
+DB_BACKUP = ROOT / "scripts/edge/backup-postgres.sh"
+DB_RESTORE = ROOT / "scripts/edge/restore-postgres.sh"
+HOST_BACKUP = ROOT / "scripts/edge/backup-host-state.sh"
+VERIFY_RUNTIME = ROOT / "scripts/edge/verify-runtime.sh"
+REBOOT_PROOF = ROOT / "scripts/edge/reboot-persistence-proof.sh"
+WATCHDOG = ROOT / "scripts/edge/health-watchdog.sh"
+WATCHDOG_SERVICE = ROOT / "deploy/edge/systemd/queen-califia-edge-watchdog.service"
+WATCHDOG_TIMER = ROOT / "deploy/edge/systemd/queen-califia-edge-watchdog.timer"
 STATE = ROOT / "config/sovereign-edge-deployment-state.json"
 TOPOLOGY = ROOT / "config/runtime-state-topology.json"
 
@@ -95,6 +103,34 @@ require(
     "no HTTP/HTTPS/Valkey/PostgreSQL host ports opened",
 )
 require(PKI.read_text(encoding="utf-8"), "QueenCalifia Sovereign Edge Valkey CA", "serverAuth", "clientAuth", "10001:10001")
+require(DB_BACKUP.read_text(encoding="utf-8"), "postgres:18-alpine", "QC_DATABASE_DIRECT_URL", "sslmode=require", "-pooler.", "age -R")
+require(DB_RESTORE.read_text(encoding="utf-8"), "QC_RESTORE_DATABASE_URL", "zero public base tables", "postgres:18-alpine", "pg_restore", "age -d")
+require(HOST_BACKUP.read_text(encoding="utf-8"), "app evidence valkey pki", "age -R", "sha256sum")
+require(
+    VERIFY_RUNTIME.read_text(encoding="utf-8"),
+    "--preauth",
+    "--authorized",
+    "plaintext Valkey unexpectedly accepted a request",
+    "docker exec -i queen-califia-api python -",
+    "SHOW server_version",
+    "no Sovereign Edge container publishes a host port",
+)
+require(
+    REBOOT_PROOF.read_text(encoding="utf-8"),
+    "SOVEREIGN_EDGE_RUNTIME_AUTHORIZED",
+    "/proc/sys/kernel/random/boot_id",
+    "boot ID did not change",
+    "qc:edge:reboot-proof",
+    "Valkey AOF reboot persistence failed",
+)
+require(
+    WATCHDOG.read_text(encoding="utf-8"),
+    "authorization gate closed; no runtime recovery attempted",
+    "never creates, edits, or repairs the authorization marker",
+    "queen-califia-cloudflared",
+)
+require(WATCHDOG_SERVICE.read_text(encoding="utf-8"), "NoNewPrivileges=true", "ProtectSystem=strict", "/run/docker.sock")
+require(WATCHDOG_TIMER.read_text(encoding="utf-8"), "OnBootSec=2min", "OnUnitActiveSec=1min", "Persistent=true")
 
 topology = json.loads(TOPOLOGY.read_text(encoding="utf-8"))
 if topology.get("multi_replica_api_permitted") is not False:
@@ -145,4 +181,4 @@ loss = state.get("historical_sources", {}).get("render_live_scanner_qc_scans_db"
 if loss.get("status") != "unrecoverable-unverified" or loss.get("verified_absent") is not False or loss.get("captured") is not False:
     raise SystemExit("Render qc_scans.db evidence truth must remain unrecoverable-unverified")
 
-print("Sovereign Edge guard verified: private mTLS Valkey, outbound-only tunnel, Neon PG18 authority, all production evidence gates closed")
+print("Sovereign Edge guard verified: private mTLS Valkey, outbound-only tunnel, Neon PG18 authority, evidence operators guarded, all production gates closed")
