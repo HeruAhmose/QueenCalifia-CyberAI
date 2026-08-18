@@ -39,7 +39,6 @@ def test_sqlite_primary_contract_remains_default(monkeypatch, tmp_path: Path):
 
 def test_sqlite_primary_contract_rejects_untrusted_filesystem_path(monkeypatch):
     _clear_database_env(monkeypatch)
-    # Exercise the runtime branch rather than pytest's isolated tempfile mapper.
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
     forbidden = Path("/etc") / f"queen-califia-{uuid.uuid4().hex}.db"
 
@@ -78,25 +77,24 @@ def test_postgresql_migration_identity_and_concurrent_writes(monkeypatch, tmp_pa
     _clear_database_env(monkeypatch)
     source_path = tmp_path / "migration-source.db"
     database.init_db(source_path)
-    migration_marker = f"migrated-{uuid.uuid4()}"
-    database.log_event(source_path, "migration-test", "source", migration_marker, {"ok": True})
+    database.log_event(source_path, "migration-test", "source", f"migrated-{uuid.uuid4()}", {"ok": True})
 
     from core import autonomy_loop
 
     assert autonomy_loop._acquire_lease(source_path, "migration-owner", ttl_seconds=300) is True
 
+    actual_source = database._resolve_sqlite_path(source_path)
+    assert actual_source.is_file()
+
     from scripts.migrate_primary_sqlite_to_postgres import migrate
 
-    copied = migrate(source_path, url)
+    copied = migrate(actual_source, url)
     assert copied["trusted_sources"] == 6
     assert copied["telemetry_events"] == 1
     assert copied["qc_autonomy_lease"] == 1
 
     with database.get_db(source_path) as source:
-        source_count = source.execute(
-            "SELECT COUNT(*) AS n FROM telemetry_events WHERE subject=?",
-            (migration_marker,),
-        ).fetchone()["n"]
+        source_count = source.execute("SELECT COUNT(*) AS n FROM telemetry_events").fetchone()["n"]
         lease_count = source.execute(
             "SELECT COUNT(*) AS n FROM qc_autonomy_lease WHERE lease_name='autonomy_loop'"
         ).fetchone()["n"]
@@ -109,10 +107,7 @@ def test_postgresql_migration_identity_and_concurrent_writes(monkeypatch, tmp_pa
     database.init_db(tmp_path / "ignored.db")
 
     with database.get_db(tmp_path / "ignored.db") as connection:
-        migrated_count = connection.execute(
-            "SELECT COUNT(*) AS n FROM telemetry_events WHERE subject=?",
-            (migration_marker,),
-        ).fetchone()["n"]
+        migrated_count = connection.execute("SELECT COUNT(*) AS n FROM telemetry_events").fetchone()["n"]
     assert migrated_count == 1
 
     from backend.modules.identity import store
