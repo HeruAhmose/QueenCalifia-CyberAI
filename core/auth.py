@@ -5,6 +5,10 @@ API key validation and admin gating for internal endpoints.
 
 This mirrors `backend/core/auth.py` so that dashboard route modules work when
 the security gateway root app (which imports from `core.*`) is loaded.
+
+When QC_DATABASE_URL/DATABASE_URL selects PostgreSQL, structured API keys are
+read from the shared `qc_api_keys` authority so revocation is immediately
+visible across API replicas. Local/dev retains JSON/env compatibility.
 """
 
 from __future__ import annotations
@@ -22,18 +26,66 @@ from core.api_key_crypto import (
     API_KEY_STORE_VERSION,
     api_key_fingerprint,
 )
+from core.database import database_backend, database_url
 
 
 def _development_auth_disabled() -> bool:
-    """Honor QC_NO_AUTH only outside a production runtime."""
     return (
         os.getenv("QC_NO_AUTH", "0") == "1"
         and os.getenv("QC_PRODUCTION", "0") != "1"
     )
 
 
+def _postgres_key_meta(provided: str):
+    if database_backend() != "postgresql" or not provided:
+        return None
+    pepper = os.getenv("QC_API_KEY_PEPPER", "")
+    if not pepper:
+        return None
+    try:
+        import psycopg
+        from psycopg.rows import dict_row
+
+        key_hash = api_key_fingerprint(provided, pepper)
+        with psycopg.connect(database_url(), row_factory=dict_row) as conn:
+            row = conn.execute(
+                """
+                SELECT key_hash, role, permissions_json, rate_limit, created_at,
+                       description, budget_capacity, budget_refill_per_minute, revoked
+                FROM qc_api_keys
+                WHERE key_hash=%s AND revoked=0
+                """,
+                (key_hash,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "key_hash": row["key_hash"],
+            "role": row["role"],
+            "permissions": json.loads(row["permissions_json"]),
+            "rate_limit": int(row["rate_limit"]),
+            "created_at": row["created_at"],
+            "description": row["description"],
+            "budget_capacity": row["budget_capacity"],
+            "budget_refill_per_minute": row["budget_refill_per_minute"],
+            "revoked": bool(row["revoked"]),
+        }
+    except Exception:
+        if os.getenv("QC_PRODUCTION", "0") == "1":
+            raise
+        return None
+
+
 def _structured_key_meta(provided: str):
     if not provided:
+        return None
+
+    pg_meta = _postgres_key_meta(provided)
+    if pg_meta is not None:
+        return pg_meta
+    if database_backend() == "postgresql" and os.getenv("QC_PRODUCTION", "0") == "1":
+        # PostgreSQL is authoritative in production. Never fall through to a
+        # stale local file/env representation after a DB miss/revocation.
         return None
 
     raw = (os.getenv("QC_API_KEYS_JSON", "") or "").strip()
@@ -76,8 +128,6 @@ def _structured_key_meta(provided: str):
 
 
 def require_api_key(fn: Callable) -> Callable:
-    """Require either the structured gateway key model or QC_API_KEY fallback."""
-
     @wraps(fn)
     def wrapper(*args, **kwargs):
         if _development_auth_disabled():
@@ -86,6 +136,10 @@ def require_api_key(fn: Callable) -> Callable:
         provided = request.headers.get("X-QC-API-Key", "")
         if _structured_key_meta(provided):
             return fn(*args, **kwargs)
+
+        # Legacy fallback is local/dev only when PostgreSQL is not production authority.
+        if database_backend() == "postgresql" and os.getenv("QC_PRODUCTION", "0") == "1":
+            return jsonify({"error": "unauthorized"}), 401
 
         expected = (os.getenv("QC_API_KEY", "") or "").strip()
         if not expected or not hmac.compare_digest(provided, expected):
@@ -97,8 +151,6 @@ def require_api_key(fn: Callable) -> Callable:
 
 
 def require_admin(fn: Callable) -> Callable:
-    """Require admin permission via structured keys or QC_ADMIN_KEY fallback."""
-
     @wraps(fn)
     def wrapper(*args, **kwargs):
         if _development_auth_disabled():
@@ -108,6 +160,9 @@ def require_admin(fn: Callable) -> Callable:
         meta = _structured_key_meta(provided_api_key)
         if meta and "admin" in list(meta.get("permissions", [])):
             return fn(*args, **kwargs)
+
+        if database_backend() == "postgresql" and os.getenv("QC_PRODUCTION", "0") == "1":
+            return jsonify({"error": "forbidden"}), 403
 
         admin_key = (os.getenv("QC_ADMIN_KEY", "") or "").strip()
         if not admin_key:
