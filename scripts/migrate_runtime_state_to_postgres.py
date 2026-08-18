@@ -19,6 +19,8 @@ Safety properties:
 - row counts AND deterministic per-table content digests are verified before
   commit;
 - serial sequences are reset after explicit IDs are copied;
+- PostgreSQL identifiers are composed with psycopg.sql.Identifier rather than
+  interpolating manifest/source metadata into SQL;
 - an optional migration manifest records source file hashes and verified table
   digests; the same manifest can later verify a restored PostgreSQL database;
 - control-plane topology is read only from the repository-owned canonical path;
@@ -285,6 +287,13 @@ def _connect_postgres(url: str):
         raise RuntimeError("psycopg is required; install backend/requirements.txt") from exc
     return psycopg.connect(url, row_factory=dict_row)
 
+def _pg_sql():
+    try:
+        from psycopg import sql
+    except ImportError as exc:  # pragma: no cover
+        raise RuntimeError("psycopg is required; install backend/requirements.txt") from exc
+    return sql
+
 def _source_tables(conn: sqlite3.Connection) -> set[str]:
     rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
     return {str(row[0]) for row in rows if not str(row[0]).startswith("sqlite_")}
@@ -411,28 +420,40 @@ def _ensure_target_schema(target, source_tables: set[str]) -> None:
     for statement in _schema_statements(TARGET_SCHEMA): target.execute(statement)
 
 def _assert_target_empty(target, tables: Iterable[str]) -> None:
-    occupied = []
+    sql = _pg_sql(); occupied = []
     for table in sorted(tables):
-        count = int(target.execute(f'SELECT COUNT(*) AS n FROM "{table}"').fetchone()["n"])
+        query = sql.SQL("SELECT COUNT(*) AS n FROM {}").format(sql.Identifier(table))
+        count = int(target.execute(query).fetchone()["n"])
         if count: occupied.append((table, count))
     if occupied:
         raise RuntimeError("PostgreSQL target is not empty; refusing to merge authorities. Occupied tables: " + ", ".join(f"{t}={n}" for t, n in occupied))
 
 def _copy_table(target, table: str, spec: TableSpec, rows: Sequence[Sequence[Any]]) -> None:
     if not rows: return
-    column_sql = ", ".join(f'"{column}"' for column in spec.columns)
-    placeholders = ", ".join(["%s"] * len(spec.columns))
-    with target.cursor() as cursor: cursor.executemany(f'INSERT INTO "{table}" ({column_sql}) VALUES ({placeholders})', rows)
+    sql = _pg_sql()
+    query = sql.SQL("INSERT INTO {} ({}) VALUES ({})").format(
+        sql.Identifier(table),
+        sql.SQL(", ").join(sql.Identifier(column) for column in spec.columns),
+        sql.SQL(", ").join(sql.Placeholder() for _ in spec.columns),
+    )
+    with target.cursor() as cursor: cursor.executemany(query, rows)
 
 def _reset_sequence(target, table: str, column: str) -> None:
+    sql = _pg_sql()
     row = target.execute("SELECT pg_get_serial_sequence(%s, %s) AS seq", (table, column)).fetchone(); sequence = row["seq"] if row else None
     if not sequence: return
-    maximum = int(target.execute(f'SELECT COALESCE(MAX("{column}"), 0) AS max_id FROM "{table}"').fetchone()["max_id"])
+    query = sql.SQL("SELECT COALESCE(MAX({}), 0) AS max_id FROM {}").format(sql.Identifier(column), sql.Identifier(table))
+    maximum = int(target.execute(query).fetchone()["max_id"])
     target.execute("SELECT setval(%s::regclass, %s, true)", (sequence, maximum)) if maximum > 0 else target.execute("SELECT setval(%s::regclass, 1, false)", (sequence,))
 
 def _target_rows(target, table: str, spec: TableSpec) -> list[tuple[Any, ...]]:
-    column_sql = ", ".join(f'"{column}"' for column in spec.columns); key_sql = ", ".join(f'"{column}"' for column in spec.key_columns)
-    rows = target.execute(f'SELECT {column_sql} FROM "{table}" ORDER BY {key_sql}').fetchall()
+    sql = _pg_sql()
+    query = sql.SQL("SELECT {} FROM {} ORDER BY {}").format(
+        sql.SQL(", ").join(sql.Identifier(column) for column in spec.columns),
+        sql.Identifier(table),
+        sql.SQL(", ").join(sql.Identifier(column) for column in spec.key_columns),
+    )
+    rows = target.execute(query).fetchall()
     return [tuple(row[column] for column in spec.columns) for row in rows]
 
 def _topology_cutover_blockers(topology_path: Path | None = None) -> list[str]:
