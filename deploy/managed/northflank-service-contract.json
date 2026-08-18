@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "provider": "northflank",
+  "plan": "developer-sandbox",
+  "repository": "HeruAhmose/QueenCalifia-CyberAI",
+  "dockerfile": "deploy/managed/Dockerfile",
+  "services": [
+    {
+      "name": "queen-califia-api",
+      "instances": 1,
+      "public": true,
+      "internal_port": 5000,
+      "command": [
+        "gunicorn",
+        "app:app",
+        "--bind",
+        "0.0.0.0:5000",
+        "--workers",
+        "1",
+        "--threads",
+        "2",
+        "--timeout",
+        "180",
+        "--keep-alive",
+        "30",
+        "--graceful-timeout",
+        "30"
+      ],
+      "service_role": "api",
+      "health_checks": [
+        {"type": "liveness", "protocol": "HTTP", "path": "/healthz", "port": 5000},
+        {"type": "readiness", "protocol": "HTTP", "path": "/readyz", "port": 5000}
+      ]
+    },
+    {
+      "name": "queen-califia-worker",
+      "instances": 1,
+      "public": false,
+      "command": [
+        "celery",
+        "-A",
+        "celery_app.celery_app",
+        "worker",
+        "-l",
+        "INFO",
+        "--concurrency",
+        "1",
+        "-Q",
+        "scans"
+      ],
+      "service_role": "worker"
+    }
+  ],
+  "required_secret_environment": [
+    "QC_DATABASE_URL",
+    "DATABASE_URL",
+    "QC_REDIS_URL",
+    "QC_CELERY_BROKER_URL",
+    "QC_CELERY_RESULT_BACKEND",
+    "QC_API_KEY_PEPPER",
+    "QC_AUDIT_HMAC_KEY",
+    "QC_METRICS_TOKEN",
+    "QC_MANAGED_RUNTIME_AUTHORIZED"
+  ],
+  "fixed_environment": {
+    "QC_PRODUCTION": "1",
+    "QC_USE_CELERY": "1",
+    "QC_REQUIRE_REDIS": "1",
+    "QC_MANAGED_RUNTIME_GATE": "1",
+    "QC_MANAGED_POSTGRES_PROVIDER": "neon",
+    "QC_DATABASE_CONNECTION_MODE": "pooled",
+    "QC_ALLOW_INSECURE_BOOTSTRAP": "0",
+    "QC_DENY_PUBLIC_TARGETS": "1"
+  },
+  "autoscaling_authorized": false,
+  "ha_authorized": false,
+  "runtime_authorized": false
+}

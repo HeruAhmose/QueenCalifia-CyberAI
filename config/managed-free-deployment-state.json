@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "target": "managed-free",
+  "preferred_target": true,
+  "application_host": {
+    "provider": "northflank",
+    "plan": "developer-sandbox",
+    "service_budget": 2,
+    "api_replicas": 1,
+    "worker_replicas": 1,
+    "frontend_service_consumed": false,
+    "runtime_authorized": false,
+    "public_api_authorized": false
+  },
+  "postgresql": {
+    "provider": "neon",
+    "project_name": "QueenCalifia-CyberAI",
+    "project_id": "delicate-poetry-25758881",
+    "branch_name": "main",
+    "branch_id": "br-silent-paper-awx0pxs5",
+    "database_name": "neondb",
+    "region": "aws-us-east-1",
+    "postgresql_major": 18,
+    "provisioned": true,
+    "application_connection_mode": "pooled",
+    "migration_and_pg_dump_connection_mode": "direct",
+    "tls_required": true,
+    "credentials_committed": false,
+    "production_migration_verified": false,
+    "production_backup_restore_verified": false
+  },
+  "queue": {
+    "provider": "aiven-valkey",
+    "plan": "free",
+    "protocol": "rediss",
+    "tls_certificate_verification_required": true,
+    "service_provisioned": false,
+    "celery_worker_enabled": true,
+    "upstash_free_primary": false,
+    "upstash_note": "Upstash remains a compatible alternative, but its command-metered free tier is not the preferred always-on Celery broker because worker polling can consume the monthly command allowance."
+  },
+  "frontend": {
+    "strategy": "existing-static-hosting",
+    "migrated_by_this_profile": false
+  },
+  "runtime_authorized": false,
+  "ha_authorized": false,
+  "read_only_root_filesystem_authorized": false,
+  "legacy_storage_retirement_authorized": false,
+  "production_cutover_complete": false,
+  "render_blueprint_retained": true,
+  "oci_profile_retained": true,
+  "historical_sources": {
+    "render_live_scanner_qc_scans_db": {
+      "former_path": "/opt/render/project/src/backend/data/qc_scans.db",
+      "status": "unrecoverable-unverified",
+      "verified_absent": false,
+      "captured": false,
+      "reason": "Render workspace was suspended before the container-local source could be captured or verified absent.",
+      "policy": "Do not synthesize absence or migration evidence. Revise only if provider-backed recovery evidence becomes available."
+    }
+  }
+}
