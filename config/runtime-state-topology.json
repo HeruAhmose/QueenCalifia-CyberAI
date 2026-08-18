@@ -1,0 +1,129 @@
+{
+  "version": 1,
+  "architecture_state": "sqlite-single-writer",
+  "external_authority_target": "postgresql",
+  "multi_replica_api_permitted": false,
+  "issue": 72,
+  "sqlite_connectors": [
+    {
+      "path": "core/database.py",
+      "store": "primary-runtime-db",
+      "scope": "api",
+      "authoritative": true,
+      "migration_required": true,
+      "environment": ["QC_DB_PATH"]
+    },
+    {
+      "path": "backend/core/database.py",
+      "store": "primary-runtime-db-backend-copy",
+      "scope": "api",
+      "authoritative": true,
+      "migration_required": true,
+      "environment": ["QC_DB_PATH"]
+    },
+    {
+      "path": "engines/vulnerability_engine.py",
+      "store": "vulnerability-scan-job-db",
+      "scope": "api-worker",
+      "authoritative": false,
+      "migration_required": true,
+      "environment": ["QC_DB_PATH"],
+      "note": "When Celery is enabled, distributed task results are authoritative in the Redis-backed Celery result backend; local scan-job SQLite remains a runtime writer and must still be removed or explicitly scoped before read-only/multi-replica completion."
+    },
+    {
+      "path": "engines/incident_response.py",
+      "store": "incident-response-db",
+      "scope": "api",
+      "authoritative": true,
+      "migration_required": true,
+      "environment": ["QC_DB_PATH"]
+    },
+    {
+      "path": "engines/auto_remediation.py",
+      "store": "auto-remediation-db",
+      "scope": "api",
+      "authoritative": true,
+      "migration_required": true,
+      "environment": ["QC_DB_PATH"]
+    },
+    {
+      "path": "engines/evolution_engine.py",
+      "store": "evolution-db",
+      "scope": "api",
+      "authoritative": true,
+      "migration_required": true,
+      "environment": ["QC_EVOLUTION_DB"]
+    },
+    {
+      "path": "engines/threat_intel_auto.py",
+      "store": "threat-intelligence-db",
+      "scope": "api",
+      "authoritative": true,
+      "migration_required": true,
+      "environment": ["QC_THREAT_INTEL_DB", "QC_EVOLUTION_DB"]
+    },
+    {
+      "path": "engines/live_scanner.py",
+      "store": "live-scanner-db",
+      "scope": "optional-runtime",
+      "authoritative": false,
+      "migration_required": true,
+      "environment": []
+    },
+    {
+      "path": "sovereignty/audit_chain.py",
+      "store": "sovereignty-audit-chain-db",
+      "scope": "api",
+      "authoritative": true,
+      "migration_required": true,
+      "environment": ["QC_AUDIT_CHAIN_DB", "QC_DB_PATH"]
+    },
+    {
+      "path": "sovereignty/approvals.py",
+      "store": "sovereignty-approvals-db",
+      "scope": "api",
+      "authoritative": true,
+      "migration_required": true,
+      "environment": ["QC_APPROVALS_DB", "QC_DB_PATH"]
+    },
+    {
+      "path": "cli.py",
+      "store": "cli-local-db",
+      "scope": "local-tooling",
+      "authoritative": false,
+      "migration_required": false,
+      "environment": []
+    }
+  ],
+  "api_file_state": [
+    {
+      "environment": "QC_API_KEYS_FILE",
+      "path": "/var/data/keys.json",
+      "migration_disposition": "external-secret-or-durable-volume"
+    },
+    {
+      "environment": "QC_AUDIT_LOG_FILE",
+      "path": "/var/data/audit.log.jsonl",
+      "migration_disposition": "siem-or-worm-object-storage"
+    },
+    {
+      "environment": "QC_MEMORY_BACKUP_DIR",
+      "path": "/var/data/memory-backups",
+      "migration_disposition": "object-storage-backup-target"
+    },
+    {
+      "environment": "QC_SPKI_LOG_FILE",
+      "path": "/var/data/spki.jsonl",
+      "migration_disposition": "durable-audit-evidence-store"
+    }
+  ],
+  "completion_gate": {
+    "all_authoritative_database_writers_externalized": false,
+    "backup_restore_tested": false,
+    "concurrent_writer_tested": false,
+    "rolling_update_tested": false,
+    "remaining_writable_paths_enumerated": false,
+    "read_only_root_filesystem_enabled": false,
+    "multi_replica_api_enabled": false
+  }
+}
