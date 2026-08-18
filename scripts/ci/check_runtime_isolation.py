@@ -75,6 +75,16 @@ require(
     "type: RuntimeDefault",
     "allowPrivilegeEscalation: false",
     'drop: ["ALL"]',
+    "replicaCount: 1",
+    "minReplicas: 1",
+    "maxReplicas: 1",
+)
+
+require(
+    "helm/queen-califia/templates/api-deployment.yaml",
+    "gt (int .Values.api.replicaCount) 1",
+    ".Values.api.autoscaling.enabled",
+    "multi-replica/autoscaling is unsupported while authoritative runtime state is local SQLite/file-backed",
 )
 
 print("Container and Kubernetes runtime-isolation invariants verified.")
