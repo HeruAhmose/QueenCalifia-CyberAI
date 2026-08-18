@@ -21,6 +21,8 @@ Safety properties:
 - serial sequences are reset after explicit IDs are copied;
 - an optional migration manifest records source file hashes and verified table
   digests; the same manifest can later verify a restored PostgreSQL database;
+- control-plane topology is read only from the repository-owned canonical path;
+- manifest transport uses stdout/stdin rather than user-controlled file writes;
 - --require-cutover-ready fails while runtime-state-topology still reports any
   unresolved SQLite/file authority or incomplete production cutover.
 """
@@ -38,6 +40,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 ROOT = Path(__file__).resolve().parents[1]
+RUNTIME_TOPOLOGY_PATH = ROOT / "config" / "runtime-state-topology.json"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -662,8 +665,15 @@ def _target_rows(target, table: str, spec: TableSpec) -> list[tuple[Any, ...]]:
     return [tuple(row[column] for column in columns) for row in rows]
 
 
-def _topology_cutover_blockers(topology_path: Path) -> list[str]:
-    topology = json.loads(topology_path.read_text(encoding="utf-8"))
+def _topology_cutover_blockers(topology_path: Path | None = None) -> list[str]:
+    if topology_path is not None:
+        requested = topology_path.expanduser().resolve()
+        canonical = RUNTIME_TOPOLOGY_PATH.resolve()
+        if requested != canonical:
+            raise RuntimeError(
+                "runtime topology path is fixed to the repository-owned control-plane file"
+            )
+    topology = json.loads(RUNTIME_TOPOLOGY_PATH.read_text(encoding="utf-8"))
     blockers: list[str] = []
     if topology.get("multi_replica_api_permitted") is not True:
         blockers.append("runtime topology does not permit multi-replica API")
@@ -757,7 +767,7 @@ def migrate_runtime_state(
             "tables": table_manifest,
             "cutover_ready": not blockers,
             "cutover_blockers": blockers,
-            "topology_path": str(topology_path) if topology_path else None,
+            "topology_path": str(RUNTIME_TOPOLOGY_PATH) if topology_path is not None else None,
         }
     finally:
         seen_connections: set[int] = set()
@@ -775,6 +785,8 @@ def verify_postgres_manifest(database_url: str, manifest: Mapping[str, Any]) -> 
     try:
         verified: dict[str, Any] = {}
         for table, expected in sorted(manifest.get("tables", {}).items()):
+            if table not in AUTHORITATIVE_TABLES:
+                raise RuntimeError(f"manifest contains unrecognized table: {table}")
             spec = TableSpec(tuple(expected["columns"]), tuple(expected["key_columns"]))
             rows = _target_rows(target, table, spec)
             actual = {"rows": len(rows), "sha256": _digest_rows(rows)}
@@ -810,18 +822,20 @@ def parse_args() -> argparse.Namespace:
         help="PostgreSQL URL; defaults to QC_DATABASE_URL or DATABASE_URL",
     )
     parser.add_argument(
-        "--topology",
-        type=Path,
-        default=ROOT / "config" / "runtime-state-topology.json",
-        help="Runtime-state topology used for cutover-readiness checks",
-    )
-    parser.add_argument(
         "--require-cutover-ready",
         action="store_true",
         help="Refuse before migration unless topology and source inventory have no unresolved cutover blockers",
     )
-    parser.add_argument("--manifest-out", type=Path, help="Write verified migration manifest JSON")
-    parser.add_argument("--verify-manifest", type=Path, help="Verify an existing PostgreSQL/restore against a migration manifest instead of migrating")
+    parser.add_argument(
+        "--emit-manifest-json",
+        action="store_true",
+        help="Emit only the verified migration manifest as JSON on stdout for shell redirection or secure capture",
+    )
+    parser.add_argument(
+        "--verify-manifest-stdin",
+        action="store_true",
+        help="Read a migration manifest as JSON from stdin and verify the PostgreSQL target/restore",
+    )
     return parser.parse_args()
 
 
@@ -848,8 +862,8 @@ def _sources_from_args(args: argparse.Namespace) -> list[SourceSpec]:
 
 def main() -> int:
     args = parse_args()
-    if args.verify_manifest:
-        manifest = json.loads(args.verify_manifest.read_text(encoding="utf-8"))
+    if args.verify_manifest_stdin:
+        manifest = json.load(sys.stdin)
         result = verify_postgres_manifest(args.database_url, manifest)
         print("PostgreSQL runtime-state restore verified against migration manifest.")
         for table, info in result["tables"].items():
@@ -859,12 +873,12 @@ def main() -> int:
     manifest = migrate_runtime_state(
         sources=_sources_from_args(args),
         database_url=args.database_url,
-        topology_path=args.topology,
+        topology_path=RUNTIME_TOPOLOGY_PATH,
         require_cutover_ready=args.require_cutover_ready,
     )
-    if args.manifest_out:
-        args.manifest_out.parent.mkdir(parents=True, exist_ok=True)
-        args.manifest_out.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if args.emit_manifest_json:
+        print(json.dumps(manifest, indent=2, sort_keys=True))
+        return 0
 
     print("Runtime SQLite -> PostgreSQL staging migration verified.")
     for table, info in sorted(manifest["tables"].items()):
