@@ -50,8 +50,34 @@ jobs:
           umask 077
           printf '%s' "$KUBECONFIG_B64" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
+          kubectl auth can-i get deployments -n "$QC_NAMESPACE" | grep -qx yes
           kubectl auth can-i get pods -n "$QC_NAMESPACE" | grep -qx yes
+          kubectl auth can-i get horizontalpodautoscalers.autoscaling -n "$QC_NAMESPACE" | grep -qx yes
           kubectl auth can-i create pods/exec -n "$QC_NAMESPACE" | grep -qx yes
+
+      - name: Prove settled single-writer deployment topology
+        shell: bash
+        run: |
+          set -euo pipefail
+          spec="$(kubectl -n "$QC_NAMESPACE" get deploy qc-api -o jsonpath='{.spec.replicas}')"
+          replicas="$(kubectl -n "$QC_NAMESPACE" get deploy qc-api -o jsonpath='{.status.replicas}')"
+          updated="$(kubectl -n "$QC_NAMESPACE" get deploy qc-api -o jsonpath='{.status.updatedReplicas}')"
+          ready="$(kubectl -n "$QC_NAMESPACE" get deploy qc-api -o jsonpath='{.status.readyReplicas}')"
+          available="$(kubectl -n "$QC_NAMESPACE" get deploy qc-api -o jsonpath='{.status.availableReplicas}')"
+          observed="$(kubectl -n "$QC_NAMESPACE" get deploy qc-api -o jsonpath='{.status.observedGeneration}')"
+          generation="$(kubectl -n "$QC_NAMESPACE" get deploy qc-api -o jsonpath='{.metadata.generation}')"
+          test "$spec" = 1
+          test "$replicas" = 1
+          test "$updated" = 1
+          test "$ready" = 1
+          test "$available" = 1
+          test "$observed" = "$generation"
+
+          targets="$(kubectl -n "$QC_NAMESPACE" get hpa -o jsonpath='{range .items[*]}{.spec.scaleTargetRef.kind}{"/"}{.spec.scaleTargetRef.name}{"\n"}{end}' 2>/dev/null || true)"
+          if printf '%s\n' "$targets" | grep -qx 'Deployment/qc-api'; then
+            echo 'Refusing capture while an HPA targets Deployment/qc-api' >&2
+            exit 1
+          fi
 
       - name: Identify exactly one live API source pod
         id: pod
@@ -68,10 +94,14 @@ jobs:
           fi
           pod="${pods[0]}"
           uid="$(kubectl -n "$QC_NAMESPACE" get pod "$pod" -o jsonpath='{.metadata.uid}')"
+          owner_kind="$(kubectl -n "$QC_NAMESPACE" get pod "$pod" -o jsonpath='{.metadata.ownerReferences[0].kind}')"
+          owner_name="$(kubectl -n "$QC_NAMESPACE" get pod "$pod" -o jsonpath='{.metadata.ownerReferences[0].name}')"
           image_id="$(kubectl -n "$QC_NAMESPACE" get pod "$pod" -o jsonpath='{.status.containerStatuses[?(@.name=="api")].imageID}')"
           ready="$(kubectl -n "$QC_NAMESPACE" get pod "$pod" -o jsonpath='{.status.containerStatuses[?(@.name=="api")].ready}')"
           restarts="$(kubectl -n "$QC_NAMESPACE" get pod "$pod" -o jsonpath='{.status.containerStatuses[?(@.name=="api")].restartCount}')"
           test "$ready" = true
+          test "$owner_kind" = ReplicaSet
+          case "$owner_name" in qc-api-*) ;; *) echo "Unexpected qc-api pod owner: $owner_kind/$owner_name" >&2; exit 1;; esac
           test -n "$uid"
           test -n "$image_id"
           case "$image_id" in
@@ -91,7 +121,7 @@ jobs:
           set -euo pipefail
           kubectl -n "$QC_NAMESPACE" exec "$QC_API_POD" -c api -- sh -eu -c '
             prefix="$1"
-            for suffix in primary.db evolution.db threat-intel.db live-scanner.db metadata.json; do
+            for suffix in primary.db evolution.db threat-intel.db live-scanner.db; do
               if [ -e "${prefix}-${suffix}" ]; then
                 echo "capture destination already exists: ${prefix}-${suffix}" >&2
                 exit 1
@@ -150,16 +180,13 @@ jobs:
               evidence.append({
                   "name": name,
                   "status": "captured",
-                  "snapshot_path": destination,
                   "bytes": dst.stat().st_size,
                   "sha256": sha256_file(dst),
               })
-
           print(json.dumps(evidence, sort_keys=True))
           PY
 
       - name: Fingerprint file-backed sources in place without exporting contents
-        id: files
         env:
           QC_API_POD: ${{ steps.pod.outputs.name }}
         shell: bash
@@ -221,10 +248,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sqlite_json="$(kubectl -n "$QC_NAMESPACE" exec "$QC_API_POD" -c api -- \
+          sqlite_json="$(kubectl -n "$QC_NAMESPACE" exec -i "$QC_API_POD" -c api -- \
             env QC_CAPTURE_PREFIX="$QC_CAPTURE_PREFIX" python - <<'PY'
-          import hashlib, json, os
+          import hashlib
+          import json
+          import os
           from pathlib import Path
+
           prefix = os.environ["QC_CAPTURE_PREFIX"]
           mapping = [
               ("primary-runtime-db", f"{prefix}-primary.db"),
@@ -232,43 +262,50 @@ jobs:
               ("threat-intelligence-db", f"{prefix}-threat-intel.db"),
               ("live-scanner-db", f"{prefix}-live-scanner.db"),
           ]
-          def digest(path):
-              h=hashlib.sha256()
-              with path.open('rb') as f:
-                  for c in iter(lambda:f.read(1024*1024), b''): h.update(c)
+          def digest(path: Path):
+              h = hashlib.sha256()
+              with path.open("rb") as handle:
+                  for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                      h.update(chunk)
               return h.hexdigest()
-          out=[]
+          out = []
           for name, raw in mapping:
-              p=Path(raw)
-              if p.exists(): out.append({"name":name,"status":"captured","bytes":p.stat().st_size,"sha256":digest(p)})
-              else: out.append({"name":name,"status":"verified-absent","checked":True})
+              path = Path(raw)
+              if path.exists():
+                  out.append({"name": name, "status": "captured", "bytes": path.stat().st_size, "sha256": digest(path)})
+              else:
+                  out.append({"name": name, "status": "verified-absent", "checked": True})
           print(json.dumps(out, sort_keys=True))
           PY
           )"
           SQLITE_JSON="$sqlite_json" python - <<'PY'
-          import json, os, re
-          image_id=os.environ['QC_API_IMAGE_ID']
-          m=re.search(r'sha256:([0-9a-f]{64})', image_id)
-          if not m: raise SystemExit('immutable image digest missing')
-          evidence={
-              'kind':'queen-califia-production-source-capture',
-              'version':1,
-              'environment':'production',
-              'namespace':os.environ['QC_NAMESPACE'],
-              'api_pod':os.environ['QC_API_POD'],
-              'api_pod_uid':os.environ['QC_API_POD_UID'],
-              'api_image_digest':'sha256:'+m.group(1),
-              'restart_count':int(os.environ['QC_API_RESTART_COUNT']),
-              'captured_before_pod_replacement':True,
-              'sqlite_sources':json.loads(os.environ['SQLITE_JSON']),
-              'file_sources':json.load(open('/tmp/qc-file-source-evidence.json', encoding='utf-8')),
-              'snapshot_location':'existing-api-pvc:/var/data',
-              'pod_restarted_or_replaced_during_capture':False,
+          import json
+          import os
+          import re
+
+          image_id = os.environ["QC_API_IMAGE_ID"]
+          match = re.search(r"sha256:([0-9a-f]{64})", image_id)
+          if not match:
+              raise SystemExit("immutable image digest missing")
+          evidence = {
+              "kind": "queen-califia-production-source-capture",
+              "version": 1,
+              "environment": "production",
+              "namespace": os.environ["QC_NAMESPACE"],
+              "api_pod": os.environ["QC_API_POD"],
+              "api_pod_uid": os.environ["QC_API_POD_UID"],
+              "api_image_digest": "sha256:" + match.group(1),
+              "restart_count": int(os.environ["QC_API_RESTART_COUNT"]),
+              "captured_before_pod_replacement": True,
+              "sqlite_sources": json.loads(os.environ["SQLITE_JSON"]),
+              "file_sources": json.load(open("/tmp/qc-file-source-evidence.json", encoding="utf-8")),
+              "snapshot_location": "existing-api-pvc:/var/data",
+              "pod_restarted_or_replaced_during_capture": False,
           }
-          with open('/tmp/production-source-capture.json','w',encoding='utf-8') as f:
-              json.dump(evidence,f,sort_keys=True,indent=2)
-              f.write('\n')
-          print(json.dumps(evidence,sort_keys=True))
+          with open("/tmp/production-source-capture.json", "w", encoding="utf-8") as handle:
+              json.dump(evidence, handle, sort_keys=True, indent=2)
+              handle.write("\n")
+          print(json.dumps(evidence, sort_keys=True))
           PY
 
       - name: Upload secret-free capture metadata only
