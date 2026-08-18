@@ -111,7 +111,7 @@
       "row-count verification",
       "deterministic SHA-256 content verification"
     ],
-    "ci_contract_verified": false,
+    "ci_contract_verified": true,
     "production_disposition_complete": false,
     "note": "The repository has a fail-closed preservation path for all remaining historical scanner and file evidence. Production sources must still be captured and the resulting evidence recorded before any PVC/file binding is removed."
   },
