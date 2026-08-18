@@ -6,7 +6,6 @@ import io
 import json
 import os
 import sqlite3
-from pathlib import Path
 
 import pytest
 
@@ -45,7 +44,8 @@ def _clean_target(url: str) -> None:
                 conn.execute(sql.SQL("DELETE FROM {}").format(sql.Identifier(table)))
 
 
-def _unlink_stages() -> None:
+def _reset_stages() -> None:
+    VULNERABILITY_STAGE.parent.mkdir(parents=True, exist_ok=True)
     for path in (VULNERABILITY_STAGE, LIVE_SCANNER_STAGE):
         try:
             path.unlink()
@@ -80,9 +80,7 @@ def _audit_line(
     )
     record_hash = hashlib.sha256(canonical.encode()).hexdigest()
     signature = hmac.new(
-        key.encode(),
-        (record_hash + previous_hash).encode(),
-        hashlib.sha256,
+        key.encode(), (record_hash + previous_hash).encode(), hashlib.sha256
     ).hexdigest()
     record = {**entry, "hash": record_hash, "hmac": signature}
     return json.dumps(record, sort_keys=True, separators=(",", ":")), record_hash
@@ -172,35 +170,24 @@ def test_file_artifacts_are_verified_and_targets_refuse_merge(monkeypatch):
 
 
 @pytest.mark.skipif(not _postgres_url(), reason="QC_TEST_POSTGRES_URL not configured")
-def test_scanner_sqlite_disposition_preserves_state(monkeypatch):
-    del monkeypatch
+def test_scanner_sqlite_disposition_preserves_state():
     url = _postgres_url()
     _clean_target(url)
-    _unlink_stages()
+    _reset_stages()
     try:
         with sqlite3.connect(VULNERABILITY_STAGE) as conn:
             conn.execute(
                 """
                 CREATE TABLE qc_vuln_scan_jobs (
-                    scan_id TEXT PRIMARY KEY,
-                    target TEXT NOT NULL,
-                    scan_type TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    created_at TEXT,
-                    started_at TEXT,
-                    completed_at TEXT,
-                    error TEXT,
-                    result_json TEXT
+                    scan_id TEXT PRIMARY KEY,target TEXT NOT NULL,
+                    scan_type TEXT NOT NULL,status TEXT NOT NULL,
+                    created_at TEXT,started_at TEXT,completed_at TEXT,
+                    error TEXT,result_json TEXT
                 )
                 """
             )
             conn.execute(
-                """
-                INSERT INTO qc_vuln_scan_jobs (
-                    scan_id,target,scan_type,status,created_at,started_at,
-                    completed_at,error,result_json
-                ) VALUES (?,?,?,?,?,?,?,?,?)
-                """,
+                "INSERT INTO qc_vuln_scan_jobs VALUES (?,?,?,?,?,?,?,?,?)",
                 (
                     "legacy-vuln-1",
                     "127.0.0.1",
@@ -242,44 +229,24 @@ def test_scanner_sqlite_disposition_preserves_state(monkeypatch):
             conn.execute(
                 "INSERT INTO scans VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (
-                    "legacy-live-1",
-                    "127.0.0.1",
-                    "quick",
-                    "2026-08-17T00:00:00Z",
-                    "2026-08-17T00:01:00Z",
-                    1,
-                    1,
-                    0,
-                    1,
-                    8.0,
-                    '{"scan_id":"legacy-live-1"}',
+                    "legacy-live-1", "127.0.0.1", "quick",
+                    "2026-08-17T00:00:00Z", "2026-08-17T00:01:00Z",
+                    1, 1, 0, 1, 8.0, '{"scan_id":"legacy-live-1"}',
                 ),
             )
             conn.execute(
                 "INSERT INTO baselines VALUES (?,?,?,?,?,?,?)",
                 (
-                    "127.0.0.1",
-                    "[443]",
-                    '{"443":"https"}',
-                    "linux",
-                    "2026-08-17T00:00:00Z",
-                    "2026-08-17T00:01:00Z",
-                    3,
+                    "127.0.0.1", "[443]", '{"443":"https"}', "linux",
+                    "2026-08-17T00:00:00Z", "2026-08-17T00:01:00Z", 3,
                 ),
             )
             conn.execute(
                 "INSERT INTO findings_log VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (
-                    "legacy-finding-1",
-                    "legacy-live-1",
-                    "127.0.0.1",
-                    "Legacy finding",
-                    "HIGH",
-                    "CVE-TEST-1",
-                    8.0,
-                    "open",
-                    None,
-                    "2026-08-17T00:00:30Z",
+                    "legacy-finding-1", "legacy-live-1", "127.0.0.1",
+                    "Legacy finding", "HIGH", "CVE-TEST-1", 8.0, "open",
+                    None, "2026-08-17T00:00:30Z",
                 ),
             )
 
@@ -303,4 +270,4 @@ def test_scanner_sqlite_disposition_preserves_state(monkeypatch):
         assert live_row["scan_id"] == "legacy-live-1"
     finally:
         _clean_target(url)
-        _unlink_stages()
+        _reset_stages()
