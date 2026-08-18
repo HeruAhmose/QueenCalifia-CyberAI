@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -77,7 +78,8 @@ def main() -> int:
         if unpinned_pyyaml.search(text):
             fail(f"unpinned PyYAML install found in {path.relative_to(ROOT)}")
 
-    print(f"platform toolchain guard: {len(REQUIRED_KEYS)} pins valid; {checked} workflows clean")
+    subprocess.run([sys.executable, str(ROOT / "scripts/ci/check_oci_deployment.py")], check=True)
+    print(f"platform toolchain guard: {len(REQUIRED_KEYS)} pins valid; {checked} workflows clean; OCI deployment contract clean")
     return 0
 
 
