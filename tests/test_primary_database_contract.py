@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import concurrent.futures
 import os
-import sqlite3
 import uuid
 from pathlib import Path
 
@@ -59,13 +58,43 @@ def _postgres_url() -> str:
 
 
 @pytest.mark.skipif(not _postgres_url(), reason="QC_TEST_POSTGRES_URL not configured")
-def test_postgresql_primary_contract_identity_and_concurrent_writes(monkeypatch, tmp_path: Path):
+def test_postgresql_migration_identity_and_concurrent_writes(monkeypatch, tmp_path: Path):
     url = _postgres_url()
+
+    # Create a real SQLite source with the exact current schema, then migrate it
+    # into the fresh CI PostgreSQL service before enabling the PostgreSQL adapter.
+    _clear_database_env(monkeypatch)
+    source_path = tmp_path / "migration-source.db"
+    database.init_db(source_path)
+    migration_marker = f"migrated-{uuid.uuid4()}"
+    database.log_event(source_path, "migration-test", "source", migration_marker, {"ok": True})
+
+    from scripts.migrate_primary_sqlite_to_postgres import migrate
+
+    copied = migrate(source_path, url)
+    assert copied["trusted_sources"] == 6
+    assert copied["telemetry_events"] == 1
+
+    # The source remains usable and unchanged because the migrator opens it
+    # read-only and commits only the PostgreSQL target transaction.
+    with database.get_db(source_path) as source:
+        source_count = source.execute(
+            "SELECT COUNT(*) AS n FROM telemetry_events WHERE subject=?",
+            (migration_marker,),
+        ).fetchone()["n"]
+    assert source_count == 1
+
     monkeypatch.setenv("QC_DATABASE_URL", url)
     monkeypatch.delenv("DATABASE_URL", raising=False)
-
     assert database.database_backend() == "postgresql"
     database.init_db(tmp_path / "ignored.db")
+
+    with database.get_db(tmp_path / "ignored.db") as connection:
+        migrated_count = connection.execute(
+            "SELECT COUNT(*) AS n FROM telemetry_events WHERE subject=?",
+            (migration_marker,),
+        ).fetchone()["n"]
+    assert migrated_count == 1
 
     # Identity-store inserts depend on cursor.lastrowid. Exercise that existing
     # calling surface against PostgreSQL instead of rewriting route code here.
