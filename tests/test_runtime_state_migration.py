@@ -91,13 +91,17 @@ def _clean_target(url: str) -> None:
 
 def _seed_sources(tmp_path: Path, monkeypatch):
     _clear_database_env(monkeypatch)
-    primary = tmp_path / "queen.db"
+    requested_primary = tmp_path / "queen.db"
     evolution = tmp_path / "qc_evolution.db"
     threat = tmp_path / "qc_threat_intel.db"
 
-    database.init_db(primary)
-    database.log_event(primary, "migration-test", "runtime", "full-state", {"ok": True})
+    database.init_db(requested_primary)
+    database.log_event(requested_primary, "migration-test", "runtime", "full-state", {"ok": True})
+    primary = database._resolve_sqlite_path(requested_primary)
+    assert primary.is_file()
 
+    # All QC_DB_PATH-backed stores must use the same canonical physical source
+    # selected by core.database, mirroring the production single-writer layout.
     approvals = SQLiteApprovalStore(str(primary))
     approval = approvals.create(
         tenant_id="tenant-1",
