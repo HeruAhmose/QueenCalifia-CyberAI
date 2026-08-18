@@ -13,6 +13,14 @@
     "postgresql_capable": true,
     "production_cutover_complete": false
   },
+  "security_engine_database_contract": {
+    "runtime_adapter_module": "engines/runtime_state.py",
+    "production_composition": "app.py",
+    "postgresql_environment": ["QC_DATABASE_URL", "DATABASE_URL"],
+    "postgresql_capable": true,
+    "production_cutover_complete": false,
+    "note": "Incident response, remediation, evolution, and threat-intelligence runtime composition can use PostgreSQL with replica-aware mutation controls. Historical SQLite migration, backup/restore validation, rolling-update validation, and remaining writable-path removal are still required before HA."
+  },
   "sqlite_connectors": [
     {
       "path": "core/database.py",
@@ -34,35 +42,51 @@
     },
     {
       "path": "engines/incident_response.py",
+      "runtime_adapter": "engines/runtime_state.py:PostgresIncidentResponseOrchestrator",
       "store": "incident-response-db",
       "scope": "api",
       "authoritative": true,
       "migration_required": true,
-      "environment": ["QC_DB_PATH"]
+      "postgresql_capable": true,
+      "production_cutover_complete": false,
+      "environment": ["QC_DB_PATH", "QC_DATABASE_URL", "DATABASE_URL"],
+      "note": "PostgreSQL mode refreshes DB authority and serializes per-incident mutations across replicas; SQLite remains the local/single-writer fallback until migration and production validation are complete."
     },
     {
       "path": "engines/auto_remediation.py",
+      "runtime_adapter": "engines/runtime_state.py:PostgresAutoRemediation",
       "store": "auto-remediation-db",
       "scope": "api",
       "authoritative": true,
       "migration_required": true,
-      "environment": ["QC_DB_PATH"]
+      "postgresql_capable": true,
+      "production_cutover_complete": false,
+      "environment": ["QC_DB_PATH", "QC_DATABASE_URL", "DATABASE_URL"],
+      "note": "PostgreSQL mode claims each plan under an advisory lock before execution so replicas cannot execute the same remediation plan concurrently."
     },
     {
       "path": "engines/evolution_engine.py",
+      "runtime_adapter": "engines/runtime_state.py:PostgresEvolutionEngine",
       "store": "evolution-db",
       "scope": "api",
       "authoritative": true,
       "migration_required": true,
-      "environment": ["QC_EVOLUTION_DB"]
+      "postgresql_capable": true,
+      "production_cutover_complete": false,
+      "environment": ["QC_EVOLUTION_DB", "QC_DATABASE_URL", "DATABASE_URL"],
+      "note": "PostgreSQL mode provides exactly-once completed-scan learning across replicas. SQLite file backups are not represented as PostgreSQL backups; external backup/restore validation remains an open gate."
     },
     {
       "path": "engines/threat_intel_auto.py",
+      "runtime_adapter": "engines/runtime_state.py:PostgresThreatIntelEngine",
       "store": "threat-intelligence-db",
       "scope": "api",
       "authoritative": true,
       "migration_required": true,
-      "environment": ["QC_THREAT_INTEL_DB", "QC_EVOLUTION_DB"]
+      "postgresql_capable": true,
+      "production_cutover_complete": false,
+      "environment": ["QC_THREAT_INTEL_DB", "QC_EVOLUTION_DB", "QC_DATABASE_URL", "DATABASE_URL"],
+      "note": "PostgreSQL mode serializes scheduler lease acquisition and per-indicator merge updates across replicas; SQLite remains supported until historical state migration and production validation are complete."
     },
     {
       "path": "engines/live_scanner.py",
