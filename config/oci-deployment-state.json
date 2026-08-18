@@ -1,6 +1,11 @@
 {
-  "version": 1,
+  "version": 2,
   "target": "oci-always-free",
+  "deployment_role": "production-candidate",
+  "preferred_production_candidate": true,
+  "production_eligible_by_provider_policy": true,
+  "production_authorized": false,
+  "provider_policy_note": "Oracle documents OCI Free Tier as supporting application deployment and Always Free compute resources. This repository still requires all production evidence gates before runtime authorization.",
   "supported_platforms": [
     "linux/arm64",
     "linux/amd64"
