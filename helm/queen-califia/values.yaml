@@ -31,14 +31,19 @@ api:
     runAsNonRoot: true
     runAsUser: 10001
     runAsGroup: 10001
+    # The single-writer API PVC is mounted at /var/data. fsGroup ensures the
+    # non-root runtime identity can initialize and update SQLite/WAL files.
+    fsGroup: 10001
+    fsGroupChangePolicy: OnRootMismatch
     seccompProfile:
       type: RuntimeDefault
   containerSecurityContext:
     allowPrivilegeEscalation: false
     capabilities:
       drop: ["ALL"]
-    # The application writes SQLite/runtime state under data/, so the root
-    # filesystem is intentionally not marked read-only without a state volume.
+    # The application still writes temporary/runtime paths outside the dedicated
+    # state volume. readOnlyRootFilesystem remains false until #72 completes the
+    # full writer inventory and explicit writable-mount migration.
     readOnlyRootFilesystem: false
   service:
     type: ClusterIP

@@ -53,6 +53,31 @@ spec:
             {{- end }}
             - secretRef:
                 name: {{ .Values.secrets.name }}
+          # Single-writer persistence contract while #72 remains open. These
+          # values are deliberately scoped to the API container so the Celery
+          # worker never shares the SQLite volume across pods.
+          env:
+            - name: QC_DB_PATH
+              value: /var/data/queen.db
+            - name: QC_EVOLUTION_DB
+              value: /var/data/qc_evolution.db
+            - name: QC_MEMORY_BACKUP_DIR
+              value: /var/data/memory-backups
+            - name: QC_THREAT_INTEL_DB
+              value: /var/data/qc_threat_intel.db
+            - name: QC_API_KEYS_FILE
+              value: /var/data/keys.json
+            - name: QC_AUDIT_LOG_FILE
+              value: /var/data/audit.log.jsonl
+            - name: QC_AUDIT_CHAIN_DB
+              value: /var/data/queen.db
+            - name: QC_APPROVALS_DB
+              value: /var/data/queen.db
+            - name: QC_SPKI_LOG_FILE
+              value: /var/data/spki.jsonl
+          volumeMounts:
+            - name: api-state
+              mountPath: /var/data
           livenessProbe:
             httpGet:
               path: {{ .Values.api.probes.livenessPath }}
@@ -71,3 +96,7 @@ spec:
             failureThreshold: 6
           resources:
 {{ toYaml .Values.api.resources | indent 12 }}
+      volumes:
+        - name: api-state
+          persistentVolumeClaim:
+            claimName: qc-api-state

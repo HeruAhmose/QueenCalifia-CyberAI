@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: qc-api-state
+spec:
+  # RWO plus a single API replica preserves one authoritative SQLite writer
+  # until issue #72 completes the external-state migration.
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi

@@ -15,7 +15,9 @@ kind: Deployment
 metadata:
   name: qc-api
 spec:
-  replicas: 2
+  # Keep the direct manifest aligned with Helm: one SQLite writer until #72
+  # externalizes authoritative runtime state to a concurrency-safe datastore.
+  replicas: 1
   selector:
     matchLabels:
       app: qc-api
@@ -29,6 +31,8 @@ spec:
         runAsNonRoot: true
         runAsUser: 10001
         runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -48,6 +52,30 @@ spec:
                 name: qc-config
             - secretRef:
                 name: qc-secrets
+          # API-only state destinations. The Celery worker must not share this
+          # SQLite PVC across pods; distributed scan results live in Redis.
+          env:
+            - name: QC_DB_PATH
+              value: /var/data/queen.db
+            - name: QC_EVOLUTION_DB
+              value: /var/data/qc_evolution.db
+            - name: QC_MEMORY_BACKUP_DIR
+              value: /var/data/memory-backups
+            - name: QC_THREAT_INTEL_DB
+              value: /var/data/qc_threat_intel.db
+            - name: QC_API_KEYS_FILE
+              value: /var/data/keys.json
+            - name: QC_AUDIT_LOG_FILE
+              value: /var/data/audit.log.jsonl
+            - name: QC_AUDIT_CHAIN_DB
+              value: /var/data/queen.db
+            - name: QC_APPROVALS_DB
+              value: /var/data/queen.db
+            - name: QC_SPKI_LOG_FILE
+              value: /var/data/spki.jsonl
+          volumeMounts:
+            - name: api-state
+              mountPath: /var/data
           livenessProbe:
             httpGet:
               path: /healthz
@@ -71,3 +99,7 @@ spec:
             limits:
               cpu: "1"
               memory: 1Gi
+      volumes:
+        - name: api-state
+          persistentVolumeClaim:
+            claimName: qc-api-state
