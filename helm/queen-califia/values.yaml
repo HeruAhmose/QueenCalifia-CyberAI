@@ -18,7 +18,10 @@ podSecurityContext: {}
 containerSecurityContext: {}
 
 api:
-  replicaCount: 2
+  # The current Kubernetes API state is local SQLite/file-backed state. Until
+  # issue #72 externalizes authoritative state, multi-replica API operation is
+  # intentionally unsupported to prevent divergent pod-local databases.
+  replicaCount: 1
   image:
     repository: ghcr.io/YOUR_ORG/queencalifia-api
     tag: "TAG"
@@ -59,9 +62,12 @@ api:
     livenessPath: /healthz
     readinessPath: /readyz
   autoscaling:
+    # Horizontal API autoscaling remains disabled until authoritative state is
+    # externalized (issue #72). The API deployment template also fails closed
+    # if autoscaling or replicaCount > 1 is requested before that migration.
     enabled: false
-    minReplicas: 2
-    maxReplicas: 8
+    minReplicas: 1
+    maxReplicas: 1
     targetCPUUtilizationPercentage: 70
     targetMemoryUtilizationPercentage: ""
     behavior: {}

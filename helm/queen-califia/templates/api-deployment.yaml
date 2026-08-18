@@ -1,3 +1,6 @@
+{{- if or (gt (int .Values.api.replicaCount) 1) .Values.api.autoscaling.enabled }}
+{{- fail "Queen Califia API multi-replica/autoscaling is unsupported while authoritative runtime state is local SQLite/file-backed. Keep api.replicaCount=1 and api.autoscaling.enabled=false until issue #72 externalizes state." }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
