@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import os
+import threading
 import uuid
 from pathlib import Path
 
@@ -61,19 +62,24 @@ def _postgres_url() -> str:
 def test_postgresql_migration_identity_and_concurrent_writes(monkeypatch, tmp_path: Path):
     url = _postgres_url()
 
-    # Create a real SQLite source with the exact current schema, then migrate it
-    # into the fresh CI PostgreSQL service before enabling the PostgreSQL adapter.
+    # Create a real SQLite source with both static and dynamic primary-state
+    # tables, then migrate it into the fresh CI PostgreSQL service.
     _clear_database_env(monkeypatch)
     source_path = tmp_path / "migration-source.db"
     database.init_db(source_path)
     migration_marker = f"migrated-{uuid.uuid4()}"
     database.log_event(source_path, "migration-test", "source", migration_marker, {"ok": True})
 
+    from core import autonomy_loop
+
+    assert autonomy_loop._acquire_lease(source_path, "migration-owner", ttl_seconds=300) is True
+
     from scripts.migrate_primary_sqlite_to_postgres import migrate
 
     copied = migrate(source_path, url)
     assert copied["trusted_sources"] == 6
     assert copied["telemetry_events"] == 1
+    assert copied["qc_autonomy_lease"] == 1
 
     # The source remains usable and unchanged because the migrator opens it
     # read-only and commits only the PostgreSQL target transaction.
@@ -82,7 +88,11 @@ def test_postgresql_migration_identity_and_concurrent_writes(monkeypatch, tmp_pa
             "SELECT COUNT(*) AS n FROM telemetry_events WHERE subject=?",
             (migration_marker,),
         ).fetchone()["n"]
+        lease_count = source.execute(
+            "SELECT COUNT(*) AS n FROM qc_autonomy_lease WHERE lease_name='autonomy_loop'"
+        ).fetchone()["n"]
     assert source_count == 1
+    assert lease_count == 1
 
     monkeypatch.setenv("QC_DATABASE_URL", url)
     monkeypatch.delenv("DATABASE_URL", raising=False)
@@ -155,6 +165,19 @@ def test_postgresql_migration_identity_and_concurrent_writes(monkeypatch, tmp_pa
             "SELECT value FROM memories WHERE user_id='qc_identity' AND value=?",
             (marker,),
         ).fetchone()
+        # Clear the migrated lease before the fresh simultaneous-owner race.
+        connection.execute("DELETE FROM qc_autonomy_lease WHERE lease_name='autonomy_loop'")
 
     assert count == 12
     assert memory["value"] == marker
+
+    barrier = threading.Barrier(2)
+
+    def acquire(owner: str) -> bool:
+        barrier.wait()
+        return autonomy_loop._acquire_lease(tmp_path / "ignored.db", owner, ttl_seconds=300)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(acquire, ("postgres-owner-a", "postgres-owner-b")))
+
+    assert sorted(results) == [False, True]
