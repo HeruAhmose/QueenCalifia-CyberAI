@@ -54,7 +54,7 @@ if [[ "$MODE" == "--authorized" ]]; then
   done
   [[ "$(docker inspect -f '{{.State.Health.Status}}' queen-califia-api)" == "healthy" ]] || { docker logs queen-califia-api; exit 7; }
 
-  docker exec queen-califia-api python - <<'PY'
+  docker exec -i queen-califia-api python - <<'PY'
 import urllib.request
 for url in ("http://localhost:5000/healthz", "http://localhost:5000/readyz", "http://caddy:8080/healthz"):
     with urllib.request.urlopen(url, timeout=5) as response:
@@ -72,7 +72,7 @@ PY
 fi
 
 python3 - <<'PY'
-import json, subprocess, sys
+import json, subprocess
 names = ["queen-califia-valkey", "queen-califia-api", "queen-califia-worker", "queen-califia-frontend", "queen-califia-caddy", "queen-califia-cloudflared"]
 for name in names:
     result = subprocess.run(["docker", "inspect", name], capture_output=True, text=True)
