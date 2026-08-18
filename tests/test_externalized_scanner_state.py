@@ -88,11 +88,8 @@ def test_postgres_live_scanner_state_is_shared_across_instances(monkeypatch):
             cvss_score=8.0,
             cve_id="CVE-TEST-0001",
             affected_asset="127.0.0.1",
-            created_at="2026-08-17T00:00:00+00:00" if False else None,
+            timestamp="2026-08-17T00:00:00+00:00",
         )
-        # Finding.timestamp is the persisted timestamp field; assign an explicit
-        # deterministic value without relying on wall-clock time.
-        finding.timestamp = "2026-08-17T00:00:00+00:00"
         host = HostResult(
             ip="127.0.0.1",
             open_ports=[443],
