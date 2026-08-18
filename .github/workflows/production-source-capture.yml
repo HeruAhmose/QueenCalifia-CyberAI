@@ -1,0 +1,285 @@
+name: production-source-capture
+
+on:
+  push:
+    branches:
+      - ops/production-live-scanner-capture
+    paths:
+      - .ops/production-live-scanner-capture.request
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-source-capture
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    env:
+      QC_NAMESPACE: queen-califia-production
+      QC_CAPTURE_PREFIX: /var/data/qc-cutover-20260818
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Read pinned kubectl version
+        id: versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(grep '^KUBECTL_VERSION=' scripts/bootstrap/versions.env | cut -d= -f2-)"
+          test -n "$version"
+          echo "kubectl=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d
+        with:
+          version: ${{ steps.versions.outputs.kubectl }}
+
+      - name: Configure production kubeconfig
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${KUBECONFIG_B64:-}"
+          install -d -m 700 ~/.kube
+          umask 077
+          printf '%s' "$KUBECONFIG_B64" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl auth can-i get pods -n "$QC_NAMESPACE" | grep -qx yes
+          kubectl auth can-i create pods/exec -n "$QC_NAMESPACE" | grep -qx yes
+
+      - name: Identify exactly one live API source pod
+        id: pod
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t pods < <(kubectl -n "$QC_NAMESPACE" get pods -l app=qc-api \
+            --field-selector=status.phase=Running \
+            -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
+          if [ "${#pods[@]}" -ne 1 ]; then
+            printf 'Expected exactly one Running qc-api pod; found %s\n' "${#pods[@]}" >&2
+            printf '%s\n' "${pods[@]:-}" >&2
+            exit 1
+          fi
+          pod="${pods[0]}"
+          uid="$(kubectl -n "$QC_NAMESPACE" get pod "$pod" -o jsonpath='{.metadata.uid}')"
+          image_id="$(kubectl -n "$QC_NAMESPACE" get pod "$pod" -o jsonpath='{.status.containerStatuses[?(@.name=="api")].imageID}')"
+          ready="$(kubectl -n "$QC_NAMESPACE" get pod "$pod" -o jsonpath='{.status.containerStatuses[?(@.name=="api")].ready}')"
+          restarts="$(kubectl -n "$QC_NAMESPACE" get pod "$pod" -o jsonpath='{.status.containerStatuses[?(@.name=="api")].restartCount}')"
+          test "$ready" = true
+          test -n "$uid"
+          test -n "$image_id"
+          case "$image_id" in
+            *@sha256:*|docker-pullable://*@sha256:*|sha256:*) ;;
+            *) echo "API imageID is not immutable-digest backed: $image_id" >&2; exit 1;;
+          esac
+          echo "name=$pod" >> "$GITHUB_OUTPUT"
+          echo "uid=$uid" >> "$GITHUB_OUTPUT"
+          echo "image_id=$image_id" >> "$GITHUB_OUTPUT"
+          echo "restart_count=$restarts" >> "$GITHUB_OUTPUT"
+
+      - name: Refuse an already-used capture destination
+        env:
+          QC_API_POD: ${{ steps.pod.outputs.name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubectl -n "$QC_NAMESPACE" exec "$QC_API_POD" -c api -- sh -eu -c '
+            prefix="$1"
+            for suffix in primary.db evolution.db threat-intel.db live-scanner.db metadata.json; do
+              if [ -e "${prefix}-${suffix}" ]; then
+                echo "capture destination already exists: ${prefix}-${suffix}" >&2
+                exit 1
+              fi
+            done
+          ' sh "$QC_CAPTURE_PREFIX"
+
+      - name: Snapshot SQLite sources with online backup API
+        env:
+          QC_API_POD: ${{ steps.pod.outputs.name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubectl -n "$QC_NAMESPACE" exec -i "$QC_API_POD" -c api -- \
+            env QC_CAPTURE_PREFIX="$QC_CAPTURE_PREFIX" python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import sqlite3
+          from pathlib import Path
+
+          prefix = os.environ["QC_CAPTURE_PREFIX"]
+          pairs = [
+              ("primary-runtime-db", os.environ.get("QC_DB_PATH", "/var/data/queen.db"), f"{prefix}-primary.db"),
+              ("evolution-db", os.environ.get("QC_EVOLUTION_DB", "/var/data/qc_evolution.db"), f"{prefix}-evolution.db"),
+              ("threat-intelligence-db", os.environ.get("QC_THREAT_INTEL_DB", "/var/data/qc_threat_intel.db"), f"{prefix}-threat-intel.db"),
+              ("live-scanner-db", "/opt/render/project/src/backend/data/qc_scans.db", f"{prefix}-live-scanner.db"),
+          ]
+
+          def sha256_file(path: Path) -> str:
+              h = hashlib.sha256()
+              with path.open("rb") as handle:
+                  for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                      h.update(chunk)
+              return h.hexdigest()
+
+          evidence = []
+          for name, source, destination in pairs:
+              src = Path(source)
+              dst = Path(destination)
+              if not src.exists():
+                  evidence.append({"name": name, "status": "verified-absent", "checked": True})
+                  continue
+              if not src.is_file() or src.is_symlink():
+                  raise SystemExit(f"refusing non-regular/symlink SQLite source: {source}")
+              if dst.exists():
+                  raise SystemExit(f"refusing to overwrite capture destination: {destination}")
+              with sqlite3.connect(f"file:{src.as_posix()}?mode=ro", uri=True) as source_db:
+                  source_db.execute("PRAGMA query_only=ON")
+                  with sqlite3.connect(dst) as target_db:
+                      source_db.backup(target_db)
+                      check = target_db.execute("PRAGMA integrity_check").fetchone()[0]
+                      if check != "ok":
+                          raise SystemExit(f"SQLite integrity_check failed for {name}: {check}")
+              os.chmod(dst, 0o600)
+              evidence.append({
+                  "name": name,
+                  "status": "captured",
+                  "snapshot_path": destination,
+                  "bytes": dst.stat().st_size,
+                  "sha256": sha256_file(dst),
+              })
+
+          print(json.dumps(evidence, sort_keys=True))
+          PY
+
+      - name: Fingerprint file-backed sources in place without exporting contents
+        id: files
+        env:
+          QC_API_POD: ${{ steps.pod.outputs.name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="$(kubectl -n "$QC_NAMESPACE" exec -i "$QC_API_POD" -c api -- python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          sources = [
+              ("api-keys", os.environ.get("QC_API_KEYS_FILE", "/var/data/keys.json")),
+              ("audit-log", os.environ.get("QC_AUDIT_LOG_FILE", "/var/data/audit.log.jsonl")),
+              ("spki", os.environ.get("QC_SPKI_LOG_FILE", "/var/data/spki.jsonl")),
+          ]
+          def digest(path: Path):
+              h = hashlib.sha256()
+              with path.open("rb") as handle:
+                  for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                      h.update(chunk)
+              return h.hexdigest()
+          out = []
+          for name, raw in sources:
+              path = Path(raw)
+              if not path.exists():
+                  out.append({"name": name, "status": "verified-absent", "checked": True})
+                  continue
+              if not path.is_file() or path.is_symlink():
+                  raise SystemExit(f"refusing non-regular/symlink evidence source: {raw}")
+              out.append({"name": name, "status": "captured", "bytes": path.stat().st_size, "sha256": digest(path)})
+          print(json.dumps(out, sort_keys=True))
+          PY
+          )"
+          printf '%s' "$result" > /tmp/qc-file-source-evidence.json
+
+      - name: Re-assert source pod identity after capture
+        env:
+          QC_API_POD: ${{ steps.pod.outputs.name }}
+          QC_API_POD_UID: ${{ steps.pod.outputs.uid }}
+          QC_API_IMAGE_ID: ${{ steps.pod.outputs.image_id }}
+          QC_API_RESTART_COUNT: ${{ steps.pod.outputs.restart_count }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          uid="$(kubectl -n "$QC_NAMESPACE" get pod "$QC_API_POD" -o jsonpath='{.metadata.uid}')"
+          image_id="$(kubectl -n "$QC_NAMESPACE" get pod "$QC_API_POD" -o jsonpath='{.status.containerStatuses[?(@.name=="api")].imageID}')"
+          restarts="$(kubectl -n "$QC_NAMESPACE" get pod "$QC_API_POD" -o jsonpath='{.status.containerStatuses[?(@.name=="api")].restartCount}')"
+          test "$uid" = "$QC_API_POD_UID"
+          test "$image_id" = "$QC_API_IMAGE_ID"
+          test "$restarts" = "$QC_API_RESTART_COUNT"
+
+      - name: Emit secret-free capture evidence
+        env:
+          QC_API_POD: ${{ steps.pod.outputs.name }}
+          QC_API_POD_UID: ${{ steps.pod.outputs.uid }}
+          QC_API_IMAGE_ID: ${{ steps.pod.outputs.image_id }}
+          QC_API_RESTART_COUNT: ${{ steps.pod.outputs.restart_count }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sqlite_json="$(kubectl -n "$QC_NAMESPACE" exec "$QC_API_POD" -c api -- \
+            env QC_CAPTURE_PREFIX="$QC_CAPTURE_PREFIX" python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          prefix = os.environ["QC_CAPTURE_PREFIX"]
+          mapping = [
+              ("primary-runtime-db", f"{prefix}-primary.db"),
+              ("evolution-db", f"{prefix}-evolution.db"),
+              ("threat-intelligence-db", f"{prefix}-threat-intel.db"),
+              ("live-scanner-db", f"{prefix}-live-scanner.db"),
+          ]
+          def digest(path):
+              h=hashlib.sha256()
+              with path.open('rb') as f:
+                  for c in iter(lambda:f.read(1024*1024), b''): h.update(c)
+              return h.hexdigest()
+          out=[]
+          for name, raw in mapping:
+              p=Path(raw)
+              if p.exists(): out.append({"name":name,"status":"captured","bytes":p.stat().st_size,"sha256":digest(p)})
+              else: out.append({"name":name,"status":"verified-absent","checked":True})
+          print(json.dumps(out, sort_keys=True))
+          PY
+          )"
+          SQLITE_JSON="$sqlite_json" python - <<'PY'
+          import json, os, re
+          image_id=os.environ['QC_API_IMAGE_ID']
+          m=re.search(r'sha256:([0-9a-f]{64})', image_id)
+          if not m: raise SystemExit('immutable image digest missing')
+          evidence={
+              'kind':'queen-califia-production-source-capture',
+              'version':1,
+              'environment':'production',
+              'namespace':os.environ['QC_NAMESPACE'],
+              'api_pod':os.environ['QC_API_POD'],
+              'api_pod_uid':os.environ['QC_API_POD_UID'],
+              'api_image_digest':'sha256:'+m.group(1),
+              'restart_count':int(os.environ['QC_API_RESTART_COUNT']),
+              'captured_before_pod_replacement':True,
+              'sqlite_sources':json.loads(os.environ['SQLITE_JSON']),
+              'file_sources':json.load(open('/tmp/qc-file-source-evidence.json', encoding='utf-8')),
+              'snapshot_location':'existing-api-pvc:/var/data',
+              'pod_restarted_or_replaced_during_capture':False,
+          }
+          with open('/tmp/production-source-capture.json','w',encoding='utf-8') as f:
+              json.dump(evidence,f,sort_keys=True,indent=2)
+              f.write('\n')
+          print(json.dumps(evidence,sort_keys=True))
+          PY
+
+      - name: Upload secret-free capture metadata only
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: production-source-capture-evidence
+          path: /tmp/production-source-capture.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Remove kubeconfig
+        if: always()
+        shell: bash
+        run: rm -f ~/.kube/config
