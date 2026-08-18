@@ -42,6 +42,22 @@ def database_backend() -> str:
     raise RuntimeError("QC_DATABASE_URL/DATABASE_URL must use postgresql:// or postgres://")
 
 
+class DatabaseCursor:
+    def __init__(self, raw: Any, dialect: str):
+        self.raw = raw
+        self.dialect = dialect
+
+    def __getattr__(self, name: str):
+        return getattr(self.raw, name)
+
+    @property
+    def lastrowid(self):
+        if self.dialect == "sqlite":
+            return self.raw.lastrowid
+        row = self.raw.connection.execute("SELECT LASTVAL() AS id").fetchone()
+        return row["id"]
+
+
 class DatabaseConnection:
     """Small DB-API compatibility facade shared by SQLite and Psycopg 3."""
 
@@ -73,20 +89,23 @@ class DatabaseConnection:
     def execute(self, sql: str, params: tuple | list = ()):
         if self.dialect == "postgresql":
             sql = _postgres_sql(sql)
-        return self.raw.execute(sql, params)
+        return DatabaseCursor(self.raw.execute(sql, params), self.dialect)
 
 
 def _postgres_sql(sql: str) -> str:
     """Translate the deliberately small SQLite query surface used by callers."""
     statement = sql.strip()
     if statement.upper() == "BEGIN IMMEDIATE":
-        return "BEGIN"
+        # Preserve the SQLite gate's single-writer semantics for the identity
+        # auto-learning throttle without taking a database-wide table lock.
+        return "SELECT pg_advisory_xact_lock(72427201)"
 
-    # Existing modules use DB-API qmark placeholders. Psycopg uses %s.
     statement = statement.replace("?", "%s")
 
-    # SQLite's INSERT OR IGNORE is equivalent to a conflict-agnostic no-op for
-    # the uniqueness constraints used by the primary runtime schema.
+    if re.match(r"(?is)^INSERT\s+OR\s+REPLACE\s+INTO\s+identity_cycle_gate\s*", statement):
+        statement = re.sub(r"(?is)^INSERT\s+OR\s+REPLACE\s+INTO", "INSERT INTO", statement, count=1)
+        return statement + " ON CONFLICT (id) DO UPDATE SET last_auto_at = EXCLUDED.last_auto_at"
+
     if re.match(r"(?is)^INSERT\s+OR\s+IGNORE\s+INTO\s+", statement):
         statement = re.sub(r"(?is)^INSERT\s+OR\s+IGNORE\s+INTO\s+", "INSERT INTO ", statement, count=1)
         if " ON CONFLICT " not in statement.upper():
