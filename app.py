@@ -30,6 +30,7 @@ import argparse
 
 from api.gateway import create_security_api, SecurityConfig
 from flask import request
+from core.cors_boundary import CorsOriginBoundaryMiddleware
 from core.tamerian_mesh import TamerianSecurityMesh
 from engines.vulnerability_engine import VulnerabilityEngine
 from engines.incident_response import IncidentResponseOrchestrator
@@ -264,6 +265,15 @@ def build_system(no_auth: bool, origins: str) -> dict:
         threat_intel=threat_intel,
     )
 
+    # Final browser CORS authority. Inner gateway/Flask-CORS hooks may remain for
+    # compatibility, but this outer WSGI boundary scrubs their response headers and
+    # re-emits CORS only for explicit or Queen-Califia-scoped origins.
+    app.wsgi_app = CorsOriginBoundaryMiddleware(
+        app.wsgi_app,
+        configured_origins=origins,
+        production=os.environ.get("QC_PRODUCTION", "0") == "1",
+    )
+
     # Background identity learning + optional safe localhost scans for evolution
     # (thread + SQLite lease; see core/autonomy_loop.py).
     start_autonomy_loop(
@@ -357,4 +367,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
