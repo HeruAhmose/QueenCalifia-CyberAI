@@ -17,13 +17,9 @@ systemctl enable --now fail2ban
 systemctl enable --now unattended-upgrades
 
 install -d -m 0750 -o root -g root /srv/queen-califia
-for dir in postgres redis app app/cutover app/legacy backups caddy caddy/data caddy/config; do
+for dir in app app/cutover app/legacy backups caddy caddy/data caddy/config; do
   install -d -m 0750 -o root -g root "/srv/queen-califia/${dir}"
 done
-
-# Container UIDs: postgres=999 in the official image, Redis commonly 999,
-# Queen Califia application=10001. Ownership is intentionally explicit.
-chown -R 999:999 /srv/queen-califia/postgres /srv/queen-califia/redis
 chown -R 10001:10001 /srv/queen-califia/app
 
 ufw --force reset
@@ -49,6 +45,6 @@ fs.protected_symlinks=1
 EOF
 sysctl --system >/dev/null
 
-echo "OCI host bootstrap complete."
-echo "IMPORTANT: also restrict the OCI VCN ingress rules to TCP 22, 80 and 443; host UFW does not replace cloud firewall policy."
-echo "Runtime authorization marker was NOT created. PostgreSQL/Redis may be staged, but API/worker remain fail-closed."
+echo "OCI compute/edge bootstrap complete."
+echo "IMPORTANT: also restrict OCI VCN/NSG ingress to required ports; host UFW does not replace cloud firewall policy."
+echo "Runtime authorization marker was NOT created. PostgreSQL and Celery queue authority must remain external and TLS-protected."
