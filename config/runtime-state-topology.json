@@ -4,6 +4,15 @@
   "external_authority_target": "postgresql",
   "multi_replica_api_permitted": false,
   "issue": 72,
+  "primary_database_contract": {
+    "canonical_module": "core/database.py",
+    "backend_compatibility_module": "backend/core/database.py",
+    "sqlite_environment": "QC_DB_PATH",
+    "postgresql_environment": ["QC_DATABASE_URL", "DATABASE_URL"],
+    "migration_tool": "scripts/migrate_primary_sqlite_to_postgres.py",
+    "postgresql_capable": true,
+    "production_cutover_complete": false
+  },
   "sqlite_connectors": [
     {
       "path": "core/database.py",
@@ -11,15 +20,8 @@
       "scope": "api",
       "authoritative": true,
       "migration_required": true,
-      "environment": ["QC_DB_PATH"]
-    },
-    {
-      "path": "backend/core/database.py",
-      "store": "primary-runtime-db-backend-copy",
-      "scope": "api",
-      "authoritative": true,
-      "migration_required": true,
-      "environment": ["QC_DB_PATH"]
+      "environment": ["QC_DB_PATH", "QC_DATABASE_URL", "DATABASE_URL"],
+      "note": "The primary database contract can target PostgreSQL, but SQLite remains an allowed runtime backend until production cutover, data verification, rollback, backup/restore, and rolling-update gates are completed."
     },
     {
       "path": "engines/vulnerability_engine.py",
