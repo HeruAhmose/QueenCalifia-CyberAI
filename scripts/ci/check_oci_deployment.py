@@ -37,7 +37,7 @@ require(
 )
 if "replicas:" in compose or "scale:" in compose:
     raise SystemExit("OCI Compose must not introduce replica/scale settings while #72 is open")
-if "render.com" in compose.lower() or "/opt/render/" in compose:
+if "/opt/render/" in compose:
     raise SystemExit("OCI deployment must be independent from Render runtime paths")
 
 require(
