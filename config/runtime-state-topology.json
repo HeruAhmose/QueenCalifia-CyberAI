@@ -133,7 +133,7 @@
       "legacy write authority disabled probe",
       "legacy source retention before binding removal"
     ],
-    "ci_contract_verified": false,
+    "ci_contract_verified": true,
     "production_source_capture_complete": false,
     "production_migration_verified": false,
     "production_disposition_complete": false,
