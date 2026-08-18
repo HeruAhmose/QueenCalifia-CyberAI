@@ -78,7 +78,10 @@
       "scope": "api",
       "authoritative": true,
       "migration_required": true,
-      "environment": ["QC_AUDIT_CHAIN_DB", "QC_DB_PATH"]
+      "postgresql_capable": true,
+      "production_cutover_complete": false,
+      "environment": ["QC_AUDIT_CHAIN_DB", "QC_DB_PATH", "QC_DATABASE_URL", "DATABASE_URL"],
+      "note": "PostgreSQL mode serializes append sequence and predecessor state across replicas; SQLite remains supported until migration and production validation are complete."
     },
     {
       "path": "sovereignty/approvals.py",
@@ -86,7 +89,10 @@
       "scope": "api",
       "authoritative": true,
       "migration_required": true,
-      "environment": ["QC_APPROVALS_DB", "QC_DB_PATH"]
+      "postgresql_capable": true,
+      "production_cutover_complete": false,
+      "environment": ["QC_APPROVALS_DB", "QC_DB_PATH", "QC_DATABASE_URL", "DATABASE_URL"],
+      "note": "PostgreSQL mode provides row-locked approval mutations and atomic nonce replay protection across replicas; SQLite remains supported until migration and production validation are complete."
     },
     {
       "path": "cli.py",
