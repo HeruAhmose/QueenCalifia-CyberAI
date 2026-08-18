@@ -2,9 +2,12 @@
 set -euo pipefail
 
 ROOT="${QC_OCI_STATE_ROOT:-/srv/queen-califia}"
-COMPOSE="${QC_OCI_COMPOSE_FILE:-deploy/oci/docker-compose.oci.yml}"
 RECIPIENTS="${QC_BACKUP_AGE_RECIPIENTS_FILE:-}"
+DIRECT_URL="${QC_DATABASE_DIRECT_URL:-}"
 [[ -n "$RECIPIENTS" && -f "$RECIPIENTS" ]] || { echo "QC_BACKUP_AGE_RECIPIENTS_FILE must point to an age recipients file" >&2; exit 2; }
+[[ "$DIRECT_URL" == postgresql://* || "$DIRECT_URL" == postgres://* ]] || { echo "QC_DATABASE_DIRECT_URL must be the direct PostgreSQL authority URL" >&2; exit 2; }
+[[ "$DIRECT_URL" == *"sslmode=require"* ]] || { echo "QC_DATABASE_DIRECT_URL must require sslmode=require" >&2; exit 2; }
+[[ "$DIRECT_URL" != *"-pooler."* ]] || { echo "pg_dump must use the direct Neon endpoint, not the pooled hostname" >&2; exit 2; }
 
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 out="${ROOT}/backups/queen-${stamp}.dump.age"
@@ -13,11 +16,10 @@ tmp="${out}.tmp"
 mkdir -p "${ROOT}/backups"
 umask 077
 
-# pg_dump custom format is produced inside the PostgreSQL 16 container and
-# encrypted immediately on the host. No plaintext dump is written to disk.
-docker compose -f "$COMPOSE" --profile state exec -T postgres \
-  pg_dump --format=custom --no-owner --no-acl \
-    --username "${QC_POSTGRES_USER:-queen}" "${QC_POSTGRES_DB:-queen}" \
+# Use a pinned PostgreSQL 18 client container against the direct TLS endpoint.
+# The custom-format dump is encrypted immediately; no plaintext dump is written to disk.
+docker run --rm -i postgres:18-alpine \
+  pg_dump --format=custom --no-owner --no-acl --dbname "$DIRECT_URL" \
   | age -R "$RECIPIENTS" -o "$tmp"
 
 mv "$tmp" "$out"
