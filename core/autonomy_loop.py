@@ -7,7 +7,7 @@ networks: optional recurring scans are limited to 127.0.0.1 only.
 - Identity learning: calls run_learning_cycle_if_due() on an interval (throttled
   inside that function by QC_AUTO_LEARNING_INTERVAL_MINUTES).
 - Evolution: ingests quick localhost scan results when enabled.
-- Multi-worker: SQLite lease in QC_DB_PATH so only one process runs a tick.
+- Multi-worker: primary-database lease so only one process runs a tick.
 
 Env:
   QC_AUTONOMY_ENABLED          1/0 (default: 1 when QC_PRODUCTION=1, else 0)
@@ -32,6 +32,7 @@ from core.database import get_db
 logger = logging.getLogger("queencalifia.autonomy")
 
 _LEASE_NAME = "autonomy_loop"
+_AUTONOMY_LEASE_LOCK = 72427202
 
 
 def _autonomy_enabled() -> bool:
@@ -64,11 +65,21 @@ def _acquire_lease(db_path: Path, owner: str, ttl_seconds: float) -> bool:
                 CREATE TABLE IF NOT EXISTS qc_autonomy_lease (
                     lease_name TEXT PRIMARY KEY,
                     owner_id TEXT NOT NULL,
-                    acquired_at REAL NOT NULL,
-                    expires_at REAL NOT NULL
+                    acquired_at DOUBLE PRECISION NOT NULL,
+                    expires_at DOUBLE PRECISION NOT NULL
                 );
                 """
             )
+
+            # Serialize the read/claim decision. SQLite's BEGIN IMMEDIATE takes
+            # the single writer reservation; PostgreSQL uses a transaction-level
+            # advisory lock so two fresh replicas cannot both believe they won
+            # an initially-empty lease row.
+            if conn.dialect == "sqlite":
+                conn.execute("BEGIN IMMEDIATE")
+            else:
+                conn.execute("SELECT pg_advisory_xact_lock(?)", (_AUTONOMY_LEASE_LOCK,))
+
             row = conn.execute(
                 "SELECT owner_id, expires_at FROM qc_autonomy_lease WHERE lease_name=?",
                 (_LEASE_NAME,),
