@@ -52,6 +52,7 @@ kernel.kptr_restrict=2
 kernel.dmesg_restrict=1
 fs.protected_hardlinks=1
 fs.protected_symlinks=1
+vm.overcommit_memory=1
 EOF
 sysctl --system >/dev/null
 
@@ -69,4 +70,5 @@ test ! -e "$ROOT/app/cutover/SOVEREIGN_EDGE_RUNTIME_AUTHORIZED"
 
 echo "Sovereign Edge host bootstrap complete."
 echo "Inbound firewall: DENY by default; SSH allowed only from $ADMIN_CIDR; no HTTP/HTTPS/Valkey/PostgreSQL host ports opened."
+echo "Valkey host prerequisite applied: vm.overcommit_memory=1."
 echo "Before production candidacy: verify full-disk encryption, BIOS restore-after-power-loss, UPS behavior, and Cloudflare Tunnel egress on TCP/UDP 7844."
