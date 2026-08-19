@@ -69,6 +69,7 @@ for forbidden in (
 valkey = VALKEY.read_text(encoding="utf-8")
 require(
     valkey,
+    "protected-mode no",
     "port 0",
     "tls-port 6379",
     "tls-auth-clients yes",
@@ -78,6 +79,14 @@ require(
     "appendonly yes",
     "appendfsync everysec",
 )
+# `protected-mode no` is permitted only as one indivisible isolated-mTLS contract:
+# no plaintext listener, mandatory client certificates, no host port, and an internal-only queue network.
+if "protected-mode no" in valkey:
+    for required in ("port 0", "tls-auth-clients yes"):
+        if required not in valkey:
+            raise SystemExit(f"protected-mode no requires Valkey invariant: {required}")
+    if "internal: true" not in compose or "ports:" in compose:
+        raise SystemExit("protected-mode no requires an internal-only queue network with zero published host ports")
 
 require(
     DOCKERFILE.read_text(encoding="utf-8"),
@@ -193,4 +202,4 @@ loss = state.get("historical_sources", {}).get("render_live_scanner_qc_scans_db"
 if loss.get("status") != "unrecoverable-unverified" or loss.get("verified_absent") is not False or loss.get("captured") is not False:
     raise SystemExit("Render qc_scans.db evidence truth must remain unrecoverable-unverified")
 
-print("Sovereign Edge guard verified: private mTLS Valkey, loopback-safe self-health, outbound-only tunnel, Neon PG18 authority, evidence operators guarded, all production gates closed")
+print("Sovereign Edge guard verified: isolated mandatory-mTLS Valkey, plaintext disabled, outbound-only tunnel, Neon PG18 authority, evidence operators guarded, all production gates closed")
