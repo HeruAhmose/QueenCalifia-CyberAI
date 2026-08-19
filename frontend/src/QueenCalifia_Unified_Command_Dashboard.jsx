@@ -65,203 +65,6 @@ const C = {
 const FONT = "'DM Sans', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif";
 const MONO = "'JetBrains Mono', 'SF Mono', 'Fira Code', Consolas, monospace";
 
-// ─── Simulated Data Generators ────────────────────────────────────────────
-
-const now = () => new Date();
-const ago = (ms) => new Date(Date.now() - ms);
-const rand = (min, max) => Math.random() * (max - min) + min;
-const randInt = (min, max) => Math.floor(rand(min, max));
-const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-const uuid8 = () => Math.random().toString(36).slice(2, 10).toUpperCase();
-
-function generateMeshStatus() {
-  return {
-    mesh_id: "QC-" + uuid8(),
-    topology: { total_nodes: 24, active_nodes: randInt(21, 24), degraded_nodes: randInt(0, 3), healthy_circuits: 6, total_circuits: 6 },
-    threat_posture: {
-      active_attack_chains: randInt(0, 4),
-      iocs_active: randInt(45, 200),
-      ips_blocked: randInt(20, 80),
-      blocked_domains: randInt(30, 120),
-    },
-    statistics: {
-      events_ingested: randInt(50000, 250000),
-      threats_detected: randInt(5, 30),
-      attacks_correlated: randInt(1, 8),
-      mesh_heals: randInt(0, 5),
-      false_positives_suppressed: randInt(10, 50),
-    },
-  };
-}
-
-function generatePredictions() {
-  const categories = ["novel_exploit", "variant_mutation", "supply_chain_injection", "living_off_the_land", "encrypted_channel_abuse", "config_drift_exploit", "polymorphic_payload", "ai_generated_malware"];
-  const horizons = ["0-1h", "1-24h", "1-7d", "7-30d"];
-  const tiers = ["speculative", "emerging", "probable", "high", "near_certain"];
-  return Array.from({ length: randInt(3, 8) }, (_, i) => {
-    const confidence = rand(0.25, 0.97);
-    const tier = confidence > 0.95 ? "near_certain" : confidence > 0.8 ? "high" : confidence > 0.6 ? "probable" : confidence > 0.3 ? "emerging" : "speculative";
-    return {
-      prediction_id: `PRED-${uuid8()}`,
-      category: pick(categories),
-      title: pick([
-        "Novel Exploit Targeting Edge Gateway",
-        "AI-Generated Phishing Campaign Imminent",
-        "Supply Chain Injection — npm Registry",
-        "Encrypted C2 Channel Establishing",
-        "LOTL Attack via PowerShell Remoting",
-        "Configuration Drift Creating RCE Window",
-        "Polymorphic Payload Variant Detected",
-        "Identity Fabric Attack — OAuth Token Theft",
-        "Firmware-Level Persistence Attempt",
-        "DNS Tunneling with ML Evasion",
-      ]),
-      confidence: Math.round(confidence * 1000) / 1000,
-      confidence_tier: tier,
-      threat_horizon: pick(horizons),
-      risk_score: Math.round(confidence * rand(6, 10) * 100) / 100,
-      affected_assets: Array.from({ length: randInt(1, 4) }, () => `10.0.${randInt(1, 5)}.${randInt(10, 200)}`),
-      contributing_signals: randInt(2, 12),
-      predicted_techniques: Array.from({ length: randInt(1, 4) }, () => `T${randInt(1000, 1600)}`),
-      created_at: ago(randInt(60000, 7200000)).toISOString(),
-    };
-  }).sort((a, b) => b.confidence - a.confidence);
-}
-
-function generateIncidents() {
-  const cats = ["ransomware", "apt", "data_breach", "unauthorized_access", "phishing", "lateral_movement"];
-  const statuses = ["triaged", "investigating", "containing", "eradicating", "recovering"];
-  const actionTypes = [
-    { action: "Block IP at perimeter firewall", type: "containment", risk: "low" },
-    { action: "Isolate host from network segment", type: "containment", risk: "medium" },
-    { action: "Disable compromised user account", type: "containment", risk: "medium" },
-    { action: "Quarantine malicious binary", type: "containment", risk: "low" },
-    { action: "Revoke active session tokens", type: "containment", risk: "medium" },
-    { action: "Kill malicious process tree (PID cascade)", type: "eradication", risk: "high" },
-    { action: "Restore from last known-good snapshot", type: "recovery", risk: "high" },
-    { action: "Deploy emergency firewall rule — block C2 domain", type: "containment", risk: "low" },
-    { action: "Rotate compromised credentials", type: "recovery", risk: "medium" },
-    { action: "Enable enhanced logging on affected segment", type: "monitoring", risk: "low" },
-  ];
-  const evidenceTypes = [
-    { type: "pcap", desc: "Network capture — suspicious outbound traffic" },
-    { type: "memory_dump", desc: "Volatile memory snapshot — injected process" },
-    { type: "disk_image", desc: "Forensic disk image — affected workstation" },
-    { type: "log_bundle", desc: "Auth logs — failed login sequence" },
-    { type: "malware_sample", desc: "Extracted binary — staged payload" },
-    { type: "email_artifact", desc: "Phishing email with weaponized attachment" },
-    { type: "registry_export", desc: "Modified Run keys — persistence mechanism" },
-    { type: "screenshot", desc: "Desktop capture at time of alert" },
-  ];
-  const iocTypes = [
-    { type: "ip", value: () => `${randInt(45,220)}.${randInt(0,255)}.${randInt(0,255)}.${randInt(1,254)}` },
-    { type: "domain", value: () => pick(["evil-update.","c2-relay.","data-sync.","api-check.","cdn-fast."]) + pick(["xyz","top","cc","ru","cn","tk"]) },
-    { type: "hash_sha256", value: () => Array.from({length:64},()=>"0123456789abcdef"[randInt(0,16)]).join("") },
-    { type: "file_path", value: () => pick(["C:\\\\Users\\\\Public\\\\svchost.exe","C:\\\\Temp\\\\update.dll","/tmp/.hidden/beacon","/var/tmp/kworker"]) },
-    { type: "user_agent", value: () => pick(["Mozilla/5.0 (compatible; MSIE 6.0)","curl/7.68.0","python-requests/2.28.1"]) },
-  ];
-  return Array.from({ length: randInt(3, 6) }, () => {
-    const createdAt = ago(randInt(300000, 86400000));
-    const numActions = randInt(1, 5);
-    const numEvidence = randInt(1, 5);
-    const numIocs = randInt(2, 6);
-    const numTimeline = randInt(4, 10);
-    return {
-      incident_id: `INC-${uuid8()}`,
-      title: pick(["Ransomware Activity Detected — Workstation Cluster", "APT28 Campaign Indicators — DMZ Servers", "Data Exfiltration Attempt — HR Database", "Brute Force Attack — VPN Gateway", "Phishing Campaign — Executive Team", "Lateral Movement — Domain Controller", "Credential Stuffing — SSO Portal", "Cryptominer Deployment — Build Servers"]),
-      severity: pick(["CRITICAL", "HIGH", "MEDIUM"]),
-      category: pick(cats),
-      status: pick(statuses),
-      affected_assets: randInt(1, 12),
-      actions_pending: numActions,
-      evidence_collected: numEvidence,
-      created_at: createdAt.toISOString(),
-      containment_time_min: rand(2, 45),
-      lead_analyst: pick(["J. Torres", "S. Chen", "M. Okoro", "R. Patel", "A. Rodriguez"]),
-      playbook: pick(["PB-RANSOM-01", "PB-APT-02", "PB-BREACH-01", "PB-PHISH-01", "PB-LATERAL-01"]),
-      mitre_techniques: Array.from({ length: randInt(2, 5) }, () => pick([
-        "T1059.001 — PowerShell", "T1071.001 — Web Protocols", "T1486 — Data Encrypted for Impact",
-        "T1566.001 — Spearphishing Attachment", "T1078 — Valid Accounts", "T1021.001 — Remote Desktop",
-        "T1053.005 — Scheduled Task", "T1055 — Process Injection", "T1003 — OS Credential Dumping",
-        "T1070.004 — File Deletion", "T1105 — Ingress Tool Transfer", "T1047 — WMI",
-        "T1036.005 — Match Legitimate Name", "T1497 — Virtualization Evasion", "T1083 — File Discovery",
-      ])),
-      pending_actions: Array.from({ length: numActions }, (_, i) => {
-        const a = pick(actionTypes);
-        return { id: `ACT-${uuid8()}`, ...a, status: "pending", requested_by: pick(["SYSTEM","QueenCalifia AI","Analyst"]), requested_at: ago(randInt(60000, 600000)).toISOString() };
-      }),
-      evidence: Array.from({ length: numEvidence }, (_, i) => {
-        const e = pick(evidenceTypes);
-        return { id: `EV-${uuid8()}`, ...e, collected_at: ago(randInt(120000, 3600000)).toISOString(), size_mb: +(rand(0.1, 500)).toFixed(1), chain_of_custody: `SHA256:${Array.from({length:16},()=>"0123456789abcdef"[randInt(0,16)]).join("")}…` };
-      }),
-      iocs: Array.from({ length: numIocs }, () => {
-        const ioc = pick(iocTypes);
-        return { type: ioc.type, value: ioc.value(), first_seen: ago(randInt(300000, 7200000)).toISOString(), source: pick(["network_flow","endpoint_agent","dns_logs","auth_logs","telemetry_t1"]) };
-      }),
-      timeline: Array.from({ length: numTimeline }, (_, i) => ({
-        time: new Date(createdAt.getTime() + i * randInt(30000, 600000)).toISOString(),
-        event: pick([
-          "Initial alert triggered — anomalous outbound connection",
-          "Correlated with TLS fingerprint match (Cobalt Strike JA3)",
-          "Endpoint agent reported suspicious process injection",
-          "Automated containment initiated — host isolation pending approval",
-          "Evidence collection started — memory dump in progress",
-          "MITRE technique mapped — T1059.001 PowerShell execution",
-          "Lateral movement attempt detected to adjacent subnet",
-          "DNS beaconing pattern confirmed by telemetry T2",
-          "Analyst escalated to CRITICAL — multiple assets affected",
-          "Playbook PB-RANSOM-01 activated — awaiting action approval",
-          "IOC extracted — C2 domain added to blocklist",
-          "Forensic disk image acquisition completed",
-          "Credential rotation triggered for 3 affected accounts",
-          "Network segment quarantine applied",
-          "Threat intel enrichment — APT28 TTP match confirmed",
-        ]),
-        actor: pick(["QueenCalifia AI", "System", "Analyst", "Telemetry T1", "Telemetry T2", "Predictor L3"]),
-        type: pick(["detection", "analysis", "containment", "evidence", "escalation", "enrichment"]),
-      })).sort((a, b) => new Date(a.time) - new Date(b.time)),
-    };
-  });
-}
-
-function generateTimeSeriesData(points = 24) {
-  let base = randInt(500, 2000);
-  return Array.from({ length: points }, (_, i) => {
-    base += randInt(-200, 300);
-    base = Math.max(100, base);
-    return {
-      time: `${String(i).padStart(2, "0")}:00`,
-      events: base,
-      threats: Math.max(0, Math.floor(base * rand(0.001, 0.015))),
-      predictions: Math.max(0, Math.floor(base * rand(0.0005, 0.005))),
-      blocked: Math.max(0, Math.floor(base * rand(0.003, 0.01))),
-    };
-  });
-}
-
-function generateThreatLandscape() {
-  return [
-    { vector: "Ransomware", risk: rand(65, 95), trend: "accelerating" },
-    { vector: "Identity", risk: rand(55, 85), trend: "accelerating" },
-    { vector: "Supply Chain", risk: rand(50, 80), trend: "escalating" },
-    { vector: "AI-Augmented", risk: rand(40, 75), trend: "emerging" },
-    { vector: "Cloud Native", risk: rand(45, 70), trend: "accelerating" },
-    { vector: "Zero-Day Market", risk: rand(55, 90), trend: "expanding" },
-    { vector: "Firmware/HW", risk: rand(25, 55), trend: "emerging" },
-    { vector: "Encrypted Ch.", risk: rand(35, 60), trend: "stable" },
-  ];
-}
-
-function generateLayerActivity() {
-  return [
-    { layer: "Anomaly Fusion", signals: randInt(12, 80), confidence: rand(0.5, 0.85) },
-    { layer: "Surface Drift", signals: randInt(5, 30), confidence: rand(0.55, 0.9) },
-    { layer: "Entropy Analysis", signals: randInt(8, 45), confidence: rand(0.45, 0.8) },
-    { layer: "Behavioral Genome", signals: randInt(3, 25), confidence: rand(0.6, 0.92) },
-    { layer: "Strategic Forecast", signals: randInt(2, 15), confidence: rand(0.5, 0.88) },
-  ];
-}
-
 // ─── Micro Components ─────────────────────────────────────────────────────
 
 const Badge = ({ children, color = C.accent, bg, style }) => (
@@ -392,93 +195,6 @@ const NAV_ITEMS = [
   { id: "identity", label: "Identity Core", icon: "♛" },
   { id: "devops", label: "DevOps Ops", icon: "⎈" },
 ];
-
-// ─── TELEMETRY DATA GENERATORS ────────────────────────────────────────────
-
-function generateTelemetryData() {
-  const beaconTypes = ["periodic_exact", "periodic_jittered", "adaptive", "slow_drip"];
-  const sensorTypes = ["network", "endpoint", "dns", "auth", "file_integrity"];
-  const healthStates = ["healthy", "degraded", "stale", "offline"];
-  const malwareFamilies = ["Cobalt Strike", "Sliver C2", "Brute Ratel", "Mythic C2", "Havoc C2"];
-  
-  return {
-    fingerprints: {
-      total: randInt(80, 250),
-      known_bad: randInt(0, 5),
-      new_last_hour: randInt(1, 15),
-      recent_matches: Array.from({ length: randInt(0, 3) }, () => ({
-        ja3: uuid8() + uuid8() + uuid8() + uuid8(),
-        family: pick(malwareFamilies),
-        source: `10.0.${randInt(1, 10)}.${randInt(1, 254)}`,
-        dest: `${randInt(100, 220)}.${randInt(0, 255)}.${randInt(0, 255)}.${randInt(1, 254)}`,
-        time: ago(randInt(60000, 3600000)).toISOString(),
-        confidence: +(rand(0.82, 0.97)).toFixed(2),
-      })),
-    },
-    dns: {
-      sources_profiled: randInt(40, 200),
-      dga_detected: randInt(0, 6),
-      tunneling_alerts: randInt(0, 3),
-      exfil_indicators: randInt(0, 2),
-      queries_per_min: randInt(300, 2500),
-    },
-    beacons: Array.from({ length: randInt(0, 5) }, () => ({
-      source: `10.0.${randInt(1, 10)}.${randInt(1, 254)}`,
-      destination: `${randInt(100, 220)}.${randInt(0, 255)}.${randInt(0, 255)}.${randInt(1, 254)}`,
-      classification: pick(beaconTypes),
-      mean_interval: +(rand(15, 600)).toFixed(1),
-      jitter: +(rand(0.01, 0.45)).toFixed(3),
-      confidence: +(rand(0.55, 0.95)).toFixed(2),
-      samples: randInt(12, 500),
-    })),
-    kernel: {
-      syscall_profiles: randInt(30, 120),
-      injection_alerts: randInt(0, 3),
-      credential_alerts: randInt(0, 2),
-      ransomware_patterns: randInt(0, 1),
-      file_io_assets: randInt(15, 80),
-      memory_anomalies: randInt(0, 4),
-      privilege_transitions: randInt(2, 25),
-    },
-    graph: {
-      total_nodes: randInt(30, 150),
-      total_edges: randInt(50, 400),
-      high_risk_assets: Array.from({ length: randInt(0, 5) }, () => ({
-        asset: `10.0.${randInt(1, 10)}.${randInt(1, 254)}`,
-        risk: +(rand(0.5, 1.0)).toFixed(2),
-        direct_targets: randInt(3, 30),
-        blast_radius: randInt(8, 80),
-      })),
-      lateral_movements: randInt(0, 4),
-    },
-    feedback: {
-      total_entries: randInt(50, 500),
-      layers_tracked: 5,
-      active_adjustments: randInt(0, 3),
-      suppression_rules: randInt(0, 2),
-      tuned_weights: randInt(2, 15),
-      layer_accuracy: {
-        anomaly_fusion: { accuracy: +(rand(0.70, 0.95)).toFixed(2), fp_rate: +(rand(0.05, 0.25)).toFixed(2), total: randInt(20, 100) },
-        surface_drift: { accuracy: +(rand(0.65, 0.90)).toFixed(2), fp_rate: +(rand(0.08, 0.30)).toFixed(2), total: randInt(15, 80) },
-        entropy_analysis: { accuracy: +(rand(0.75, 0.95)).toFixed(2), fp_rate: +(rand(0.03, 0.20)).toFixed(2), total: randInt(10, 60) },
-        genome_deviation: { accuracy: +(rand(0.60, 0.88)).toFixed(2), fp_rate: +(rand(0.10, 0.35)).toFixed(2), total: randInt(10, 50) },
-        strategic_forecast: { accuracy: +(rand(0.50, 0.85)).toFixed(2), fp_rate: +(rand(0.12, 0.40)).toFixed(2), total: randInt(5, 30) },
-      },
-    },
-    sensors: sensorTypes.map(type => ({
-      type,
-      count: randInt(1, 6),
-      health: pick(healthStates.slice(0, 2)), // mostly healthy
-      coverage_pct: +(rand(70, 100)).toFixed(1),
-      avg_latency_ms: +(rand(5, 200)).toFixed(0),
-      events_per_min: +(rand(50, 3000)).toFixed(0),
-    })),
-    blind_spots: randInt(0, 2),
-    overall_health: pick(["healthy", "healthy", "healthy", "blind_spots_detected"]),
-    signals_generated: randInt(5, 80),
-    events_processed: randInt(1000, 50000),
-  };
-}
 
 // ─── TELEMETRY TAB ────────────────────────────────────────────────────────
 
@@ -2445,13 +2161,17 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
 
 // ─── DEVOPS TAB ────────────────────────────────────────────────────────────
 
+// workflowFile must name a real file in .github/workflows/ -- these link out
+// to GitHub's own workflow_dispatch page, since this dashboard has no
+// backend wired to trigger runs itself. There is no standalone DNS-check
+// workflow, so no "DNS Sanity Check" entry here -- don't list an operation
+// that doesn't correspond to a real, runnable workflow.
 const DEVOPS_WORKFLOWS = [
-  { id: "bootstrap", label: "Bootstrap K8s", icon: "⎈", color: C.accent, desc: "Provision cluster, ingress, cert-manager, ArgoCD" },
-  { id: "protect", label: "Protect Branches", icon: "🛡", color: C.green, desc: "Apply branch protection rules with auto-discover" },
-  { id: "dns", label: "DNS Sanity Check", icon: "🌐", color: C.cyan, desc: "Verify DNS propagation and record sanity" },
-  { id: "deploy", label: "Deploy to VM", icon: "🚀", color: C.purple, desc: "Docker compose deploy with TLS and monitoring" },
-  { id: "promote", label: "Promote to Prod", icon: "📦", color: C.amber, desc: "Promote staging to production via PR" },
-  { id: "helm", label: "Release Helm Chart", icon: "⚓", color: C.magenta, desc: "Package and publish Helm chart" },
+  { id: "bootstrap", label: "Bootstrap K8s", icon: "⎈", color: C.accent, desc: "Provision cluster, ingress, cert-manager, ArgoCD", workflowFile: "bootstrap-k8s.yml" },
+  { id: "protect", label: "Protect Branches", icon: "🛡", color: C.green, desc: "Apply branch protection rules with auto-discover", workflowFile: "protect-branches.yml" },
+  { id: "deploy", label: "Deploy to VM", icon: "🚀", color: C.purple, desc: "Docker compose deploy with TLS and monitoring", workflowFile: "deploy-vm.yml" },
+  { id: "promote", label: "Promote to Prod", icon: "📦", color: C.amber, desc: "Promote staging to production via PR", workflowFile: "promote-production.yml" },
+  { id: "helm", label: "Release Helm Chart", icon: "⚓", color: C.magenta, desc: "Package and publish Helm chart", workflowFile: "release-helm.yml" },
 ];
 
 // ─── QC OS v4.2.1 — API Layer (shared by all QC tabs) ────────────────────
@@ -3407,7 +3127,6 @@ function IdentityTab() {
 
 function DevOpsTab() {
   const [selected, setSelected] = useState(null);
-  const [running, setRunning] = useState(null);
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -3429,7 +3148,6 @@ function DevOpsTab() {
                 <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{w.label}</span>
               </div>
               <div style={{ fontSize: 10, color: C.textSoft, lineHeight: 1.4 }}>{w.desc}</div>
-              {running === w.id && <ProgressBar value={65} color={w.color} height={3} bg={`${w.color}10`} style={{ marginTop: 8 }} />}
             </button>
           ))}
         </div>
@@ -3450,46 +3168,53 @@ function DevOpsTab() {
               <input defaultValue="main" style={{ width: "100%", padding: "8px 10px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: MONO, fontSize: 11, boxSizing: "border-box" }} />
             </div>
           </div>
-          <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-            <button
-              onClick={() => { setRunning(selected); setTimeout(() => setRunning(null), 5000); }}
-              disabled={running === selected}
-              style={{ padding: "8px 20px", background: running === selected ? C.textDim : C.accent, color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: running ? "wait" : "pointer" }}
+          <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
+            <a
+              href={`https://github.com/HeruAhmose/QueenCalifia-CyberAI/actions/workflows/${DEVOPS_WORKFLOWS.find(w => w.id === selected)?.workflowFile}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ padding: "8px 20px", background: C.accent, color: "#fff", borderRadius: 6, fontSize: 12, fontWeight: 600, textDecoration: "none", display: "inline-block" }}
             >
-              {running === selected ? "Running..." : "Execute"}
-            </button>
+              Open in GitHub Actions ↗
+            </a>
             <button onClick={() => setSelected(null)} style={{ padding: "8px 16px", background: "transparent", color: C.textSoft, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
               Cancel
             </button>
           </div>
+          <p style={{ marginTop: 10, fontSize: 10, color: C.textDim, lineHeight: 1.5 }}>
+            This dashboard doesn't trigger workflow runs directly. "Open in GitHub Actions" takes you to the real workflow_dispatch page, where you can run it with your own credentials.
+          </p>
         </Panel>
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <Panel title="CI/CD Workflows" icon="🔄" accent={C.green}>
+        <Panel title="CI/CD Workflows" icon="🔄" accent={C.green} headerRight={
+          <span style={{ fontSize: 9, color: C.textDim, fontFamily: MONO }}>links to real runs, not live status</span>
+        }>
           {["ci.yml", "deploy-vm.yml", "promote-production.yml", "release-helm.yml", "bootstrap-k8s.yml", "protect-branches.yml", "deps-refresh.yml", "weekly-platform-upgrades.yml"].map(wf => (
-            <div key={wf} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${C.border}` }}>
+            <a
+              key={wf}
+              href={`https://github.com/HeruAhmose/QueenCalifia-CyberAI/actions/workflows/${wf}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${C.border}`, textDecoration: "none" }}
+            >
               <span style={{ fontSize: 11, fontFamily: MONO, color: C.text }}>{wf}</span>
-              <PulseDot color={C.green} size={6} />
-            </div>
+              <span style={{ fontSize: 10, color: C.textDim }}>view runs ↗</span>
+            </a>
           ))}
         </Panel>
 
-        <Panel title="Infrastructure" icon="🏗" accent={C.cyan}>
+        <Panel title="Infrastructure" icon="🏗" accent={C.cyan} headerRight={
+          <span style={{ fontSize: 9, color: C.textDim, fontFamily: MONO }}>provisioned, not live-checked</span>
+        }>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             {[
-              { label: "K8s Cluster", status: "Active" },
-              { label: "ArgoCD", status: "Synced" },
-              { label: "Cert-Manager", status: "Ready" },
-              { label: "Ingress", status: "Active" },
-              { label: "Redis", status: "Connected" },
-              { label: "Prometheus", status: "Scraping" },
-              { label: "Grafana", status: "Ready" },
-              { label: "OTEL Collector", status: "Active" },
-            ].map(s => (
-              <div key={s.label} style={{ padding: "6px 8px", background: C.surface, borderRadius: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 10, color: C.textSoft }}>{s.label}</span>
-                <span style={{ fontSize: 9, fontFamily: MONO, color: C.green }}>{s.status}</span>
+              "K8s Cluster", "ArgoCD", "Cert-Manager", "Ingress",
+              "Redis", "Prometheus", "Grafana", "OTEL Collector",
+            ].map(label => (
+              <div key={label} style={{ padding: "6px 8px", background: C.surface, borderRadius: 4 }}>
+                <span style={{ fontSize: 10, color: C.textSoft }}>{label}</span>
               </div>
             ))}
           </div>
