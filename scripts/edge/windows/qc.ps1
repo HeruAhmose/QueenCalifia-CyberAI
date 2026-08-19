@@ -66,7 +66,9 @@ function Invoke-VBox {
 
     $output = & $script:VBoxManage @Arguments 2>&1
     $code = $LASTEXITCODE
-    $text = ($output | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine
+    # Normalize native-process output to LF. PowerShell on Windows otherwise joins
+    # lines with CRLF, which can break regexes anchored at end-of-line.
+    $text = ($output | ForEach-Object { $_.ToString() }) -join "`n"
 
     if (-not $AllowFailure -and $code -ne 0) {
         throw "VBoxManage failed (ExitCode=$code): $text"
@@ -80,9 +82,9 @@ function Invoke-VBox {
 
 function Get-VMState {
     $result = Invoke-VBox -Arguments @('showvminfo', $VmName, '--machinereadable')
-    $match = [regex]::Match($result.Output, '(?m)^VMState="([^"]+)"$')
+    $match = [regex]::Match($result.Output, '(?m)^VMState="([^"]+)"\r?$')
     if (-not $match.Success) {
-        throw "Unable to determine VirtualBox state for '$VmName'."
+        throw "Unable to determine VirtualBox state for '$VmName'. VBoxManage output: $($result.Output)"
     }
     return $match.Groups[1].Value
 }
@@ -95,7 +97,7 @@ function Get-GuestProperty {
         return $null
     }
 
-    $match = [regex]::Match($result.Output, '(?m)^Value:\s?(.*)$')
+    $match = [regex]::Match($result.Output, '(?m)^Value:\s?(.*)\r?$')
     if (-not $match.Success) {
         return $null
     }
