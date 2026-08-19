@@ -35,9 +35,9 @@ docker exec queen-califia-valkey valkey-cli --tls \
   --cacert /run/valkey-pki/ca.crt \
   --cert /run/valkey-pki/health.crt \
   --key /run/valkey-pki/health.key \
-  -h valkey -p 6379 ping | grep -qx PONG
+  -h 127.0.0.1 -p 6379 ping | grep -qx PONG
 
-if docker exec queen-califia-valkey valkey-cli -h valkey -p 6379 ping >/tmp/qc-edge-plaintext.out 2>/tmp/qc-edge-plaintext.err; then
+if docker exec queen-califia-valkey valkey-cli -h 127.0.0.1 -p 6379 ping >/tmp/qc-edge-plaintext.out 2>/tmp/qc-edge-plaintext.err; then
   echo "plaintext Valkey unexpectedly accepted a request" >&2
   exit 5
 fi
