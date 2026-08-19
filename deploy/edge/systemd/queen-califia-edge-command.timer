@@ -1,0 +1,12 @@
+[Unit]
+Description=Queen Califia Sovereign Edge host command poller
+
+[Timer]
+OnBootSec=5s
+OnUnitActiveSec=2s
+AccuracySec=1s
+Persistent=false
+Unit=queen-califia-edge-command.service
+
+[Install]
+WantedBy=timers.target
