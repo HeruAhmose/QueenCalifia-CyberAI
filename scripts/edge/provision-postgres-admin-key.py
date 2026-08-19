@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Provision Queen Califia's first production admin API key into PostgreSQL.
 
-The raw key is generated locally and written to a caller-selected secret file.
-Only its PBKDF2 fingerprint is persisted in PostgreSQL. The raw key is never
-printed. Provisioning fails closed unless qc_api_keys is empty.
+The raw key is generated locally and written only to Queen Califia's fixed
+root-owned secret location. Only its PBKDF2 fingerprint is persisted in
+PostgreSQL. The raw key and fingerprint are never printed. Provisioning fails
+closed unless qc_api_keys is empty.
 """
 from __future__ import annotations
 
@@ -21,6 +22,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.api_key_crypto import API_KEY_HASH_SCHEME, api_key_fingerprint  # noqa: E402
+
+SECRET_PATH = Path("/srv/queen-califia/secrets/qc-admin-api-key")
+_ADVISORY_LOCK = 72427219
 
 
 def _utcnow() -> str:
@@ -42,29 +46,26 @@ def validate_direct_database_url(url: str) -> str:
     return value
 
 
-def _write_secret_file(path: Path, raw_key: str) -> None:
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    try:
-        path.parent.chmod(0o700)
-    except PermissionError:
-        pass
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+def _write_secret_file(raw_key: str) -> None:
+    SECRET_PATH.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    SECRET_PATH.parent.chmod(0o700)
+    fd = os.open(SECRET_PATH, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
         os.write(fd, (raw_key + "\n").encode("utf-8"))
         os.fsync(fd)
     finally:
         os.close(fd)
-    mode = stat.S_IMODE(path.stat().st_mode)
+    mode = stat.S_IMODE(SECRET_PATH.stat().st_mode)
     if mode != 0o600:
-        path.unlink(missing_ok=True)
-        raise RuntimeError(f"secret file permissions must be 0600, got {oct(mode)}")
+        SECRET_PATH.unlink(missing_ok=True)
+        raise RuntimeError("secret file permissions must be 0600")
 
 
-def provision(database_url: str, pepper: str, secret_path: Path) -> dict[str, object]:
+def provision(database_url: str, pepper: str) -> dict[str, object]:
     if not pepper:
         raise RuntimeError("QC_API_KEY_PEPPER is required")
-    if secret_path.exists():
-        raise RuntimeError(f"refusing to overwrite existing secret file: {secret_path}")
+    if SECRET_PATH.exists():
+        raise RuntimeError("refusing to overwrite existing admin secret")
 
     try:
         import psycopg
@@ -76,7 +77,7 @@ def provision(database_url: str, pepper: str, secret_path: Path) -> dict[str, ob
     key_hash = api_key_fingerprint(raw_key, pepper)
     created_at = _utcnow()
 
-    _write_secret_file(secret_path, raw_key)
+    _write_secret_file(raw_key)
     inserted = False
     try:
         with psycopg.connect(url) as conn:
@@ -84,7 +85,7 @@ def provision(database_url: str, pepper: str, secret_path: Path) -> dict[str, ob
             major = server_version_num // 10000
             if major != 18:
                 raise RuntimeError(f"expected PostgreSQL 18, got major {major}")
-            conn.execute("SELECT pg_advisory_xact_lock(%s)", (72427219,))
+            conn.execute("SELECT pg_advisory_xact_lock(%s)", (_ADVISORY_LOCK,))
             row = conn.execute("SELECT COUNT(*) FROM qc_api_keys").fetchone()
             if int(row[0]) != 0:
                 raise RuntimeError("refusing admin-key provision: qc_api_keys is not empty")
@@ -108,11 +109,11 @@ def provision(database_url: str, pepper: str, secret_path: Path) -> dict[str, ob
             )
             inserted = True
     except Exception:
-        secret_path.unlink(missing_ok=True)
+        SECRET_PATH.unlink(missing_ok=True)
         raise
 
     if not inserted:
-        secret_path.unlink(missing_ok=True)
+        SECRET_PATH.unlink(missing_ok=True)
         raise RuntimeError("admin-key provision did not commit")
 
     return {
@@ -123,20 +124,17 @@ def provision(database_url: str, pepper: str, secret_path: Path) -> dict[str, ob
         "permissions": ["read", "write", "execute", "admin"],
         "rate_limit": 240,
         "hash_scheme": API_KEY_HASH_SCHEME,
-        "key_hash": key_hash,
         "raw_key_printed": False,
+        "fingerprint_printed": False,
         "secret_file_mode": "0600",
-        "secret_path": str(secret_path),
+        "secret_location": "fixed-sovereign-edge-state-root",
     }
 
 
 def main() -> int:
     url = os.getenv("QC_DATABASE_DIRECT_URL", "")
     pepper = os.getenv("QC_API_KEY_PEPPER", "")
-    secret_path = Path(
-        os.getenv("QC_ADMIN_KEY_OUTPUT", "/srv/queen-califia/secrets/qc-admin-api-key")
-    )
-    print(json.dumps(provision(url, pepper, secret_path), sort_keys=True, indent=2))
+    print(json.dumps(provision(url, pepper), sort_keys=True, indent=2))
     return 0
 
 
