@@ -84,27 +84,57 @@ jobs:
             exit 1
           fi
 
-          docker exec queen-califia-valkey valkey-cli --tls \
+          echo "SELF_TLS_BEGIN"
+          set +e
+          self_output="$(docker exec queen-califia-valkey valkey-cli --tls \
             --cacert /run/valkey-pki/ca.crt \
             --cert /run/valkey-pki/health.crt \
             --key /run/valkey-pki/health.key \
-            -h 127.0.0.1 -p 6379 ping | grep -qx PONG
+            -h 127.0.0.1 -p 6379 ping 2>&1)"
+          self_rc=$?
+          set -e
+          printf 'SELF_TLS_RC=%s\n%s\n' "$self_rc" "$self_output"
+          if [ "$self_rc" -ne 0 ] || [ "$self_output" != PONG ]; then
+            openssl x509 -in "${RUNNER_TEMP}/qc-edge/pki/valkey/server.crt" -noout -text || true
+            docker logs queen-califia-valkey || true
+            echo "self mTLS assertion failed" >&2
+            exit 1
+          fi
 
-          docker run --rm --user 10001:10001 --network queen-califia-queue \
+          echo "NETWORK_MTLS_BEGIN"
+          set +e
+          network_output="$(docker run --rm --user 10001:10001 --network queen-califia-queue \
             -v "${RUNNER_TEMP}/qc-edge/pki/valkey:/run/valkey-pki:ro" \
             valkey/valkey:9.1.1-alpine3.24 \
             valkey-cli --tls --cacert /run/valkey-pki/ca.crt \
               --cert /run/valkey-pki/health.crt --key /run/valkey-pki/health.key \
-              -h valkey -p 6379 ping | grep -qx PONG
+              -h valkey -p 6379 ping 2>&1)"
+          network_rc=$?
+          set -e
+          printf 'NETWORK_MTLS_RC=%s\n%s\n' "$network_rc" "$network_output"
+          if [ "$network_rc" -ne 0 ] || [ "$network_output" != PONG ]; then
+            docker logs queen-califia-valkey || true
+            echo "private-network mTLS assertion failed" >&2
+            exit 1
+          fi
 
-          if docker run --rm --network queen-califia-queue valkey/valkey:9.1.1-alpine3.24 \
-            valkey-cli -h valkey -p 6379 ping; then
+          echo "PLAINTEXT_NEGATIVE_BEGIN"
+          set +e
+          plaintext_output="$(docker run --rm --network queen-califia-queue valkey/valkey:9.1.1-alpine3.24 \
+            valkey-cli -h valkey -p 6379 ping 2>&1)"
+          plaintext_rc=$?
+          set -e
+          printf 'PLAINTEXT_RC=%s\n%s\n' "$plaintext_rc" "$plaintext_output"
+          if [ "$plaintext_rc" -eq 0 ]; then
             echo "plaintext Valkey unexpectedly succeeded across the private queue network" >&2
             exit 1
           fi
 
-          test -s "${RUNNER_TEMP}/qc-edge/valkey/appendonlydir/appendonly.aof.manifest" || {
-            docker exec queen-califia-valkey sh -c 'find /data -maxdepth 3 -type f -print'
+          echo "AOF_BEGIN"
+          sudo find "${RUNNER_TEMP}/qc-edge/valkey" -maxdepth 3 -type f -ls || true
+          sudo test -s "${RUNNER_TEMP}/qc-edge/valkey/appendonlydir/appendonly.aof.manifest" || {
+            docker exec queen-califia-valkey sh -c 'find /data -maxdepth 3 -type f -ls' || true
             echo "Valkey AOF manifest not created" >&2
             exit 1
           }
+          echo "SOVEREIGN_EDGE_VALKEY_PROOF=PASS"
