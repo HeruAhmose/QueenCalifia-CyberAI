@@ -83,15 +83,26 @@ jobs:
             echo "Valkey failed to become healthy: $status" >&2
             exit 1
           fi
+
           docker exec queen-califia-valkey valkey-cli --tls \
             --cacert /run/valkey-pki/ca.crt \
             --cert /run/valkey-pki/health.crt \
             --key /run/valkey-pki/health.key \
-            -h valkey -p 6379 ping | grep -qx PONG
-          if docker exec queen-califia-valkey valkey-cli -h valkey -p 6379 ping; then
-            echo "plaintext Valkey unexpectedly succeeded" >&2
+            -h 127.0.0.1 -p 6379 ping | grep -qx PONG
+
+          docker run --rm --user 10001:10001 --network queen-califia-queue \
+            -v "${RUNNER_TEMP}/qc-edge/pki/valkey:/run/valkey-pki:ro" \
+            valkey/valkey:9.1.1-alpine3.24 \
+            valkey-cli --tls --cacert /run/valkey-pki/ca.crt \
+              --cert /run/valkey-pki/health.crt --key /run/valkey-pki/health.key \
+              -h valkey -p 6379 ping | grep -qx PONG
+
+          if docker run --rm --network queen-califia-queue valkey/valkey:9.1.1-alpine3.24 \
+            valkey-cli -h valkey -p 6379 ping; then
+            echo "plaintext Valkey unexpectedly succeeded across the private queue network" >&2
             exit 1
           fi
+
           test -s "${RUNNER_TEMP}/qc-edge/valkey/appendonlydir/appendonly.aof.manifest" || {
             docker exec queen-califia-valkey sh -c 'find /data -maxdepth 3 -type f -print'
             echo "Valkey AOF manifest not created" >&2
