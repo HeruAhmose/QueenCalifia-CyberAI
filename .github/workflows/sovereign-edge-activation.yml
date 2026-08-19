@@ -1,0 +1,69 @@
+name: sovereign-edge-activation
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sovereign-edge-activation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  activation-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+
+      - name: One-command activation invariants
+        run: python scripts/ci/check_sovereign_edge_activation.py
+
+      - name: Shell syntax
+        run: |
+          bash -n scripts/edge/activate-runtime.sh
+          bash -n scripts/edge/vbox-runtime-state.sh
+          bash -n scripts/edge/command-dispatch.sh
+          bash -n scripts/edge/install-systemd.sh
+
+      - name: PowerShell syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/edge/windows/qc.ps1'),
+            [ref]$tokens,
+            [ref]$errors
+          )
+          if ($errors.Count -gt 0) {
+            $errors | Format-List Message, Extent
+            throw 'Sovereign Edge PowerShell launcher parser failed.'
+          }
+          'POWERSHELL_LAUNCHER_PARSE=PASS'
+
+      - name: PowerShell powered-off status smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/fake-vbox"
+          cat >"${RUNNER_TEMP}/fake-vbox/VBoxManage.exe" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          if [[ "$1" == "showvminfo" ]]; then
+            printf 'VMState="poweroff"\n'
+            exit 0
+          fi
+          echo "unexpected fake VBoxManage invocation: $*" >&2
+          exit 2
+          SH
+          chmod +x "${RUNNER_TEMP}/fake-vbox/VBoxManage.exe"
+          PATH="${RUNNER_TEMP}/fake-vbox:${PATH}" pwsh -NoLogo -NoProfile -File scripts/edge/windows/qc.ps1 status | tee /tmp/qc-status.txt
+          grep -q 'QUEEN_CALIFIA=OFFLINE' /tmp/qc-status.txt
