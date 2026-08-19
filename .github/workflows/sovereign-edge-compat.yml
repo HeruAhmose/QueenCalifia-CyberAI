@@ -76,7 +76,13 @@ jobs:
             [ "$status" = healthy ] && break
             sleep 2
           done
-          test "$(docker inspect -f '{{.State.Health.Status}}' queen-califia-valkey)" = healthy
+          status="$(docker inspect -f '{{.State.Health.Status}}' queen-califia-valkey 2>/dev/null || true)"
+          if [ "$status" != healthy ]; then
+            docker inspect queen-califia-valkey || true
+            docker logs queen-califia-valkey || true
+            echo "Valkey failed to become healthy: $status" >&2
+            exit 1
+          fi
           docker exec queen-califia-valkey valkey-cli --tls \
             --cacert /run/valkey-pki/ca.crt \
             --cert /run/valkey-pki/health.crt \
