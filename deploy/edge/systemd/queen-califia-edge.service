@@ -1,0 +1,30 @@
+[Unit]
+Description=Queen Califia Sovereign Edge authorized runtime
+After=docker.service network-online.target vboxadd-service.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/queen-califia
+Environment=QC_EDGE_REPO_ROOT=/opt/queen-califia
+Environment=DOCKER_CONFIG=/run/queen-califia-edge-docker
+Environment=HOME=/run/queen-califia-edge-docker
+RuntimeDirectory=queen-califia-edge-docker
+RuntimeDirectoryMode=0700
+ExecStart=/opt/queen-califia/scripts/edge/activate-runtime.sh start
+ExecStop=/opt/queen-califia/scripts/edge/activate-runtime.sh stop
+TimeoutStartSec=5min
+TimeoutStopSec=2min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ReadWritePaths=/srv/queen-califia /run/docker.sock /run/queen-califia-edge-docker
+
+[Install]
+WantedBy=multi-user.target

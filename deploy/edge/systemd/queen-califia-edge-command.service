@@ -1,0 +1,17 @@
+[Unit]
+Description=Queen Califia Sovereign Edge host command dispatcher
+After=vboxadd-service.service
+
+[Service]
+Type=oneshot
+Environment=QC_EDGE_REPO_ROOT=/opt/queen-califia
+ExecStart=/opt/queen-califia/scripts/edge/command-dispatch.sh
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RuntimeDirectory=queen-califia-edge
+RuntimeDirectoryMode=0700
+ReadWritePaths=/run/queen-califia-edge
