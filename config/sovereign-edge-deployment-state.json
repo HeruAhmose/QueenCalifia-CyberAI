@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "target": "sovereign-local-edge",
+  "deployment_role": "production-candidate",
+  "preferred_production_candidate": true,
+  "production_authorized": false,
+  "compute_location": "sovereign-local",
+  "production_compose": "deploy/edge/docker-compose.edge.yml",
+  "state_root": "/srv/queen-califia",
+  "host": {
+    "operating_system": "ubuntu-server",
+    "dedicated_host_required": true,
+    "provisioned": false,
+    "identity_verified": false,
+    "full_disk_encryption_verified": false,
+    "firewall_default_deny_incoming_verified": false,
+    "bios_restore_after_power_loss_verified": false,
+    "ups_verified": false,
+    "api_replicas": 1,
+    "worker_replicas": 1
+  },
+  "ingress": {
+    "provider": "cloudflare-tunnel",
+    "connector": "cloudflared",
+    "outbound_only": true,
+    "publicly_routable_origin_ip_required": false,
+    "host_http_ports_published": false,
+    "tunnel_provisioned": false,
+    "tunnel_identity_verified": false,
+    "public_hostname_verified": false,
+    "origin_service": "http://caddy:8080"
+  },
+  "postgresql": {
+    "provider": "neon",
+    "project_name": "QueenCalifia-CyberAI",
+    "project_id": "delicate-poetry-25758881",
+    "branch_name": "main",
+    "branch_id": "br-silent-paper-awx0pxs5",
+    "database_name": "neondb",
+    "region": "aws-us-east-1",
+    "postgresql_major": 18,
+    "authoritative_application_state": true,
+    "application_connection_mode": "pooled",
+    "migration_and_pg_dump_connection_mode": "direct",
+    "tls_required": true,
+    "production_migration_verified": false,
+    "database_manifest_verified": false,
+    "production_backup_restore_verified": false
+  },
+  "queue": {
+    "provider": "self-hosted-valkey",
+    "version": "9.1.1",
+    "scope": "host-local-private-docker-network",
+    "authoritative_application_state": false,
+    "tls_required": true,
+    "mutual_tls_required": true,
+    "plaintext_port_disabled": true,
+    "internet_exposed": false,
+    "aof_persistence_required": true,
+    "pki_generated": false,
+    "authority_verified": false
+  },
+  "runtime": {
+    "authorization_gate": "/srv/queen-califia/app/cutover/SOVEREIGN_EDGE_RUNTIME_AUTHORIZED",
+    "runtime_authorized": false,
+    "health_probes_verified": false,
+    "celery_task_completion_verified": false,
+    "scanner_postgres_writes_verified": false,
+    "restart_persistence_verified": false,
+    "reboot_persistence_verified": false
+  },
+  "production_cutover_complete": false,
+  "ha_authorized": false,
+  "read_only_root_filesystem_authorized": false,
+  "legacy_storage_retirement_authorized": false,
+  "render_blueprint_retained": true,
+  "historical_sources": {
+    "render_live_scanner_qc_scans_db": {
+      "former_path": "/opt/render/project/src/backend/data/qc_scans.db",
+      "status": "unrecoverable-unverified",
+      "verified_absent": false,
+      "captured": false,
+      "reason": "Render workspace was suspended before the container-local source could be captured or verified absent.",
+      "policy": "Do not synthesize absence, do not delete related retained evidence, and revise status only if provider-backed recovery evidence becomes available."
+    }
+  }
+}

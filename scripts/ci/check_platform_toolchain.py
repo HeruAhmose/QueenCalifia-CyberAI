@@ -80,9 +80,10 @@ def main() -> int:
 
     subprocess.run([sys.executable, str(ROOT / "scripts/ci/check_oci_deployment.py")], check=True)
     subprocess.run([sys.executable, str(ROOT / "scripts/ci/check_managed_free_deployment.py")], check=True)
+    subprocess.run([sys.executable, str(ROOT / "scripts/ci/check_sovereign_edge_deployment.py")], check=True)
     print(
         f"platform toolchain guard: {len(REQUIRED_KEYS)} pins valid; {checked} workflows clean; "
-        "OCI and managed-free deployment contracts clean"
+        "OCI historical, managed-free staging, and Sovereign Edge deployment contracts clean"
     )
     return 0
 

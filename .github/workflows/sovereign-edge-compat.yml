@@ -1,0 +1,140 @@
+name: sovereign-edge-compat
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sovereign-edge-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sovereign-edge-compat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+
+      - name: Sovereign Edge static invariants
+        run: python scripts/ci/check_sovereign_edge_deployment.py
+
+      - name: Shell syntax
+        run: |
+          bash -n scripts/edge/bootstrap-ubuntu.sh
+          bash -n scripts/edge/generate-valkey-mtls.sh
+          bash -n scripts/edge/backup-postgres.sh
+          bash -n scripts/edge/restore-postgres.sh
+          bash -n scripts/edge/backup-host-state.sh
+          bash -n scripts/edge/verify-runtime.sh
+          bash -n scripts/edge/reboot-persistence-proof.sh
+          bash -n scripts/edge/health-watchdog.sh
+          bash -n scripts/edge/container-entrypoint.sh
+
+      - name: Render compose with no host ports
+        run: |
+          cat >.env.edge <<EOF
+          QC_EDGE_STATE_ROOT=${RUNNER_TEMP}/qc-edge
+          QC_DATABASE_URL=postgresql://queen:placeholder@example-pooler.neon.tech/neondb?sslmode=require
+          DATABASE_URL=postgresql://queen:placeholder@example-pooler.neon.tech/neondb?sslmode=require
+          QC_DATABASE_DIRECT_URL=postgresql://queen:placeholder@example.neon.tech/neondb?sslmode=require
+          CF_TUNNEL_TOKEN=ci-placeholder-not-a-real-token
+          QC_API_KEY_PEPPER=ci-placeholder
+          QC_AUDIT_HMAC_KEY=ci-placeholder
+          QC_METRICS_TOKEN=ci-placeholder
+          QC_ALLOW_INSECURE_BOOTSTRAP=0
+          QC_DENY_PUBLIC_TARGETS=1
+          QC_SCAN_ALLOWLIST=127.0.0.0/8
+          EOF
+          docker compose --env-file .env.edge -f deploy/edge/docker-compose.edge.yml config > /tmp/edge-compose.yml
+          if grep -Eq '^[[:space:]]+ports:' /tmp/edge-compose.yml; then
+            echo "Sovereign Edge must not publish host ports" >&2
+            exit 1
+          fi
+
+      - name: Generate ephemeral Valkey mTLS PKI
+        run: |
+          sudo install -d -m 0750 -o root -g root "${RUNNER_TEMP}/qc-edge"
+          sudo install -d -m 0750 -o 10001 -g 10001 "${RUNNER_TEMP}/qc-edge/valkey"
+          sudo env QC_EDGE_STATE_ROOT="${RUNNER_TEMP}/qc-edge" bash scripts/edge/generate-valkey-mtls.sh
+
+      - name: Prove TLS-only mTLS Valkey
+        run: |
+          set -euo pipefail
+          docker compose --env-file .env.edge -f deploy/edge/docker-compose.edge.yml up -d valkey
+          cleanup() { docker compose --env-file .env.edge -f deploy/edge/docker-compose.edge.yml down -v || true; }
+          trap cleanup EXIT
+          for _ in $(seq 1 30); do
+            status="$(docker inspect -f '{{.State.Health.Status}}' queen-califia-valkey 2>/dev/null || true)"
+            [ "$status" = healthy ] && break
+            sleep 2
+          done
+          status="$(docker inspect -f '{{.State.Health.Status}}' queen-califia-valkey 2>/dev/null || true)"
+          if [ "$status" != healthy ]; then
+            docker inspect queen-califia-valkey || true
+            docker logs queen-califia-valkey || true
+            echo "Valkey failed to become healthy: $status" >&2
+            exit 1
+          fi
+
+          echo "SELF_TLS_BEGIN"
+          set +e
+          self_output="$(docker exec queen-califia-valkey valkey-cli --tls \
+            --cacert /run/valkey-pki/ca.crt \
+            --cert /run/valkey-pki/health.crt \
+            --key /run/valkey-pki/health.key \
+            -h 127.0.0.1 -p 6379 ping 2>&1)"
+          self_rc=$?
+          set -e
+          printf 'SELF_TLS_RC=%s\n%s\n' "$self_rc" "$self_output"
+          if [ "$self_rc" -ne 0 ] || [ "$self_output" != PONG ]; then
+            openssl x509 -in "${RUNNER_TEMP}/qc-edge/pki/valkey/server.crt" -noout -text || true
+            docker logs queen-califia-valkey || true
+            echo "self mTLS assertion failed" >&2
+            exit 1
+          fi
+
+          echo "NETWORK_MTLS_BEGIN"
+          set +e
+          network_output="$(docker run --rm --user 10001:10001 --network queen-califia-queue \
+            -v "${RUNNER_TEMP}/qc-edge/pki/valkey:/run/valkey-pki:ro" \
+            valkey/valkey:9.1.1-alpine3.24 \
+            valkey-cli --tls --cacert /run/valkey-pki/ca.crt \
+              --cert /run/valkey-pki/health.crt --key /run/valkey-pki/health.key \
+              -h valkey -p 6379 ping 2>&1)"
+          network_rc=$?
+          set -e
+          printf 'NETWORK_MTLS_RC=%s\n%s\n' "$network_rc" "$network_output"
+          if [ "$network_rc" -ne 0 ] || [ "$network_output" != PONG ]; then
+            docker logs queen-califia-valkey || true
+            echo "private-network mTLS assertion failed" >&2
+            exit 1
+          fi
+
+          echo "PLAINTEXT_NEGATIVE_BEGIN"
+          set +e
+          plaintext_output="$(docker run --rm --network queen-califia-queue valkey/valkey:9.1.1-alpine3.24 \
+            valkey-cli -h valkey -p 6379 ping 2>&1)"
+          plaintext_rc=$?
+          set -e
+          printf 'PLAINTEXT_RC=%s\n%s\n' "$plaintext_rc" "$plaintext_output"
+          if [ "$plaintext_rc" -eq 0 ]; then
+            echo "plaintext Valkey unexpectedly succeeded across the private queue network" >&2
+            exit 1
+          fi
+
+          echo "AOF_BEGIN"
+          sudo find "${RUNNER_TEMP}/qc-edge/valkey" -maxdepth 3 -type f -ls || true
+          sudo test -s "${RUNNER_TEMP}/qc-edge/valkey/appendonlydir/appendonly.aof.manifest" || {
+            docker exec queen-califia-valkey sh -c 'find /data -maxdepth 3 -type f -ls' || true
+            echo "Valkey AOF manifest not created" >&2
+            exit 1
+          }
+          echo "SOVEREIGN_EDGE_VALKEY_PROOF=PASS"

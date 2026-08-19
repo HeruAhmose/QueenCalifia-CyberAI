@@ -5,6 +5,7 @@ __pycache__/
 .env.local
 .env.oci
 .env.managed
+.env.edge
 frontend/.env.local
 data/
 qc_evolution.db
