@@ -113,7 +113,7 @@ function Set-HostCommand {
     $payload = "$Verb|$Nonce"
     Invoke-VBox -Arguments @(
         'guestproperty', 'set', $VmName, $CommandKey, $payload,
-        '--flags=TRANSRESET,RDONLYGUEST'
+        '--flags', 'TRANSRESET,RDONLYGUEST'
     ) | Out-Null
     return $payload
 }
