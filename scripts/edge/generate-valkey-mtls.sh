@@ -41,7 +41,8 @@ EOF
 }
 
 # All runtime containers use the fixed non-root UID/GID 10001 in the Sovereign Edge profile.
-issue_cert server serverAuth "subjectAltName=DNS:valkey"
+# Server SAN covers both private Docker DNS (api/worker) and loopback (self-health probe).
+issue_cert server serverAuth "subjectAltName=DNS:valkey,IP:127.0.0.1"
 issue_cert health clientAuth "subjectAltName=DNS:queen-califia-valkey-health"
 issue_cert api clientAuth "subjectAltName=DNS:queen-califia-api"
 issue_cert worker clientAuth "subjectAltName=DNS:queen-califia-worker"
