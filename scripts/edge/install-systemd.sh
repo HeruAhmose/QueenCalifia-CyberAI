@@ -27,6 +27,7 @@ done
 for script in \
   scripts/edge/activate-runtime.sh \
   scripts/edge/command-dispatch.sh \
+  scripts/edge/health-watchdog.sh \
   scripts/edge/vbox-runtime-state.sh; do
   chmod 0755 "$REPO_ROOT/$script"
 done

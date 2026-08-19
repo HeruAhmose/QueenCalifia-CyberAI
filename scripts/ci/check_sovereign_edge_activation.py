@@ -88,12 +88,14 @@ require(
     "--type=$Frontend",
     "/VirtualBox/GuestAdd/Version",
     "systemd-v1",
-    "TRANSRESET,RDONLYGUEST",
+    "'--flags', 'TRANSRESET,RDONLYGUEST'",
     "ACTIVATE",
     "STOP",
     "RESTART",
     "QUEEN_CALIFIA=READY",
 )
+if "--flags=TRANSRESET,RDONLYGUEST" in launcher:
+    raise SystemExit("Windows launcher must pass VBoxManage guestproperty flags as separate argv tokens for VirtualBox 7.2 compatibility")
 for forbidden in (
     "guestcontrol",
     "--username",
