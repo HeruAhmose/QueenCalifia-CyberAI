@@ -21,7 +21,7 @@ set +a
 compose=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 mkdir -p "$ROOT/evidence"
 
-valkey_cli=(docker exec queen-califia-valkey valkey-cli --tls --cacert /run/valkey-pki/ca.crt --cert /run/valkey-pki/health.crt --key /run/valkey-pki/health.key -h valkey -p 6379)
+valkey_cli=(docker exec queen-califia-valkey valkey-cli --tls --cacert /run/valkey-pki/ca.crt --cert /run/valkey-pki/health.crt --key /run/valkey-pki/health.key -h 127.0.0.1 -p 6379)
 
 if [[ "$ACTION" == "prepare" ]]; then
   [[ "$(docker inspect -f '{{.State.Health.Status}}' queen-califia-valkey 2>/dev/null || true)" == "healthy" ]] || { echo "Valkey must be healthy before preparing reboot proof" >&2; exit 4; }
