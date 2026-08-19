@@ -40,22 +40,60 @@ def test_invalid_direct_url_rejected(url: str, message: str):
         module.validate_direct_database_url(url)
 
 
-def test_secret_file_is_exclusive_and_0600(tmp_path: Path):
+def test_secret_file_is_exclusive_and_0600(monkeypatch, tmp_path: Path):
     path = tmp_path / "secret" / "admin"
-    module._write_secret_file(path, "abc")
+    monkeypatch.setattr(module, "SECRET_PATH", path)
+    module._write_secret_file("abc")
     assert path.read_text() == "abc\n"
     assert path.stat().st_mode & 0o777 == 0o600
     with pytest.raises(FileExistsError):
-        module._write_secret_file(path, "def")
+        module._write_secret_file("def")
 
 
 def test_existing_secret_file_fails_before_database_access(monkeypatch, tmp_path: Path):
     path = tmp_path / "admin"
     path.write_text("existing\n")
-    monkeypatch.setenv("QC_API_KEY_PEPPER", "pepper")
+    monkeypatch.setattr(module, "SECRET_PATH", path)
     with pytest.raises(RuntimeError, match="refusing to overwrite"):
         module.provision(
             "postgresql://u:p@ep-example.c-12.us-east-1.aws.neon.tech/neondb?sslmode=require",
             "pepper",
-            path,
         )
+
+
+def test_evidence_does_not_disclose_secret_or_fingerprint(monkeypatch, tmp_path: Path):
+    path = tmp_path / "admin"
+    monkeypatch.setattr(module, "SECRET_PATH", path)
+
+    class FakeResult:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def fetchone(self):
+            return self._rows[0]
+
+    class FakeConn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, sql, params=()):
+            if sql == "SHOW server_version_num":
+                return FakeResult([("180000",)])
+            if "COUNT(*) FROM qc_api_keys" in sql:
+                return FakeResult([(0,)])
+            return FakeResult([(None,)])
+
+    fake_psycopg = type("FakePsycopg", (), {"connect": staticmethod(lambda url: FakeConn())})
+    monkeypatch.setitem(__import__("sys").modules, "psycopg", fake_psycopg)
+
+    evidence = module.provision(
+        "postgresql://u:p@ep-example.c-12.us-east-1.aws.neon.tech/neondb?sslmode=require",
+        "pepper",
+    )
+    assert evidence["raw_key_printed"] is False
+    assert evidence["fingerprint_printed"] is False
+    assert "key_hash" not in evidence
+    assert "secret_path" not in evidence
