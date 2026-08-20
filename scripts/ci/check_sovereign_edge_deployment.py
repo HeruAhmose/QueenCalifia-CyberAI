@@ -202,9 +202,22 @@ if ingress.get("provider") != "cloudflare-tunnel" or ingress.get("outbound_only"
     raise SystemExit("ingress must be outbound-only Cloudflare Tunnel")
 if ingress.get("host_http_ports_published") is not False:
     raise SystemExit("Sovereign Edge must publish zero host HTTP ports")
-for key in ("tunnel_provisioned", "tunnel_identity_verified", "public_hostname_verified"):
-    if ingress.get(key) is not False:
-        raise SystemExit(f"Cloudflare production evidence gate must remain false: ingress.{key}")
+required_ingress = {
+    "tunnel_provisioned": True,
+    "tunnel_id": "1aac242e-2e12-4d91-9bbc-149964270d92",
+    "tunnel_identity_verified": True,
+    "public_hostname": "qc.tamerian-materials.com",
+    "public_hostname_verified": True,
+    "origin_service": "http://caddy:8080",
+    "origin_route_verified": True,
+    "connector_registration_verified": True,
+    "connector_protocol_verified": "quic",
+    "controlled_connector_test_returned_to_dormant": True,
+    "dormant_public_response": "cloudflare-1033",
+}
+for key, expected in required_ingress.items():
+    if ingress.get(key) != expected:
+        raise SystemExit(f"Cloudflare ingress evidence mismatch: ingress.{key}")
 
 pg = state.get("postgresql", {})
 if pg.get("provider") != "neon" or pg.get("project_id") != "delicate-poetry-25758881" or pg.get("postgresql_major") != 18:
@@ -248,4 +261,4 @@ loss = state.get("historical_sources", {}).get("render_live_scanner_qc_scans_db"
 if loss.get("status") != "unrecoverable-unverified" or loss.get("verified_absent") is not False or loss.get("captured") is not False:
     raise SystemExit("Render qc_scans.db evidence truth must remain unrecoverable-unverified")
 
-print("Sovereign Edge guard verified: Hyper-V production candidate is explicit, preauthorization and PostgreSQL restore evidence are recorded, physical-host/provider/authorized-runtime gates remain closed")
+print("Sovereign Edge guard verified: Hyper-V and Cloudflare ingress evidence are recorded, preauthorization and PostgreSQL restore evidence remain intact, physical-host/authorized-runtime/cutover gates remain closed")
