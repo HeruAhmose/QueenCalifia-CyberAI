@@ -29,27 +29,36 @@ jobs:
       - name: Shell syntax
         run: |
           bash -n scripts/edge/activate-runtime.sh
+          bash -n scripts/edge/runtime-state.sh
           bash -n scripts/edge/vbox-runtime-state.sh
           bash -n scripts/edge/command-dispatch.sh
           bash -n scripts/edge/install-systemd.sh
+          bash -n scripts/edge/hyperv-control.sh
+          bash -n scripts/edge/hyperv-control-root.sh
+          bash -n scripts/edge/install-hyperv-control.sh
 
       - name: PowerShell syntax
         shell: pwsh
         run: |
-          $tokens = $null
-          $errors = $null
-          [void][System.Management.Automation.Language.Parser]::ParseFile(
-            (Resolve-Path 'scripts/edge/windows/qc.ps1'),
-            [ref]$tokens,
-            [ref]$errors
-          )
-          if ($errors.Count -gt 0) {
-            $errors | Format-List Message, Extent
-            throw 'Sovereign Edge PowerShell launcher parser failed.'
+          foreach ($path in @(
+            'scripts/edge/windows/qc.ps1',
+            'scripts/edge/windows/Initialize-QueenCalifia-HyperV.ps1'
+          )) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $path),
+              [ref]$tokens,
+              [ref]$errors
+            )
+            if ($errors.Count -gt 0) {
+              $errors | Format-List Message, Extent
+              throw "Sovereign Edge PowerShell parser failed: $path"
+            }
           }
-          'POWERSHELL_LAUNCHER_PARSE=PASS'
+          'POWERSHELL_LAUNCHERS_PARSE=PASS'
 
-      - name: PowerShell powered-off status smoke
+      - name: VirtualBox powered-off status smoke
         shell: bash
         run: |
           set -euo pipefail
@@ -65,5 +74,5 @@ jobs:
           exit 2
           SH
           chmod +x "${RUNNER_TEMP}/fake-vbox/VBoxManage.exe"
-          PATH="${RUNNER_TEMP}/fake-vbox:${PATH}" pwsh -NoLogo -NoProfile -File scripts/edge/windows/qc.ps1 status | tee /tmp/qc-status.txt
+          PATH="${RUNNER_TEMP}/fake-vbox:${PATH}" pwsh -NoLogo -NoProfile -File scripts/edge/windows/qc.ps1 status -Hypervisor virtualbox | tee /tmp/qc-status.txt
           grep -q 'QUEEN_CALIFIA=OFFLINE' /tmp/qc-status.txt

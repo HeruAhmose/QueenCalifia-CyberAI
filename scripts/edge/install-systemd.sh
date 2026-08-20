@@ -28,7 +28,11 @@ for script in \
   scripts/edge/activate-runtime.sh \
   scripts/edge/command-dispatch.sh \
   scripts/edge/health-watchdog.sh \
-  scripts/edge/vbox-runtime-state.sh; do
+  scripts/edge/runtime-state.sh \
+  scripts/edge/vbox-runtime-state.sh \
+  scripts/edge/hyperv-control.sh \
+  scripts/edge/hyperv-control-root.sh \
+  scripts/edge/install-hyperv-control.sh; do
   chmod 0755 "$REPO_ROOT/$script"
 done
 
@@ -36,7 +40,8 @@ systemctl daemon-reload
 systemctl enable queen-califia-edge.service
 systemctl enable --now queen-califia-edge-watchdog.timer
 
-if command -v VBoxControl >/dev/null 2>&1; then
+virt="$(systemd-detect-virt -v 2>/dev/null || true)"
+if [[ "$virt" == "oracle" ]] && command -v VBoxControl >/dev/null 2>&1; then
   systemctl enable --now queen-califia-edge-command.timer
   "$REPO_ROOT/scripts/edge/activate-runtime.sh" status >/dev/null 2>&1 || true
   systemctl is-active queen-califia-edge-command.timer >/dev/null
@@ -44,6 +49,10 @@ if command -v VBoxControl >/dev/null 2>&1; then
 else
   systemctl disable --now queen-califia-edge-command.timer >/dev/null 2>&1 || true
   echo "VIRTUALBOX_HOST_CONTROL=NOT_APPLICABLE"
+fi
+
+if [[ "$virt" == "microsoft" ]]; then
+  echo "HYPERV_HOST_CONTROL=AVAILABLE_AFTER_KEY_ENROLLMENT"
 fi
 
 systemctl is-enabled queen-califia-edge.service >/dev/null
