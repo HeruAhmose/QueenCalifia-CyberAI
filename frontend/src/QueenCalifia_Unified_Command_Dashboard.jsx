@@ -212,15 +212,22 @@ function TelemetryTab({ telemetry: t }) {
   return (
     <div>
       {/* Sub-navigation */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 16, flexWrap: "wrap" }}>
+      <div role="tablist" aria-label="Telemetry views" style={{ display: "flex", gap: 4, marginBottom: 16, flexWrap: "wrap" }}>
         {subTabs.map(st => (
-          <button key={st.id} onClick={() => setSubTab(st.id)} style={{
-            padding: "6px 12px", borderRadius: 6, border: `1px solid ${subTab === st.id ? C.cyan : C.border}`,
-            background: subTab === st.id ? C.cyanDim : C.panel, color: subTab === st.id ? C.cyan : C.textSoft,
-            fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: FONT,
-            display: "flex", alignItems: "center", gap: 5, transition: "all 0.2s",
-          }}>
-            <span>{st.icon}</span> {st.label}
+          <button
+            key={st.id}
+            role="tab"
+            id={`subtab-${st.id}`}
+            aria-selected={subTab === st.id}
+            aria-controls="telemetry-subtabpanel"
+            onClick={() => setSubTab(st.id)}
+            style={{
+              padding: "6px 12px", borderRadius: 6, border: `1px solid ${subTab === st.id ? C.cyan : C.border}`,
+              background: subTab === st.id ? C.cyanDim : C.panel, color: subTab === st.id ? C.cyan : C.textSoft,
+              fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: FONT,
+              display: "flex", alignItems: "center", gap: 5, transition: "all 0.2s",
+            }}>
+            <span aria-hidden="true">{st.icon}</span> {st.label}
           </button>
         ))}
       </div>
@@ -236,12 +243,14 @@ function TelemetryTab({ telemetry: t }) {
       </div>
 
       {/* Sub-tab content */}
-      {subTab === "network" && <TelemetryNetworkPanel t={t} />}
-      {subTab === "temporal" && <TelemetryTemporalPanel t={t} />}
-      {subTab === "kernel" && <TelemetryKernelPanel t={t} />}
-      {subTab === "graph" && <TelemetryGraphPanel t={t} />}
-      {subTab === "feedback" && <TelemetryFeedbackPanel t={t} />}
-      {subTab === "health" && <TelemetryHealthPanel t={t} />}
+      <div role="tabpanel" id="telemetry-subtabpanel" aria-labelledby={`subtab-${subTab}`} tabIndex={0}>
+        {subTab === "network" && <TelemetryNetworkPanel t={t} />}
+        {subTab === "temporal" && <TelemetryTemporalPanel t={t} />}
+        {subTab === "kernel" && <TelemetryKernelPanel t={t} />}
+        {subTab === "graph" && <TelemetryGraphPanel t={t} />}
+        {subTab === "feedback" && <TelemetryFeedbackPanel t={t} />}
+        {subTab === "health" && <TelemetryHealthPanel t={t} />}
+      </div>
     </div>
   );
 }
@@ -3176,6 +3185,7 @@ function DevOpsTab() {
               style={{ padding: "8px 20px", background: C.accent, color: "#fff", borderRadius: 6, fontSize: 12, fontWeight: 600, textDecoration: "none", display: "inline-block" }}
             >
               Open in GitHub Actions ↗
+              <span className="sr-only"> (opens in new tab)</span>
             </a>
             <button onClick={() => setSelected(null)} style={{ padding: "8px 16px", background: "transparent", color: C.textSoft, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
               Cancel
@@ -3200,7 +3210,9 @@ function DevOpsTab() {
               style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${C.border}`, textDecoration: "none" }}
             >
               <span style={{ fontSize: 11, fontFamily: MONO, color: C.text }}>{wf}</span>
-              <span style={{ fontSize: 10, color: C.textDim }}>view runs ↗</span>
+              <span style={{ fontSize: 10, color: C.textDim }}>
+                view runs ↗<span className="sr-only"> (opens in new tab)</span>
+              </span>
             </a>
           ))}
         </Panel>
@@ -4242,17 +4254,24 @@ export default function QueenCalifiaCommandDashboard() {
       )}
 
       {/* Navigation */}
-      <nav style={{
-        display: "flex", gap: 2, padding: isNarrow ? "0 8px" : "0 24px",
-        borderBottom: `1px solid ${C.border}`, background: C.panel,
-        position: "relative",
-        zIndex: 2,
-        overflowX: "auto",
-        scrollbarWidth: "thin",
-      }}>
+      <nav
+        role="tablist"
+        aria-label="Dashboard sections"
+        style={{
+          display: "flex", gap: 2, padding: isNarrow ? "0 8px" : "0 24px",
+          borderBottom: `1px solid ${C.border}`, background: C.panel,
+          position: "relative",
+          zIndex: 2,
+          overflowX: "auto",
+          scrollbarWidth: "thin",
+        }}>
         {visibleNav.map(item => (
           <button
             key={item.id}
+            role="tab"
+            id={`tab-${item.id}`}
+            aria-selected={activeTab === item.id}
+            aria-controls={`tabpanel-${item.id}`}
             onClick={() => setActiveTab(item.id)}
             style={{
               padding: "10px 16px", background: "transparent",
@@ -4264,7 +4283,7 @@ export default function QueenCalifiaCommandDashboard() {
               transition: "all 0.2s ease",
             }}
           >
-            <span style={{ fontSize: 13 }}>{item.icon}</span>
+            <span style={{ fontSize: 13 }} aria-hidden="true">{item.icon}</span>
             {item.label}
             {item.id === "predictor" && highPreds > 0 && (
               <span style={{ width: 16, height: 16, borderRadius: "50%", background: C.purple, color: "#fff", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{highPreds}</span>
@@ -4289,6 +4308,10 @@ export default function QueenCalifiaCommandDashboard() {
         <AnimatePresence mode="wait">
           <motion.div
             key={`${expertMode ? "expert" : "simple"}:${activeTab}`}
+            role="tabpanel"
+            id={`tabpanel-${activeTab}`}
+            aria-labelledby={`tab-${activeTab}`}
+            tabIndex={0}
             initial={{ opacity: 0, y: 10, filter: "blur(8px)" }}
             animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
             exit={{ opacity: 0, y: -8, filter: "blur(8px)" }}
