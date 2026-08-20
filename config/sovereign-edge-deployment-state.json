@@ -34,10 +34,17 @@
     "outbound_only": true,
     "publicly_routable_origin_ip_required": false,
     "host_http_ports_published": false,
-    "tunnel_provisioned": false,
-    "tunnel_identity_verified": false,
-    "public_hostname_verified": false,
-    "origin_service": "http://caddy:8080"
+    "tunnel_provisioned": true,
+    "tunnel_id": "1aac242e-2e12-4d91-9bbc-149964270d92",
+    "tunnel_identity_verified": true,
+    "public_hostname": "qc.tamerian-materials.com",
+    "public_hostname_verified": true,
+    "origin_service": "http://caddy:8080",
+    "origin_route_verified": true,
+    "connector_registration_verified": true,
+    "connector_protocol_verified": "quic",
+    "controlled_connector_test_returned_to_dormant": true,
+    "dormant_public_response": "cloudflare-1033"
   },
   "postgresql": {
     "provider": "neon",
