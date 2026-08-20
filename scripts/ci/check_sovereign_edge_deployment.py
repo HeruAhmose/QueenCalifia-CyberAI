@@ -79,8 +79,6 @@ require(
     "appendonly yes",
     "appendfsync everysec",
 )
-# `protected-mode no` is permitted only as one indivisible isolated-mTLS contract:
-# no plaintext listener, mandatory client certificates, no host port, and an internal-only queue network.
 if "protected-mode no" in valkey:
     for required in ("port 0", "tls-auth-clients yes"):
         if required not in valkey:
@@ -162,25 +160,81 @@ for key in ("read_only_root_filesystem_enabled", "multi_replica_api_enabled", "b
         raise SystemExit(f"Sovereign Edge must not prematurely close topology gate: {key}")
 
 state = json.loads(STATE.read_text(encoding="utf-8"))
+if state.get("version") != 2:
+    raise SystemExit("Sovereign Edge deployment state must use the Hyper-V-aware v2 evidence schema")
 if state.get("target") != "sovereign-local-edge" or state.get("deployment_role") != "production-candidate":
     raise SystemExit("Sovereign Edge must be a production candidate")
 if state.get("preferred_production_candidate") is not True or state.get("production_authorized") is not False:
     raise SystemExit("preferred candidacy must not imply production authorization")
+
 host = state.get("host", {})
-if host.get("provisioned") is not False or host.get("identity_verified") is not False:
-    raise SystemExit("local host must remain unprovisioned/unverified until machine evidence exists")
+required_host = {
+    "operating_system": "ubuntu-server",
+    "deployment_form": "hyperv-virtual-machine",
+    "hypervisor": "hyperv",
+    "vm_name": "QueenCalifia-Sovereign-Edge-HyperV",
+    "guest_hostname": "qc-edge-01",
+    "control_plane": "systemd-hyperv-v1",
+    "control_plane_verified": True,
+    "restricted_forced_command_key_verified": True,
+    "preauthorization_evidence_path": "/srv/queen-califia/evidence/runtime-20260820T031522Z.json",
+    "preauthorization_evidence_git_head": "770803fa52b5fc4279257da33a6817322df8cd98",
+    "dedicated_physical_host_required_for_final_production": True,
+}
+for key, expected in required_host.items():
+    if host.get(key) != expected:
+        raise SystemExit(f"Hyper-V production-candidate evidence mismatch: host.{key}")
+for key in (
+    "provisioned",
+    "identity_verified",
+    "full_disk_encryption_verified",
+    "firewall_default_deny_incoming_verified",
+    "bios_restore_after_power_loss_verified",
+    "ups_verified",
+):
+    if host.get(key) is not False:
+        raise SystemExit(f"final production host evidence gate must remain false: host.{key}")
 if host.get("api_replicas") != 1 or host.get("worker_replicas") != 1:
     raise SystemExit("Sovereign Edge must keep exactly one API and one worker")
+
 ingress = state.get("ingress", {})
 if ingress.get("provider") != "cloudflare-tunnel" or ingress.get("outbound_only") is not True:
     raise SystemExit("ingress must be outbound-only Cloudflare Tunnel")
-if ingress.get("host_http_ports_published") is not False or ingress.get("tunnel_provisioned") is not False:
-    raise SystemExit("ingress must not claim host ports or a provisioned tunnel")
+if ingress.get("host_http_ports_published") is not False:
+    raise SystemExit("Sovereign Edge must publish zero host HTTP ports")
+required_ingress = {
+    "tunnel_provisioned": True,
+    "tunnel_id": "1aac242e-2e12-4d91-9bbc-149964270d92",
+    "tunnel_identity_verified": True,
+    "public_hostname": "qc.tamerian-materials.com",
+    "public_hostname_verified": True,
+    "origin_service": "http://caddy:8080",
+    "origin_route_verified": True,
+    "connector_registration_verified": True,
+    "connector_protocol_verified": "quic",
+    "controlled_connector_test_returned_to_dormant": True,
+    "dormant_public_response": "cloudflare-1033",
+}
+for key, expected in required_ingress.items():
+    if ingress.get(key) != expected:
+        raise SystemExit(f"Cloudflare ingress evidence mismatch: ingress.{key}")
+
 pg = state.get("postgresql", {})
 if pg.get("provider") != "neon" or pg.get("project_id") != "delicate-poetry-25758881" or pg.get("postgresql_major") != 18:
     raise SystemExit("Sovereign Edge must retain verified isolated Neon PG18 authority")
 if pg.get("authoritative_application_state") is not True or pg.get("tls_required") is not True:
     raise SystemExit("Neon must remain authoritative application state over TLS")
+if pg.get("production_migration_verified") is not False:
+    raise SystemExit("historical-source migration must remain open while Render qc_scans.db is unrecoverable-unverified")
+if pg.get("database_manifest_verified") is not True:
+    raise SystemExit("independent source/restore database manifest equality is verified and must remain recorded")
+if pg.get("database_manifest_sha256") != "efd4ec38a752f41255309635638aaa1c59e0f59dbd5953c0b7b89871882eaaed":
+    raise SystemExit("database manifest evidence digest mismatch")
+if pg.get("production_backup_restore_verified") is not True:
+    raise SystemExit("independent encrypted PostgreSQL backup/restore proof must remain recorded")
+if pg.get("encrypted_backup_sha256") != "20a473c2e5312d357b1cb4fb92691f33bb192f429deba9a5af00e870d81d2ca0":
+    raise SystemExit("encrypted PostgreSQL backup digest mismatch")
+
 queue = state.get("queue", {})
 if queue.get("provider") != "self-hosted-valkey" or queue.get("scope") != "host-local-private-docker-network":
     raise SystemExit("queue must be self-hosted Valkey on the private host network")
@@ -189,12 +243,17 @@ for key in ("tls_required", "mutual_tls_required", "plaintext_port_disabled", "a
         raise SystemExit(f"queue invariant must remain true: {key}")
 if queue.get("internet_exposed") is not False or queue.get("authoritative_application_state") is not False:
     raise SystemExit("Valkey must not be Internet exposed or authoritative application state")
+if queue.get("preauthorization_tls_verified") is not True or queue.get("preauthorization_plaintext_refused") is not True:
+    raise SystemExit("fresh preauthorization Valkey TLS/plaintext-refusal evidence must remain recorded")
 if queue.get("pki_generated") is not False or queue.get("authority_verified") is not False:
-    raise SystemExit("queue evidence must remain false until generated/verified on the real host")
+    raise SystemExit("final production-host PKI evidence remains open pending host source-of-truth closure")
+
 runtime = state.get("runtime", {})
+if runtime.get("preauthorization_verified") is not True or runtime.get("preauthorization_no_host_ports_published") is not True:
+    raise SystemExit("fresh fail-closed preauthorization evidence must remain recorded")
 for key in ("runtime_authorized", "health_probes_verified", "celery_task_completion_verified", "scanner_postgres_writes_verified", "restart_persistence_verified", "reboot_persistence_verified"):
     if runtime.get(key) is not False:
-        raise SystemExit(f"runtime evidence gate must remain false: {key}")
+        raise SystemExit(f"authorized runtime evidence gate must remain false: {key}")
 for key in ("production_cutover_complete", "ha_authorized", "read_only_root_filesystem_authorized", "legacy_storage_retirement_authorized"):
     if state.get(key) is not False:
         raise SystemExit(f"production safety gate must remain false: {key}")
@@ -202,4 +261,4 @@ loss = state.get("historical_sources", {}).get("render_live_scanner_qc_scans_db"
 if loss.get("status") != "unrecoverable-unverified" or loss.get("verified_absent") is not False or loss.get("captured") is not False:
     raise SystemExit("Render qc_scans.db evidence truth must remain unrecoverable-unverified")
 
-print("Sovereign Edge guard verified: isolated mandatory-mTLS Valkey, plaintext disabled, outbound-only tunnel, Neon PG18 authority, evidence operators guarded, all production gates closed")
+print("Sovereign Edge guard verified: Hyper-V and Cloudflare ingress evidence are recorded, preauthorization and PostgreSQL restore evidence remain intact, physical-host/authorized-runtime/cutover gates remain closed")

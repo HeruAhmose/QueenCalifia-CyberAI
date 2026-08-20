@@ -1,6 +1,6 @@
 [Unit]
 Description=Queen Califia Sovereign Edge authorized runtime
-After=docker.service network-online.target vboxadd-service.service
+After=docker.service network-online.target
 Wants=network-online.target
 Requires=docker.service
 

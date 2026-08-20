@@ -5,7 +5,12 @@ param(
     [ValidateSet('activate', 'status', 'stop', 'restart')]
     [string]$Action = 'activate',
 
-    [string]$VmName = 'QueenCalifia-Sovereign-Edge',
+    [ValidateSet('auto', 'hyperv', 'virtualbox')]
+    [string]$Hypervisor = 'auto',
+
+    [string]$VmName = '',
+    [string]$GuestUser = 'qcadmin',
+    [string]$HyperVKeyPath = (Join-Path $HOME '.ssh\queen-califia-hyperv-control'),
 
     [ValidateSet('gui', 'separate')]
     [string]$Frontend = 'gui',
@@ -20,278 +25,231 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$Prefix = '/QueenCalifia/SovereignEdge'
-$StateKey = "$Prefix/State"
-$DetailKey = "$Prefix/Detail"
-$ControlPlaneKey = "$Prefix/ControlPlane"
-$CommandKey = "$Prefix/Command"
-$AckKey = "$Prefix/CommandAck"
-
 function Write-QC {
     param([string]$Message, [ConsoleColor]$Color = [ConsoleColor]::Gray)
     Write-Host $Message -ForegroundColor $Color
 }
 
-function Get-VBoxManagePath {
-    $fromPath = Get-Command 'VBoxManage.exe' -ErrorAction SilentlyContinue
-    if ($null -ne $fromPath) {
-        return $fromPath.Source
+function Resolve-Hypervisor {
+    if ($Hypervisor -ne 'auto') { return $Hypervisor }
+
+    if (Get-Command Get-VM -ErrorAction SilentlyContinue) {
+        $candidate = if ($VmName) { $VmName } else { 'QueenCalifia-Sovereign-Edge-HyperV' }
+        if (Get-VM -Name $candidate -ErrorAction SilentlyContinue) { return 'hyperv' }
     }
 
-    $candidates = @()
-    if (${env:ProgramFiles}) {
-        $candidates += (Join-Path ${env:ProgramFiles} 'Oracle\VirtualBox\VBoxManage.exe')
-    }
-    if (${env:ProgramFiles(x86)}) {
-        $candidates += (Join-Path ${env:ProgramFiles(x86)} 'Oracle\VirtualBox\VBoxManage.exe')
-    }
+    if (Get-Command VBoxManage.exe -ErrorAction SilentlyContinue) { return 'virtualbox' }
+    throw 'Neither the Queen Califia Hyper-V VM nor VBoxManage.exe could be resolved.'
+}
 
-    foreach ($candidate in $candidates) {
-        if (Test-Path -LiteralPath $candidate) {
+$script:ResolvedHypervisor = Resolve-Hypervisor
+if (-not $VmName) {
+    $VmName = if ($script:ResolvedHypervisor -eq 'hyperv') {
+        'QueenCalifia-Sovereign-Edge-HyperV'
+    } else {
+        'QueenCalifia-Sovereign-Edge'
+    }
+}
+
+function Get-HyperVIP {
+    $adapter = Get-VMNetworkAdapter -VMName $VmName | Select-Object -First 1
+    foreach ($candidate in @($adapter.IPAddresses)) {
+        if ($candidate -match '^\d{1,3}(\.\d{1,3}){3}$' -and -not $candidate.StartsWith('169.254.')) {
             return $candidate
         }
     }
 
-    throw 'VBoxManage.exe was not found. Install Oracle VirtualBox or add VBoxManage.exe to PATH.'
+    $mac = ($adapter.MacAddress -replace '(.{2})(?!$)', '$1-').ToUpperInvariant()
+    $neighbor = Get-NetNeighbor -ErrorAction SilentlyContinue | Where-Object {
+        $_.LinkLayerAddress -and
+        $_.LinkLayerAddress.ToUpperInvariant() -eq $mac -and
+        $_.IPAddress -match '^\d{1,3}(\.\d{1,3}){3}$'
+    } | Select-Object -First 1
+
+    if ($neighbor) { return $neighbor.IPAddress }
+    return $null
 }
 
-$script:VBoxManage = Get-VBoxManagePath
+function Ensure-HyperVRunning {
+    $vm = Get-VM -Name $VmName -ErrorAction Stop
+    Write-QC "VM_STATE=$($vm.State)" Cyan
+    switch ($vm.State.ToString()) {
+        'Running' { return }
+        'Off' {
+            Start-VM -Name $VmName | Out-Null
+            Write-QC 'VM_START=PASS (Hyper-V)' Green
+            return
+        }
+        default { throw "Hyper-V VM '$VmName' is in unsupported state '$($vm.State)'." }
+    }
+}
 
-function Invoke-VBox {
-    param(
-        [Parameter(Mandatory)]
-        [string[]]$Arguments,
-        [switch]$AllowFailure
-    )
+function Wait-HyperVSSH {
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds($ReadyTimeoutSeconds)
+    do {
+        $ip = Get-HyperVIP
+        if ($ip -and (Test-NetConnection -ComputerName $ip -Port 22 -InformationLevel Quiet -WarningAction SilentlyContinue)) {
+            return $ip
+        }
+        Start-Sleep -Seconds 2
+    } while ([DateTimeOffset]::UtcNow -lt $deadline)
+    throw "Timed out waiting for SSH on Hyper-V VM '$VmName'."
+}
 
-    $output = & $script:VBoxManage @Arguments 2>&1
-    $code = $LASTEXITCODE
-    # Normalize native-process output to LF. PowerShell on Windows otherwise joins
-    # lines with CRLF, which can break regexes anchored at end-of-line.
+function Invoke-HyperVControl {
+    param([Parameter(Mandatory)][ValidateSet('ACTIVATE', 'STATUS', 'STOP', 'RESTART')][string]$Verb)
+
+    if (-not (Get-Command ssh.exe -ErrorAction SilentlyContinue)) {
+        throw 'Windows OpenSSH client is required for Hyper-V host control.'
+    }
+    if (-not (Test-Path -LiteralPath $HyperVKeyPath)) {
+        throw "Hyper-V control key is not enrolled. Run scripts/edge/windows/Initialize-QueenCalifia-HyperV.ps1 once."
+    }
+
+    $ip = Wait-HyperVSSH
+    $knownHosts = "$HyperVKeyPath.known_hosts"
+    $sshArgs = @('-o','BatchMode=yes','-o','IdentitiesOnly=yes','-o',"IdentityFile=$HyperVKeyPath",'-o','StrictHostKeyChecking=accept-new','-o',"UserKnownHostsFile=$knownHosts",'-o','ConnectTimeout=5',"$GuestUser@$ip",$Verb)
+    $output = & ssh.exe @sshArgs 2>&1
+    $rc = $LASTEXITCODE
     $text = ($output | ForEach-Object { $_.ToString() }) -join "`n"
 
-    if (-not $AllowFailure -and $code -ne 0) {
-        throw "VBoxManage failed (ExitCode=$code): $text"
+    if ($text) {
+        foreach ($line in ($text -split "`n")) {
+            $color = if ($line -match 'READY|STOPPED|PASS') { 'Green' } elseif ($line -match 'BLOCKED|FAILED') { 'Red' } else { 'Cyan' }
+            Write-QC $line $color
+        }
     }
-
-    [pscustomobject]@{
-        ExitCode = $code
-        Output   = $text
-    }
+    if ($rc -eq 78 -and $Verb -eq 'STATUS') { return }
+    if ($rc -eq 78) { throw 'QC activation is fail-closed: runtime authorization gate is closed.' }
+    if ($rc -ne 0) { throw "Hyper-V guest control failed (ExitCode=$rc): $text" }
 }
 
-function Get-VMState {
+function Get-VBoxManagePath {
+    $fromPath = Get-Command 'VBoxManage.exe' -ErrorAction SilentlyContinue
+    if ($fromPath) { return $fromPath.Source }
+
+    if (${env:ProgramFiles}) {
+        $candidate = Join-Path ${env:ProgramFiles} 'Oracle\VirtualBox\VBoxManage.exe'
+        if (Test-Path -LiteralPath $candidate) { return $candidate }
+    }
+    throw 'VBoxManage.exe was not found.'
+}
+
+function Invoke-VBox {
+    param([Parameter(Mandatory)][string[]]$Arguments, [switch]$AllowFailure)
+    $output = & $script:VBoxManage @Arguments 2>&1
+    $code = $LASTEXITCODE
+    $text = ($output | ForEach-Object { $_.ToString() }) -join "`n"
+    if (-not $AllowFailure -and $code -ne 0) { throw "VBoxManage failed (ExitCode=$code): $text" }
+    [pscustomobject]@{ ExitCode = $code; Output = $text }
+}
+
+function Get-VBoxState {
     $result = Invoke-VBox -Arguments @('showvminfo', $VmName, '--machinereadable')
     $match = [regex]::Match($result.Output, '(?m)^VMState="([^"]+)"\r?$')
-    if (-not $match.Success) {
-        throw "Unable to determine VirtualBox state for '$VmName'. VBoxManage output: $($result.Output)"
-    }
+    if (-not $match.Success) { throw "Unable to determine VirtualBox state for '$VmName'." }
     return $match.Groups[1].Value
 }
 
 function Get-GuestProperty {
     param([Parameter(Mandatory)][string]$Name)
-
     $result = Invoke-VBox -Arguments @('guestproperty', 'get', $VmName, $Name) -AllowFailure
-    if ($result.ExitCode -ne 0 -or $result.Output -match 'No value set!') {
-        return $null
-    }
-
+    if ($result.ExitCode -ne 0 -or $result.Output -match 'No value set!') { return $null }
     $match = [regex]::Match($result.Output, '(?m)^Value:\s?(.*)\r?$')
-    if (-not $match.Success) {
-        return $null
-    }
-    return $match.Groups[1].Value.Trim()
+    if ($match.Success) { return $match.Groups[1].Value.Trim() }
+    return $null
 }
 
-function Set-HostCommand {
-    param(
-        [Parameter(Mandatory)][ValidateSet('ACTIVATE', 'STOP', 'RESTART', 'STATUS')][string]$Verb,
-        [Parameter(Mandatory)][string]$Nonce
-    )
-
-    $payload = "$Verb|$Nonce"
-    Invoke-VBox -Arguments @(
-        'guestproperty', 'set', $VmName, $CommandKey, $payload,
-        '--flags', 'TRANSRESET,RDONLYGUEST'
-    ) | Out-Null
-    return $payload
+function Ensure-VBoxRunning {
+    $state = Get-VBoxState
+    Write-QC "VM_STATE=$state" Cyan
+    switch ($state) {
+        'running' { return }
+        'paused' { Invoke-VBox -Arguments @('controlvm', $VmName, 'resume') | Out-Null; return }
+        'poweroff' { Invoke-VBox -Arguments @('startvm', "--type=$Frontend", $VmName) | Out-Null; Write-QC 'VM_START=PASS (VirtualBox)' Green; return }
+        'saved' { Invoke-VBox -Arguments @('startvm', "--type=$Frontend", $VmName) | Out-Null; return }
+        'aborted' { Invoke-VBox -Arguments @('startvm', "--type=$Frontend", $VmName) | Out-Null; return }
+        default { throw "Unsupported VirtualBox state '$state'." }
+    }
 }
 
 function Wait-GuestAdditions {
     $deadline = [DateTimeOffset]::UtcNow.AddSeconds($GuestAdditionsTimeoutSeconds)
     do {
         $version = Get-GuestProperty -Name '/VirtualBox/GuestAdd/Version'
-        if ($version) {
-            Write-QC "GUEST_ADDITIONS=PASS ($version)" Green
-            return
-        }
+        if ($version) { Write-QC "GUEST_ADDITIONS=PASS ($version)" Green; return }
         Start-Sleep -Seconds 2
     } while ([DateTimeOffset]::UtcNow -lt $deadline)
-
-    throw "Guest Additions did not become ready within $GuestAdditionsTimeoutSeconds seconds."
+    throw 'Guest Additions did not become ready.'
 }
 
-function Ensure-VMRunning {
-    $state = Get-VMState
-    Write-QC "VM_STATE=$state" Cyan
-
-    switch ($state) {
-        'running' { return }
-        'paused' {
-            Invoke-VBox -Arguments @('controlvm', $VmName, 'resume') | Out-Null
-            Write-QC 'VM_RESUME=PASS' Green
-            return
-        }
-        'poweroff' {
-            Invoke-VBox -Arguments @('startvm', "--type=$Frontend", $VmName) | Out-Null
-            Write-QC "VM_START=PASS ($Frontend)" Green
-            return
-        }
-        'saved' {
-            Invoke-VBox -Arguments @('startvm', "--type=$Frontend", $VmName) | Out-Null
-            Write-QC "VM_RESUME_FROM_SAVED=PASS ($Frontend)" Green
-            return
-        }
-        'aborted' {
-            Invoke-VBox -Arguments @('startvm', "--type=$Frontend", $VmName) | Out-Null
-            Write-QC "VM_RECOVERY_START=PASS ($Frontend)" Yellow
-            return
-        }
-        default {
-            throw "VM '$VmName' is in unsupported state '$state'."
-        }
-    }
-}
-
-function Show-QCStatus {
-    $vmState = Get-VMState
-    Write-QC "VM_STATE=$vmState" Cyan
-    if ($vmState -notin @('running', 'paused')) {
-        Write-QC 'QUEEN_CALIFIA=OFFLINE' Yellow
-        return
-    }
-
-    $controlPlane = Get-GuestProperty -Name $ControlPlaneKey
-    $state = Get-GuestProperty -Name $StateKey
-    $detail = Get-GuestProperty -Name $DetailKey
-
-    if (-not $controlPlane) { $controlPlane = 'not-installed' }
-    if (-not $state) { $state = 'UNKNOWN' }
-
-    Write-QC "CONTROL_PLANE=$controlPlane" Cyan
-    Write-QC "QUEEN_CALIFIA=$state" $(if ($state -eq 'READY') { 'Green' } elseif ($state -in @('FAILED', 'BLOCKED')) { 'Red' } else { 'Yellow' })
-    if ($detail) {
-        Write-QC "DETAIL=$detail" Yellow
-    }
-}
-
-function Require-ControlPlane {
-    $controlPlane = Get-GuestProperty -Name $ControlPlaneKey
-    if ($controlPlane -ne 'systemd-v1') {
-        throw @"
-QC boot control plane is not installed in the guest.
-One-time guest setup is required from the VM console:
-  cd /opt/queen-califia
-  sudo bash scripts/edge/install-systemd.sh
-After that, normal activation is passwordless from Windows.
-"@
-    }
-    Write-QC 'CONTROL_PLANE=systemd-v1' Green
-}
-
-function Invoke-QCCommandAndWait {
+function Invoke-VBoxControl {
     param(
-        [Parameter(Mandatory)][ValidateSet('ACTIVATE', 'STOP', 'RESTART')][string]$Verb,
-        [Parameter(Mandatory)][ValidateSet('READY', 'STOPPED')][string]$TargetState
+        [ValidateSet('ACTIVATE', 'STOP', 'RESTART')][string]$Verb,
+        [ValidateSet('READY', 'STOPPED')][string]$Target
     )
-
     $nonce = [guid]::NewGuid().ToString()
-    $payload = Set-HostCommand -Verb $Verb -Nonce $nonce
-    Write-QC "COMMAND=$Verb" Cyan
-
+    $payload = "$Verb|$nonce"
+    Invoke-VBox -Arguments @('guestproperty', 'set', $VmName, '/QueenCalifia/SovereignEdge/Command', $payload, '--flags', 'TRANSRESET,RDONLYGUEST') | Out-Null
     $deadline = [DateTimeOffset]::UtcNow.AddSeconds($ReadyTimeoutSeconds)
-    $lastState = $null
-    $commandAcknowledged = $false
-
     do {
-        $state = Get-GuestProperty -Name $StateKey
-        $detail = Get-GuestProperty -Name $DetailKey
-        $ack = Get-GuestProperty -Name $AckKey
-
-        if ($state -and $state -ne $lastState) {
-            Write-QC "QC_STATE=$state" $(if ($state -eq $TargetState) { 'Green' } elseif ($state -in @('FAILED', 'BLOCKED')) { 'Red' } else { 'Yellow' })
-            $lastState = $state
-        }
-
-        if ($state -eq $TargetState) {
-            Write-QC "QUEEN_CALIFIA=$TargetState" Green
-            return
-        }
-
+        $state = Get-GuestProperty -Name '/QueenCalifia/SovereignEdge/State'
+        $detail = Get-GuestProperty -Name '/QueenCalifia/SovereignEdge/Detail'
+        $ack = Get-GuestProperty -Name '/QueenCalifia/SovereignEdge/CommandAck'
+        if ($state -eq $Target) { Write-QC "QUEEN_CALIFIA=$Target" Green; return }
         if ($ack -and $ack.StartsWith("$payload|")) {
-            $commandAcknowledged = $true
-            $parts = $ack.Split('|')
-            $rc = [int]$parts[-1]
-            if ($rc -eq 78) {
-                if (-not $detail) { $detail = 'runtime authorization/configuration gate is closed' }
-                throw "QC activation is fail-closed: $detail"
-            }
-            if ($rc -ne 0) {
-                if (-not $detail) { $detail = 'guest runtime command failed' }
-                throw "QC guest command failed (ExitCode=$rc): $detail"
-            }
+            $rc = [int]($ack.Split('|')[-1])
+            if ($rc -eq 78) { throw "QC activation is fail-closed: $detail" }
+            if ($rc -ne 0) { throw "QC guest command failed (ExitCode=$rc): $detail" }
         }
-
-        if ($commandAcknowledged -and $state -in @('FAILED', 'BLOCKED')) {
-            if (-not $detail) { $detail = 'guest runtime entered a terminal failure state' }
-            throw "QC activation did not reach '$TargetState': $state - $detail"
-        }
-
         Start-Sleep -Seconds 2
     } while ([DateTimeOffset]::UtcNow -lt $deadline)
-
-    if (-not $detail) { $detail = 'no additional guest detail was published' }
-    throw "Timed out waiting for Queen Califia state '$TargetState'. Last state='$lastState'. Detail='$detail'."
+    throw "Timed out waiting for Queen Califia state '$Target'."
 }
 
 Write-QC '============================================================' DarkCyan
 Write-QC 'QUEEN CALIFIA — SOVEREIGN EDGE CONTROL' Cyan
 Write-QC '============================================================' DarkCyan
 Write-QC "ACTION=$Action" Cyan
+Write-QC "HYPERVISOR=$script:ResolvedHypervisor" Cyan
 Write-QC "VM=$VmName" Cyan
 
-if ($Action -eq 'status') {
-    Show-QCStatus
+if ($script:ResolvedHypervisor -eq 'hyperv') {
+    if ($Action -eq 'status') {
+        $vm = Get-VM -Name $VmName -ErrorAction Stop
+        Write-QC "VM_STATE=$($vm.State)" Cyan
+        if ($vm.State.ToString() -ne 'Running') { Write-QC 'QUEEN_CALIFIA=OFFLINE' Yellow; exit 0 }
+        Invoke-HyperVControl -Verb STATUS
+        exit 0
+    }
+    if ($Action -eq 'stop') {
+        $vm = Get-VM -Name $VmName -ErrorAction Stop
+        if ($vm.State.ToString() -ne 'Running') { Write-QC 'QUEEN_CALIFIA=STOPPED' Green; exit 0 }
+    }
+    Ensure-HyperVRunning
+    switch ($Action) {
+        'activate' { Invoke-HyperVControl -Verb ACTIVATE }
+        'stop' { Invoke-HyperVControl -Verb STOP }
+        'restart' { Invoke-HyperVControl -Verb RESTART }
+    }
     exit 0
 }
 
-if ($Action -eq 'stop') {
-    $stopVmState = Get-VMState
-    if ($stopVmState -notin @('running', 'paused')) {
-        Write-QC "VM_STATE=$stopVmState" Cyan
-        Write-QC 'QUEEN_CALIFIA=STOPPED' Green
-        exit 0
-    }
+$script:VBoxManage = Get-VBoxManagePath
+if ($Action -eq 'status') {
+    $state = Get-VBoxState
+    Write-QC "VM_STATE=$state" Cyan
+    if ($state -ne 'running') { Write-QC 'QUEEN_CALIFIA=OFFLINE' Yellow; exit 0 }
+    $runtimeState = Get-GuestProperty -Name '/QueenCalifia/SovereignEdge/State'
+    if (-not $runtimeState) { $runtimeState = 'UNKNOWN' }
+    Write-QC "QUEEN_CALIFIA=$runtimeState" Cyan
+    exit 0
 }
 
-Ensure-VMRunning
+Ensure-VBoxRunning
 Wait-GuestAdditions
-Require-ControlPlane
-
 switch ($Action) {
-    'activate' {
-        $currentState = Get-GuestProperty -Name $StateKey
-        if ($currentState -eq 'READY') {
-            Write-QC 'QUEEN_CALIFIA=READY' Green
-            exit 0
-        }
-        Invoke-QCCommandAndWait -Verb 'ACTIVATE' -TargetState 'READY'
-    }
-    'stop' {
-        Invoke-QCCommandAndWait -Verb 'STOP' -TargetState 'STOPPED'
-    }
-    'restart' {
-        Invoke-QCCommandAndWait -Verb 'RESTART' -TargetState 'READY'
-    }
+    'activate' { Invoke-VBoxControl -Verb ACTIVATE -Target READY }
+    'stop' { Invoke-VBoxControl -Verb STOP -Target STOPPED }
+    'restart' { Invoke-VBoxControl -Verb RESTART -Target READY }
 }

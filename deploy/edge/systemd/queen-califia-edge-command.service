@@ -1,6 +1,5 @@
 [Unit]
-Description=Queen Califia Sovereign Edge host command dispatcher
-After=vboxadd-service.service
+Description=Queen Califia Sovereign Edge VirtualBox command dispatcher
 
 [Service]
 Type=oneshot
