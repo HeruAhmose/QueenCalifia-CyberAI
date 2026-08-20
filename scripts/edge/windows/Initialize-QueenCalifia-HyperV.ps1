@@ -11,6 +11,7 @@ $ErrorActionPreference = 'Stop'
 
 if (-not (Get-Command Get-VM -ErrorAction SilentlyContinue)) { throw 'Hyper-V PowerShell module is required.' }
 if (-not (Get-Command ssh.exe -ErrorAction SilentlyContinue)) { throw 'Windows OpenSSH client is required.' }
+if (-not (Get-Command scp.exe -ErrorAction SilentlyContinue)) { throw 'Windows OpenSSH scp client is required.' }
 if (-not (Get-Command ssh-keygen.exe -ErrorAction SilentlyContinue)) { throw 'ssh-keygen.exe is required.' }
 
 $vm = Get-VM -Name $VmName -ErrorAction Stop
@@ -22,7 +23,8 @@ if (-not (Test-Path -LiteralPath $KeyPath)) {
     & ssh-keygen.exe -q -t ed25519 -a 64 -N '' -C 'queen-califia-hyperv-control' -f $KeyPath
     if ($LASTEXITCODE -ne 0) { throw 'Failed to generate Hyper-V control key.' }
 }
-$publicKey = (Get-Content -LiteralPath "$KeyPath.pub" -Raw).Trim()
+$publicKeyPath = "$KeyPath.pub"
+if (-not (Test-Path -LiteralPath $publicKeyPath)) { throw "Missing public key: $publicKeyPath" }
 
 function Get-QCHyperVIP {
     $adapter = Get-VMNetworkAdapter -VMName $VmName | Select-Object -First 1
@@ -45,13 +47,29 @@ do {
 } while ([DateTimeOffset]::UtcNow -lt $deadline)
 if (-not $ip) { throw 'Unable to discover Hyper-V guest IPv4 address.' }
 
-$remote = "sudo bash /opt/queen-califia/scripts/edge/install-hyperv-control.sh '$publicKey'"
+$knownHosts = "$KeyPath.known_hosts"
+$remoteKey = "/tmp/queen-califia-hyperv-control-$([guid]::NewGuid().ToString('N')).pub"
+$sshBase = @('-o', 'StrictHostKeyChecking=accept-new', '-o', "UserKnownHostsFile=$knownHosts")
+
 Write-Host "HYPERV_GUEST_IP=$ip" -ForegroundColor Cyan
 Write-Host 'One-time enrollment will request the existing guest password and sudo authentication.' -ForegroundColor Yellow
-& ssh.exe -t "$GuestUser@$ip" $remote
-if ($LASTEXITCODE -ne 0) { throw "Hyper-V control-key enrollment failed (ExitCode=$LASTEXITCODE)." }
 
-$knownHosts = "$KeyPath.known_hosts"
+& scp.exe @sshBase -- $publicKeyPath "$GuestUser@${ip}:$remoteKey"
+if ($LASTEXITCODE -ne 0) { throw "Hyper-V public-key staging failed (ExitCode=$LASTEXITCODE)." }
+
+# Never interpolate the public-key text into a Windows OpenSSH command line. The
+# remote shell reads the staged file locally, removes it before sudo, and passes
+# the key to the root-owned installer entirely inside the Linux guest.
+$remote = "key=`$(cat '$remoteKey') && rm -f '$remoteKey' && sudo bash /opt/queen-califia/scripts/edge/install-hyperv-control.sh `"`$key`""
+& ssh.exe @sshBase -t "$GuestUser@$ip" $remote
+$enrollCode = $LASTEXITCODE
+if ($enrollCode -ne 0) {
+    # Best-effort cleanup for failures that occurred before the remote command
+    # consumed the staged public key. This never uses or transmits the private key.
+    & ssh.exe @sshBase "$GuestUser@$ip" "rm -f '$remoteKey'" 2>$null | Out-Null
+    throw "Hyper-V control-key enrollment failed (ExitCode=$enrollCode)."
+}
+
 & ssh.exe -o BatchMode=yes -o IdentitiesOnly=yes -o "IdentityFile=$KeyPath" -o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=$knownHosts" "$GuestUser@$ip" STATUS
 if ($LASTEXITCODE -notin @(0,78)) { throw 'Restricted Hyper-V control key verification failed.' }
 Write-Host 'HYPERV_CONTROL_ENROLLMENT=PASS' -ForegroundColor Green

@@ -29,6 +29,8 @@ pwsh -NoLogo -NoProfile -File scripts/edge/windows/Initialize-QueenCalifia-Hyper
 
 The enrollment step creates `%USERPROFILE%\.ssh\queen-califia-hyperv-control` if needed, discovers the VM address, and asks for the existing guest password / sudo authentication only for this one-time installation. The private key remains on the Windows host and is never copied to the guest or repository.
 
+The public key is transferred with `scp` as a randomized temporary public-key file under `/tmp`. The remote guest reads that file locally, removes it before invoking the root-owned installer, and passes the key to the installer entirely inside Linux. The public-key text is never interpolated into the Windows `ssh.exe` command line. A best-effort cleanup also removes the temporary file if enrollment fails before the remote command consumes it.
+
 ## Normal operation
 
 After enrollment, normal Windows control is noninteractive:
