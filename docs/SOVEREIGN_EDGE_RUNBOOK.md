@@ -30,8 +30,8 @@ Hyper-V host control is intentionally narrow. The enrolled Ed25519 key is attach
 
 The current v2 ledger distinguishes three categories:
 
-1. **Validated production-candidate evidence** — facts already demonstrated on the Hyper-V candidate.
-2. **Final production-host/provider evidence** — physical-host and Cloudflare claims that remain open.
+1. **Validated production-candidate evidence** — facts already demonstrated on the Hyper-V candidate and verified provider paths.
+2. **Final production-host evidence** — physical-host claims that remain open.
 3. **Authorized-runtime/cutover evidence** — facts that cannot be proven until production authorization is deliberately opened after prerequisite review.
 
 ### Validated candidate evidence
@@ -47,6 +47,11 @@ The ledger records the following facts as proven:
 - Valkey TLS success and plaintext refusal in that preauthorization proof
 - independent whole-database source/restore manifest equality
 - encrypted PostgreSQL backup plus independent restore verification
+- Cloudflare tunnel UUID `1aac242e-2e12-4d91-9bbc-149964270d92`
+- public hostname `qc.tamerian-materials.com`
+- remotely managed ingress route `qc.tamerian-materials.com -> http://caddy:8080`
+- successful QUIC connector registration to Cloudflare during a controlled connector-only test
+- fail-closed return to Cloudflare `1033` after the connector-only test was stopped
 
 The recorded preauthorization evidence file is:
 
@@ -76,7 +81,6 @@ The following must remain false until their own evidence exists:
 - final production-host firewall verified
 - BIOS/UEFI restore-after-power-loss verified
 - UPS verified
-- Cloudflare Tunnel provisioned/identity/public-hostname verified
 - final production-host Valkey PKI generation/authority verification
 - historical-source production migration completion
 - authorized API/readiness/Celery/scanner-write probes
@@ -157,21 +161,28 @@ The independent source/restore manifest equality and encrypted backup/restore pr
 
 ## 5. Cloudflare Tunnel
 
-The intended public ingress remains outbound-only Cloudflare Tunnel with origin service:
+The verified public ingress is an outbound-only Cloudflare Tunnel with:
 
 ```text
-http://caddy:8080
+tunnel UUID: 1aac242e-2e12-4d91-9bbc-149964270d92
+hostname:    qc.tamerian-materials.com
+origin:      http://caddy:8080
 ```
 
-Before any production authorization or cutover claim, verify from the Cloudflare control plane:
+The controlled verification sequence proved the following without starting the application dependency graph or opening runtime authorization:
 
-- tunnel UUID/name
-- intended connector identity and health
-- public hostname route
-- origin service `http://caddy:8080`
-- absence of alternate origin records that bypass the tunnel
+1. `qc.tamerian-materials.com` resolved through Cloudflare.
+2. With no connector online, the public hostname returned Cloudflare `1033`.
+3. The guest's configured tunnel token decoded to the expected tunnel UUID without exposing the token itself.
+4. `cloudflared` was started with `docker compose ... up -d --no-deps cloudflared` so Caddy/API/frontend/worker were not started as dependencies.
+5. `cloudflared` selected QUIC and registered four tunnel connections successfully.
+6. The remotely managed configuration reported `qc.tamerian-materials.com` routed to `http://caddy:8080` with a terminal `http_status:404` fallback.
+7. With the connector online but Caddy deliberately absent, the public hostname returned Cloudflare `502` and the connector log recorded the request against `ingressRule=0` and `originService=http://caddy:8080`.
+8. The connector was stopped again, after which the hostname returned Cloudflare `1033` again.
 
-Until that review is complete, `tunnel_provisioned`, `tunnel_identity_verified`, and `public_hostname_verified` remain false.
+This sequence verifies `tunnel_provisioned`, `tunnel_identity_verified`, `public_hostname_verified`, and the intended origin route while preserving a dormant fail-closed public state. It is **not** production cutover and does not verify the authorized application runtime.
+
+Before final cutover, repeat provider review if the tunnel UUID, hostname, token, DNS zone, or ingress configuration changes. Do not keep the connector online merely to satisfy an evidence flag while runtime authorization remains closed.
 
 ## 6. Preauthorization proof
 
@@ -232,7 +243,7 @@ Do **not** create or modify:
 /srv/queen-califia/app/cutover/SOVEREIGN_EDGE_RUNTIME_AUTHORIZED
 ```
 
-until all required source-disposition, database, queue, host, Cloudflare identity, and off-host-backup evidence has been reviewed.
+until all remaining required source-disposition, database, queue, final-host, and off-host-backup evidence has been reviewed. The Cloudflare tunnel identity/hostname/origin-route gate is already verified, but that does not authorize the runtime.
 
 When authorization is eventually approved, the marker authorizes only one API and one worker. It does not authorize HA, multiple API replicas, read-only-rootfs conversion, historical-source deletion, or production traffic cutover.
 
@@ -285,7 +296,7 @@ Before production traffic cutover, retain evidence for:
 - full-disk encryption state
 - final host firewall policy
 - BIOS/UEFI power-loss behavior and UPS status when applicable
-- Cloudflare tunnel UUID/connector/public hostname
+- Cloudflare tunnel UUID/connector/public hostname and origin route
 - Valkey CA fingerprint and final-host PKI authority
 - historical-source disposition
 - source/restore database manifests
