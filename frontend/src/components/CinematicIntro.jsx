@@ -24,6 +24,11 @@ function createParticle(w, h) {
 export default function CinematicIntro({ onComplete, onAwaken }) {
   const canvasRef = useRef(null);
   const [phase, setPhase] = useState("waiting");
+  const prefersReducedMotionRef = useRef(
+    typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
   const [textVisible, setTextVisible] = useState(false);
   const [subtitleVisible, setSubtitleVisible] = useState(false);
   const [buttonVisible, setButtonVisible] = useState(false);
@@ -39,7 +44,17 @@ export default function CinematicIntro({ onComplete, onAwaken }) {
     "Sovereign circuit stabilized",
   ];
 
+  // WCAG 2.3.3 (Animation from Interactions): skip the particle field / avatar
+  // reveal sequence entirely for visitors who have asked the OS for reduced
+  // motion, and go straight to the dashboard instead of playing it anyway.
   useEffect(() => {
+    if (!prefersReducedMotionRef.current) return;
+    onAwaken?.();
+    onComplete?.();
+  }, [onAwaken, onComplete]);
+
+  useEffect(() => {
+    if (prefersReducedMotionRef.current) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
