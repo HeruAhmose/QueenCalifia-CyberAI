@@ -6,6 +6,23 @@ Version 4.3 | Tamerian Materials | Proprietary
 
 ---
 
+## Part of TRAI
+
+This is organ 03 (Brain) of TRAI — the Tamerian Renaissance Alliance
+Initiative — one regenerative organism framed as seven ventures. The entry
+gate that names and links all seven lives at
+[`peoples-portfolio`](https://github.com/HeruAhmose/peoples-portfolio).
+
+| # | Organ · role | Venture | Status | Where it lives |
+|---|---|---|---|---|
+| 01 | Skeleton — material sovereignty | Tamerian Materials | U.S. provisional filed | own repo: [`tamerian-materials`](https://github.com/HeruAhmose/tamerian-materials) → tamerian-materials.com |
+| 02 | Heart — biological sovereignty | True Melange Φ | Formulation set · entity pending | own repo: [`blue-gold-daily`](https://github.com/HeruAhmose/blue-gold-daily) → heruahmose.github.io/blue-gold-daily/layers.html |
+| **03** | **Brain — cognitive sovereignty** | **Queen Califia** | **Demo standing** | **you are here** → queencalifia-cyberai.web.app |
+| 04 | Vessels — mobility sovereignty | Mela Nation | EIN filed · early development | a page inside [`trai-portfolio`](https://github.com/HeruAhmose/trai-portfolio) (the estate) — no separate repo |
+| 05 | Skin — identity sovereignty | MeLaNiNa | EIN filed · early development | a page inside [`trai-portfolio`](https://github.com/HeruAhmose/trai-portfolio) (the estate) — no separate repo |
+| 06 | Hands — community reach | TechBridge Collective | Designed · not yet operating | own repo: [`techbridge-collective`](https://github.com/HeruAhmose/techbridge-collective) → techbridge-collective.org |
+| 07 | Lymphatic — regenerative return | The Peoples Foundation | EIN obtained · exemption pending | a page inside [`trai-portfolio`](https://github.com/HeruAhmose/trai-portfolio) (the estate) — no separate repo |
+
 ## Production Topology
 
 ```
