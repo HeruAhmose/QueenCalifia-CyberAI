@@ -7,9 +7,12 @@ ACK_KEY="/QueenCalifia/SovereignEdge/CommandAck"
 RUNTIME_UNIT="queen-califia-edge.service"
 RUN_DIR="/run/queen-califia-edge"
 LAST_FILE="$RUN_DIR/last-command"
-STATE_HELPER="$REPO_ROOT/scripts/edge/vbox-runtime-state.sh"
+STATE_HELPER="$REPO_ROOT/scripts/edge/runtime-state.sh"
 
 [[ "${EUID}" -eq 0 ]] || exit 1
+# The VBox guest-property dispatcher is valid only when VirtualBox is the active
+# hypervisor. Binary presence alone is not sufficient after VM migration.
+[[ "$(systemd-detect-virt -v 2>/dev/null || true)" == "oracle" ]] || exit 0
 command -v VBoxControl >/dev/null 2>&1 || exit 0
 mkdir -p "$RUN_DIR"
 chmod 0700 "$RUN_DIR"
@@ -39,9 +42,7 @@ case "$verb" in
           systemctl restart "$RUNTIME_UNIT" || rc=$?
         fi
         ;;
-      activating)
-        rc=0
-        ;;
+      activating) rc=0 ;;
       *)
         systemctl reset-failed "$RUNTIME_UNIT" >/dev/null 2>&1 || true
         systemctl start "$RUNTIME_UNIT" || rc=$?
@@ -65,12 +66,7 @@ case "$verb" in
 esac
 
 VBoxControl guestproperty set "$ACK_KEY" "$verb|$nonce|$rc" >/dev/null 2>&1 || true
-
 if [[ "$rc" -ne 0 && "$rc" -ne 78 ]]; then
   "$STATE_HELPER" FAILED "host command $verb failed" >/dev/null 2>&1 || true
 fi
-
-# The dispatcher itself stays healthy; command success/failure is carried in the
-# acknowledgement and runtime state so the polling timer is not poisoned by an
-# intentionally fail-closed activation (for example, authorization rc=78).
 exit 0
