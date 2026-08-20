@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "target": "sovereign-local-edge",
   "deployment_role": "production-candidate",
   "preferred_production_candidate": true,
@@ -9,7 +9,16 @@
   "state_root": "/srv/queen-califia",
   "host": {
     "operating_system": "ubuntu-server",
-    "dedicated_host_required": true,
+    "deployment_form": "hyperv-virtual-machine",
+    "hypervisor": "hyperv",
+    "vm_name": "QueenCalifia-Sovereign-Edge-HyperV",
+    "guest_hostname": "qc-edge-01",
+    "control_plane": "systemd-hyperv-v1",
+    "control_plane_verified": true,
+    "restricted_forced_command_key_verified": true,
+    "preauthorization_evidence_path": "/srv/queen-califia/evidence/runtime-20260820T031522Z.json",
+    "preauthorization_evidence_git_head": "770803fa52b5fc4279257da33a6817322df8cd98",
+    "dedicated_physical_host_required_for_final_production": true,
     "provisioned": false,
     "identity_verified": false,
     "full_disk_encryption_verified": false,
@@ -44,8 +53,10 @@
     "migration_and_pg_dump_connection_mode": "direct",
     "tls_required": true,
     "production_migration_verified": false,
-    "database_manifest_verified": false,
-    "production_backup_restore_verified": false
+    "database_manifest_verified": true,
+    "database_manifest_sha256": "efd4ec38a752f41255309635638aaa1c59e0f59dbd5953c0b7b89871882eaaed",
+    "production_backup_restore_verified": true,
+    "encrypted_backup_sha256": "20a473c2e5312d357b1cb4fb92691f33bb192f429deba9a5af00e870d81d2ca0"
   },
   "queue": {
     "provider": "self-hosted-valkey",
@@ -58,11 +69,15 @@
     "internet_exposed": false,
     "aof_persistence_required": true,
     "pki_generated": false,
-    "authority_verified": false
+    "authority_verified": false,
+    "preauthorization_tls_verified": true,
+    "preauthorization_plaintext_refused": true
   },
   "runtime": {
     "authorization_gate": "/srv/queen-califia/app/cutover/SOVEREIGN_EDGE_RUNTIME_AUTHORIZED",
     "runtime_authorized": false,
+    "preauthorization_verified": true,
+    "preauthorization_no_host_ports_published": true,
     "health_probes_verified": false,
     "celery_task_completion_verified": false,
     "scanner_postgres_writes_verified": false,
