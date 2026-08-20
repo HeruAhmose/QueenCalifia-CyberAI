@@ -65,7 +65,20 @@ for forbidden in ("--passwordfile", "Read-Host", "SecureString"):
         raise SystemExit(f"normal Windows launcher must remain noninteractive; found {forbidden}")
 
 initializer = text(WINDOWS_INIT)
-require(initializer, "ssh-keygen.exe", "ed25519", "install-hyperv-control.sh", "HYPERV_CONTROL_ENROLLMENT=PASS")
+require(
+    initializer,
+    "scp.exe",
+    "ssh-keygen.exe",
+    "ed25519",
+    "/tmp/queen-califia-hyperv-control-",
+    "install-hyperv-control.sh",
+    "rm -f",
+    "HYPERV_CONTROL_ENROLLMENT=PASS",
+)
+if "$publicKey =" in initializer or "install-hyperv-control.sh '$publicKey'" in initializer:
+    raise SystemExit("Hyper-V enrollment must never interpolate public-key text into the Windows OpenSSH command line")
+if "Get-Content -LiteralPath \"$KeyPath.pub\" -Raw" in initializer:
+    raise SystemExit("Hyper-V enrollment must stage the public-key file rather than reading key text for remote command interpolation")
 
 cmd = text(CMD)
 require(cmd, "pwsh.exe", "qc.ps1", "activate")
@@ -81,6 +94,6 @@ if "vboxadd-service.service" in command_unit:
 command_timer = text(COMMAND_TIMER)
 require(command_timer, "OnBootSec=5s", "OnUnitActiveSec=2s", "Unit=queen-califia-edge-command.service")
 require(text(VBOX_DOC).lower(), "one-time guest installation", "runtime authorization gate")
-require(text(HYPERV_DOC).lower(), "one-time guest installation", "forced command", "production authorization", "virtualbox compatibility")
+require(text(HYPERV_DOC).lower(), "one-time guest installation", "forced command", "production authorization", "virtualbox compatibility", "temporary public-key file")
 
-print("Sovereign Edge activation guard verified: Hyper-V and VirtualBox are explicit, host control is credentialless after enrollment, and production authorization remains fail-closed")
+print("Sovereign Edge activation guard verified: Hyper-V and VirtualBox are explicit, enrollment stages public-key files safely, host control is credentialless after enrollment, and production authorization remains fail-closed")
