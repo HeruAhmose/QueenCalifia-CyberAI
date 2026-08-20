@@ -75,7 +75,7 @@ require(
     "rm -f",
     "HYPERV_CONTROL_ENROLLMENT=PASS",
 )
-if "install-hyperv-control.sh '$publicKey'" in initializer or '$publicKey' in initializer:
+if "$publicKey =" in initializer or "install-hyperv-control.sh '$publicKey'" in initializer:
     raise SystemExit("Hyper-V enrollment must never interpolate public-key text into the Windows OpenSSH command line")
 if "Get-Content -LiteralPath \"$KeyPath.pub\" -Raw" in initializer:
     raise SystemExit("Hyper-V enrollment must stage the public-key file rather than reading key text for remote command interpolation")
