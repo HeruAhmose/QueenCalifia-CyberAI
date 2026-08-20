@@ -79,6 +79,8 @@ if "$publicKey =" in initializer or "install-hyperv-control.sh '$publicKey'" in 
     raise SystemExit("Hyper-V enrollment must never interpolate public-key text into the Windows OpenSSH command line")
 if "Get-Content -LiteralPath \"$KeyPath.pub\" -Raw" in initializer:
     raise SystemExit("Hyper-V enrollment must stage the public-key file rather than reading key text for remote command interpolation")
+if "& scp.exe @sshBase -- " in initializer:
+    raise SystemExit("Windows OpenSSH scp enrollment must not use the unsupported -- separator")
 
 cmd = text(CMD)
 require(cmd, "pwsh.exe", "qc.ps1", "activate")

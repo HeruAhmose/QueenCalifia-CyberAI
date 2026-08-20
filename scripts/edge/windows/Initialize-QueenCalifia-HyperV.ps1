@@ -54,7 +54,7 @@ $sshBase = @('-o', 'StrictHostKeyChecking=accept-new', '-o', "UserKnownHostsFile
 Write-Host "HYPERV_GUEST_IP=$ip" -ForegroundColor Cyan
 Write-Host 'One-time enrollment will request the existing guest password and sudo authentication.' -ForegroundColor Yellow
 
-& scp.exe @sshBase -- $publicKeyPath "$GuestUser@${ip}:$remoteKey"
+& scp.exe @sshBase $publicKeyPath "$GuestUser@${ip}:$remoteKey"
 if ($LASTEXITCODE -ne 0) { throw "Hyper-V public-key staging failed (ExitCode=$LASTEXITCODE)." }
 
 # Never interpolate the public-key text into a Windows OpenSSH command line. The
