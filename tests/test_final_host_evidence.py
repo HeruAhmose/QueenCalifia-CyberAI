@@ -84,7 +84,7 @@ def patch_common(monkeypatch, *, bare_metal: bool) -> None:
     monkeypatch.setattr(
         collector,
         "repository_evidence",
-        lambda _repo_root: {
+        lambda: {
             "repository": "/opt/queen-califia",
             "head": "c" * 40,
             "head_probe_error": None,
@@ -107,7 +107,7 @@ def test_encryption_chain_detects_crypt_and_luks() -> None:
 
 def test_hyperv_candidate_cannot_satisfy_final_host_machine_evidence(monkeypatch) -> None:
     patch_common(monkeypatch, bare_metal=False)
-    evidence = collector.build_evidence(Path("/opt/queen-califia"))
+    evidence = collector.build_evidence()
     assert evidence["virtualization"]["bare_metal"] is False
     assert evidence["machine_evidence_ready_for_review"] is False
     assert evidence["ledger_modified"] is False
@@ -116,7 +116,7 @@ def test_hyperv_candidate_cannot_satisfy_final_host_machine_evidence(monkeypatch
 
 def test_bare_metal_machine_evidence_still_requires_manual_controls(monkeypatch) -> None:
     patch_common(monkeypatch, bare_metal=True)
-    evidence = collector.build_evidence(Path("/opt/queen-califia"))
+    evidence = collector.build_evidence()
     assert evidence["machine_evidence_ready_for_review"] is True
     assert evidence["manual_controls"]["bios_restore_after_power_loss"]["verified"] is False
     assert evidence["manual_controls"]["ups"]["verified"] is False
@@ -127,6 +127,11 @@ def test_bare_metal_machine_evidence_still_requires_manual_controls(monkeypatch)
 def test_authorization_marker_presence_blocks_machine_readiness(monkeypatch) -> None:
     patch_common(monkeypatch, bare_metal=True)
     monkeypatch.setattr(collector, "AUTH_MARKER", MarkerStub(True))
-    evidence = collector.build_evidence(Path("/opt/queen-califia"))
+    evidence = collector.build_evidence()
     assert evidence["authorization_marker"]["present"] is True
     assert evidence["machine_evidence_ready_for_review"] is False
+
+
+def test_production_paths_are_fixed_constants() -> None:
+    assert collector.CANONICAL_REPO_ROOT == Path("/opt/queen-califia")
+    assert collector.EVIDENCE_ROOT == Path("/srv/queen-califia/evidence")
