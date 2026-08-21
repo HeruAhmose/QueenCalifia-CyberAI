@@ -89,6 +89,7 @@ def main() -> int:
     subprocess.run([sys.executable, str(ROOT / "scripts/ci/check_final_host_manual_controls_contract.py")], check=True)
     subprocess.run([sys.executable, str(ROOT / "scripts/ci/check_hyperv_final_host_evidence_contract.py")], check=True)
     subprocess.run([sys.executable, str(ROOT / "scripts/ci/check_hyperv_final_host_manual_controls_contract.py")], check=True)
+    subprocess.run([sys.executable, str(ROOT / "scripts/ci/check_hyperv_valkey_authority_contract.py")], check=True)
     subprocess.run(
         [
             sys.executable,
@@ -102,8 +103,9 @@ def main() -> int:
     print(
         f"platform toolchain guard: {len(REQUIRED_KEYS)} pins valid; {checked} workflows clean; "
         "OCI historical, managed-free staging, Sovereign Edge deployment, Linux final-host evidence, Hyper-V physical-host evidence, "
-        "off-host backup, Render historical-source disposition, final Valkey PKI, live Valkey authority, Linux final-host manual-control, "
-        "and Hyper-V final-host manual-control evidence contracts clean; production authorization readiness remains explicitly fail-closed"
+        "off-host backup, Render historical-source disposition, Linux final Valkey PKI/live authority, Hyper-V final Valkey PKI/live authority, "
+        "Linux final-host manual-control, and Hyper-V final-host manual-control evidence contracts clean; production authorization readiness "
+        "remains explicitly fail-closed"
     )
     return 0
 
