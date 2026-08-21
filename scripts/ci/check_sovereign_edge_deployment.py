@@ -177,23 +177,33 @@ required_host = {
     "control_plane": "systemd-hyperv-v1",
     "control_plane_verified": True,
     "restricted_forced_command_key_verified": True,
-    "preauthorization_evidence_path": "/srv/queen-califia/evidence/runtime-20260820T031522Z.json",
-    "preauthorization_evidence_git_head": "770803fa52b5fc4279257da33a6817322df8cd98",
+    "preauthorization_evidence_path": "/srv/queen-califia/evidence/runtime-20260821T095053Z.json",
+    "preauthorization_evidence_git_head": "4f2f6949a723ed034db3ccd7196b77c8df3ae99c",
     "dedicated_physical_host_required_for_final_production": True,
 }
 for key, expected in required_host.items():
     if host.get(key) != expected:
         raise SystemExit(f"Hyper-V production-candidate evidence mismatch: host.{key}")
-for key in (
-    "provisioned",
-    "identity_verified",
-    "full_disk_encryption_verified",
-    "firewall_default_deny_incoming_verified",
-    "bios_restore_after_power_loss_verified",
-    "ups_verified",
-):
+for key in ("provisioned", "identity_verified", "full_disk_encryption_verified", "firewall_default_deny_incoming_verified"):
+    if host.get(key) is not True:
+        raise SystemExit(f"verified final-host evidence must remain recorded: host.{key}")
+for key in ("bios_restore_after_power_loss_verified", "ups_verified"):
     if host.get(key) is not False:
-        raise SystemExit(f"final production host evidence gate must remain false: host.{key}")
+        raise SystemExit(f"manual physical-host control must remain false until actually tested: host.{key}")
+final_host = host.get("final_host_evidence", {})
+required_final_host = {
+    "schema": "queen-califia-hyperv-final-host-evidence-v2",
+    "architecture": "windows-physical-host-with-hyperv-ubuntu-guest",
+    "path": "C:\\ProgramData\\QueenCalifia\\evidence\\hyperv-final-host\\hyperv-final-host-v2-20260821T095153Z.json",
+    "sha256": "da9f6d5396d4b155876687de9c5a256e1b569f8df37442aa81499721aecbe8bc",
+    "git_head": "4f2f6949a723ed034db3ccd7196b77c8df3ae99c",
+    "vm_id": "b7a57ed1-4245-454f-b004-9f38196b80aa",
+    "automated_host_evidence_ready_for_review": True,
+    "manual_controls": "BIOS_AND_UPS_REQUIRED",
+}
+for key, expected in required_final_host.items():
+    if final_host.get(key) != expected:
+        raise SystemExit(f"final-host evidence mismatch: host.final_host_evidence.{key}")
 if host.get("api_replicas") != 1 or host.get("worker_replicas") != 1:
     raise SystemExit("Sovereign Edge must keep exactly one API and one worker")
 
@@ -245,8 +255,35 @@ if queue.get("internet_exposed") is not False or queue.get("authoritative_applic
     raise SystemExit("Valkey must not be Internet exposed or authoritative application state")
 if queue.get("preauthorization_tls_verified") is not True or queue.get("preauthorization_plaintext_refused") is not True:
     raise SystemExit("fresh preauthorization Valkey TLS/plaintext-refusal evidence must remain recorded")
-if queue.get("pki_generated") is not False or queue.get("authority_verified") is not False:
-    raise SystemExit("final production-host PKI evidence remains open pending host source-of-truth closure")
+if queue.get("pki_generated") is not True or queue.get("authority_verified") is not True:
+    raise SystemExit("host-bound Valkey PKI and live authority evidence must remain recorded")
+authority = queue.get("authority_evidence", {})
+required_authority = {
+    "schema": "queen-califia-hyperv-final-valkey-authority-evidence-v2",
+    "path": "C:\\ProgramData\\QueenCalifia\\evidence\\hyperv-valkey-authority\\hyperv-final-valkey-authority-v2-20260821T095159Z.json",
+    "sha256": "87c5627b2e81cd75f5ccc0d019c6b234be35157b8478c0635451a5b8fd78c8b9",
+    "git_head": "4f2f6949a723ed034db3ccd7196b77c8df3ae99c",
+    "vm_id": "b7a57ed1-4245-454f-b004-9f38196b80aa",
+    "cross_host_binding": "NIC_HASH",
+    "eligible_for_human_review": True,
+    "ledger_updated_by_evidence_tool": False,
+    "authorization_updated_by_evidence_tool": False,
+}
+for key, expected in required_authority.items():
+    if authority.get(key) != expected:
+        raise SystemExit(f"Valkey authority evidence mismatch: queue.authority_evidence.{key}")
+
+backup = state.get("backup", {})
+if backup.get("local_encrypted_host_state_backup_verified") is not True:
+    raise SystemExit("fresh local encrypted host-state backup evidence must remain recorded")
+if backup.get("local_encrypted_host_state_backup_path") != "/srv/queen-califia/backups/edge-state-20260821T095912Z.tar.age":
+    raise SystemExit("local encrypted host-state backup path mismatch")
+if backup.get("local_encrypted_host_state_backup_sha256") != "dc0d9c8eda6dcbbbdc6229b9ad1bcfa1ec54aa02a414c681706739aed63ec2ca":
+    raise SystemExit("local encrypted host-state backup digest mismatch")
+if backup.get("off_host_encrypted_copy_required") is not True:
+    raise SystemExit("off-host encrypted copy must remain required")
+if backup.get("off_host_encrypted_copy_verified") is not False or backup.get("off_host_evidence_path") is not None or backup.get("off_host_evidence_sha256") is not None:
+    raise SystemExit("off-host copy gate must remain open until independent storage proof exists")
 
 runtime = state.get("runtime", {})
 if runtime.get("preauthorization_verified") is not True or runtime.get("preauthorization_no_host_ports_published") is not True:
@@ -261,4 +298,4 @@ loss = state.get("historical_sources", {}).get("render_live_scanner_qc_scans_db"
 if loss.get("status") != "unrecoverable-unverified" or loss.get("verified_absent") is not False or loss.get("captured") is not False:
     raise SystemExit("Render qc_scans.db evidence truth must remain unrecoverable-unverified")
 
-print("Sovereign Edge guard verified: Hyper-V and Cloudflare ingress evidence are recorded, preauthorization and PostgreSQL restore evidence remain intact, physical-host/authorized-runtime/cutover gates remain closed")
+print("Sovereign Edge guard verified: final Windows host and host-bound Valkey authority evidence are recorded; local encrypted backup is verified; BIOS/UPS/off-host/historical-source/authorized-runtime/cutover gates remain closed")
