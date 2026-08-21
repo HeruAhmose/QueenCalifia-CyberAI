@@ -80,6 +80,13 @@
     "preauthorization_tls_verified": true,
     "preauthorization_plaintext_refused": true
   },
+  "backup": {
+    "host_state_backup_script": "scripts/edge/backup-host-state.sh",
+    "off_host_encrypted_copy_required": true,
+    "off_host_encrypted_copy_verified": false,
+    "off_host_evidence_path": null,
+    "off_host_evidence_sha256": null
+  },
   "runtime": {
     "authorization_gate": "/srv/queen-califia/app/cutover/SOVEREIGN_EDGE_RUNTIME_AUTHORIZED",
     "runtime_authorized": false,
