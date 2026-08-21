@@ -86,6 +86,7 @@ def main() -> int:
     subprocess.run([sys.executable, str(ROOT / "scripts/ci/check_render_source_disposition_contract.py")], check=True)
     subprocess.run([sys.executable, str(ROOT / "scripts/ci/check_final_valkey_pki_contract.py")], check=True)
     subprocess.run([sys.executable, str(ROOT / "scripts/ci/check_final_valkey_authority_contract.py")], check=True)
+    subprocess.run([sys.executable, str(ROOT / "scripts/ci/check_final_host_manual_controls_contract.py")], check=True)
     subprocess.run(
         [
             sys.executable,
@@ -99,8 +100,8 @@ def main() -> int:
     print(
         f"platform toolchain guard: {len(REQUIRED_KEYS)} pins valid; {checked} workflows clean; "
         "OCI historical, managed-free staging, Sovereign Edge deployment, final-host evidence, off-host backup, "
-        "Render historical-source disposition, final Valkey PKI, and live Valkey authority evidence contracts clean; "
-        "production authorization readiness remains explicitly fail-closed"
+        "Render historical-source disposition, final Valkey PKI, live Valkey authority, and final-host manual-control "
+        "evidence contracts clean; production authorization readiness remains explicitly fail-closed"
     )
     return 0
 
