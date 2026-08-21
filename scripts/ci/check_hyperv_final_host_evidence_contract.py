@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import shutil
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -16,6 +18,18 @@ def require(text: str, *needles: str) -> None:
 def main() -> int:
     if not COLLECTOR.is_file():
         raise SystemExit("missing Hyper-V final-host evidence collector")
+
+    pwsh = shutil.which("pwsh")
+    if not pwsh:
+        raise SystemExit("PowerShell 7 is required in CI to parse the Hyper-V final-host collector")
+
+    parser_script = (
+        "$tokens=$null;$errors=$null;"
+        "[System.Management.Automation.Language.Parser]::ParseFile(" 
+        f"'{COLLECTOR.as_posix()}',[ref]$tokens,[ref]$errors)|Out-Null;"
+        "if($errors.Count -gt 0){$errors|Format-List Message,Extent;exit 1}"
+    )
+    subprocess.run([pwsh, "-NoLogo", "-NoProfile", "-Command", parser_script], check=True)
 
     text = COLLECTOR.read_text(encoding="utf-8")
 
@@ -68,7 +82,7 @@ def main() -> int:
             raise SystemExit(f"Hyper-V final-host collector contains forbidden state-mutation surface: {forbidden}")
 
     print(
-        "Hyper-V final-host evidence guard verified: Windows physical-host trust, BitLocker/TPM/Secure Boot/VBS/LSA/firewall, "
+        "Hyper-V final-host evidence guard verified: PowerShell parser clean; Windows physical-host trust, BitLocker/TPM/Secure Boot/VBS/LSA/firewall, "
         "exact VM identity/storage, and closed guest authorization are review-only; BIOS/UPS remain manual and no ledger/authorization state is mutated"
     )
     return 0
