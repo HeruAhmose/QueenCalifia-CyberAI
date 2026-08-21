@@ -32,7 +32,7 @@ function Assert-RegularJsonFile([string]$Path,[string]$Label) {
     if ($item.LinkType) { throw "HYPERV_VALKEY_AUTHORITY_ERROR=$Label symlink/reparse substitution refused: $Path" }
     if ($item.Length -le 0) { throw "HYPERV_VALKEY_AUTHORITY_ERROR=$Label must be non-empty: $Path" }
     try { $record = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json }
-    catch { throw "HYPERV_VALKEY_AUTHORITY_ERROR=invalid JSON in $Label: $Path" }
+    catch { throw "HYPERV_VALKEY_AUTHORITY_ERROR=invalid JSON in ${Label}: $Path" }
     [pscustomobject]@{ Item=$item; Record=$record }
 }
 
