@@ -27,10 +27,17 @@ def main() -> int:
         "authorization marker exists; preauthorization backup proof refused",
         '[[ "$mount_target" == "$OFFHOST_ROOT" ]]',
         '[[ "$source_dev" != "$offhost_dev" ]]',
+        "top_disk_for_device",
+        '[[ "$offhost_mount_source" != /dev/loop* ]]',
+        '[[ "$source_top_disk" != "$offhost_top_disk" ]]',
+        'independence_mode="distinct-physical-disk"',
+        'nfs|nfs4|cifs|smb3|fuse.sshfs)',
+        'independence_mode="network-filesystem"',
         "source backup hash mismatch",
         "off-host copy hash mismatch",
         "source_destination_hash_equal",
         "separate_filesystem_device",
+        "independence_mode",
         "deployment_ledger_modified",
         "authorization_modified",
         "destination archive or manifest already exists; immutable copy refused",
@@ -53,8 +60,9 @@ def main() -> int:
             raise SystemExit(f"off-host backup operator contains forbidden mutation/path surface: {forbidden}")
 
     print(
-        "Off-host backup proof guard verified: canonical paths fixed, dedicated separate mount required, "
-        "encrypted archive and evidence are hash-verified, and authorization/ledger state cannot be changed"
+        "Off-host backup proof guard verified: canonical paths fixed; loop/RAM-style shortcuts excluded; "
+        "destination must be a distinct physical disk or supported network filesystem; encrypted archive and "
+        "evidence are hash-verified; authorization/ledger state cannot be changed"
     )
     return 0
 
