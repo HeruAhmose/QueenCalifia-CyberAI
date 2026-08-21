@@ -102,19 +102,19 @@ Assert-Hex40 -Value $repoHead -Label 'Windows repository head'
 if (@(& git -C $RepoRoot status --porcelain).Count -gt 0) { throw 'HYPERV_VALKEY_AUTHORITY_V2_ERROR=Windows repository checkout must be clean' }
 if ((& git -C $RepoRoot branch --show-current).Trim() -ne 'main') { throw 'HYPERV_VALKEY_AUTHORITY_V2_ERROR=Windows repository must be on protected main' }
 
-$host = Get-Newest -Root $HostEvidenceRoot -Filter 'hyperv-final-host-v2-*.json' -Label 'Windows final-host'
-if ($host.Record.schema -ne 'queen-califia-hyperv-final-host-evidence-v2') { throw 'HYPERV_VALKEY_AUTHORITY_V2_ERROR=unsupported Windows final-host schema' }
-if ($host.Record.architecture -ne 'windows-physical-host-with-hyperv-ubuntu-guest') { throw 'HYPERV_VALKEY_AUTHORITY_V2_ERROR=unexpected Windows final-host architecture' }
-if ($host.Record.automated_host_evidence_ready_for_review -ne $true) { throw 'HYPERV_VALKEY_AUTHORITY_V2_ERROR=Windows final-host evidence is not review-ready' }
-$hostHead = [string]$host.Record.repository.head
+$hostEvidence = Get-Newest -Root $HostEvidenceRoot -Filter 'hyperv-final-host-v2-*.json' -Label 'Windows final-host'
+if ($hostEvidence.Record.schema -ne 'queen-califia-hyperv-final-host-evidence-v2') { throw 'HYPERV_VALKEY_AUTHORITY_V2_ERROR=unsupported Windows final-host schema' }
+if ($hostEvidence.Record.architecture -ne 'windows-physical-host-with-hyperv-ubuntu-guest') { throw 'HYPERV_VALKEY_AUTHORITY_V2_ERROR=unexpected Windows final-host architecture' }
+if ($hostEvidence.Record.automated_host_evidence_ready_for_review -ne $true) { throw 'HYPERV_VALKEY_AUTHORITY_V2_ERROR=Windows final-host evidence is not review-ready' }
+$hostHead = [string]$hostEvidence.Record.repository.head
 Assert-Hex40 -Value $hostHead -Label 'Windows final-host Git head'
 if ($hostHead -ne $repoHead) { throw 'HYPERV_VALKEY_AUTHORITY_V2_ERROR=Windows final-host evidence must be recollected at current protected main' }
-$hostFingerprint = [string]$host.Record.host_identity.fingerprint_sha256
+$hostFingerprint = [string]$hostEvidence.Record.host_identity.fingerprint_sha256
 Assert-Hex64 -Value $hostFingerprint -Label 'Windows physical-host fingerprint'
-$hostVmId = Normalize-Guid -Value ([string]$host.Record.hyperv.vm_id) -Label 'Windows Hyper-V VM ID'
+$hostVmId = Normalize-Guid -Value ([string]$hostEvidence.Record.hyperv.vm_id) -Label 'Windows Hyper-V VM ID'
 
 $hostNicHashes = @(
-    $host.Record.hyperv.network_adapters |
+    $hostEvidence.Record.hyperv.network_adapters |
         Where-Object { $_.connected -eq $true -and $_.mac_address_sha256 } |
         ForEach-Object { ([string]$_.mac_address_sha256).ToLowerInvariant() }
 )
@@ -215,7 +215,7 @@ $record = [ordered]@{
     git_head = $repoHead
     valkey_certificate_fingerprints_sha256 = $pkiCerts
     source_evidence = [ordered]@{
-        windows_final_host = [ordered]@{ name=$host.Item.Name; sha256=Get-FileSha256Lower $host.Item.FullName }
+        windows_final_host = [ordered]@{ name=$hostEvidence.Item.Name; sha256=Get-FileSha256Lower $hostEvidence.Item.FullName }
         guest_valkey_pki = [ordered]@{ name=$pki.Item.Name; sha256=$pkiSha }
         guest_identity_binding = [ordered]@{ name=$identity.Item.Name; sha256=Get-FileSha256Lower $identity.Item.FullName }
         guest_runtime_preauthorization = [ordered]@{ name=$runtime.Item.Name; sha256=$runtimeSha; boot_id=[string]$runtime.Record.boot_id }
