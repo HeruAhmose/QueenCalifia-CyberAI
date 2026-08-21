@@ -16,7 +16,7 @@ gate that names and links all seven lives at
 | # | Organ · role | Venture | Status | Where it lives |
 |---|---|---|---|---|
 | 01 | Skeleton — material sovereignty | Tamerian Materials | U.S. provisional filed | own repo: [`tamerian-materials`](https://github.com/HeruAhmose/tamerian-materials) → tamerian-materials.com |
-| 02 | Heart — biological sovereignty | True Melange Φ | Formulation set · entity pending | own repo: [`blue-gold-daily`](https://github.com/HeruAhmose/blue-gold-daily) → heruahmose.github.io/blue-gold-daily/layers.html |
+| 02 | Heart — biological sovereignty | True Mélange Φ | Formulation set · entity pending | own repo: [`blue-gold-daily`](https://github.com/HeruAhmose/blue-gold-daily) → heruahmose.github.io/blue-gold-daily/layers.html |
 | **03** | **Brain — cognitive sovereignty** | **Queen Califia** | **Demo standing** | **you are here** → queencalifia-cyberai.web.app |
 | 04 | Vessels — mobility sovereignty | Mela Nation | EIN filed · early development | a page inside [`trai-portfolio`](https://github.com/HeruAhmose/trai-portfolio) (the estate) — no separate repo |
 | 05 | Skin — identity sovereignty | MeLaNiNa | EIN filed · early development | a page inside [`trai-portfolio`](https://github.com/HeruAhmose/trai-portfolio) (the estate) — no separate repo |
