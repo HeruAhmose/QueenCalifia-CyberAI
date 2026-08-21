@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -35,6 +36,11 @@ def main() -> int:
     )
     subprocess.run([pwsh, '-NoLogo', '-NoProfile', '-Command', parser], check=True)
     windows = WINDOWS.read_text(encoding='utf-8')
+
+    # PowerShell variable names are case-insensitive. $Host is a built-in read-only
+    # automatic variable, so assigning to $host would parse but fail at runtime.
+    if re.search(r'(?im)^\s*\$host\s*=', windows):
+        raise SystemExit('Hyper-V Gen1 Valkey NIC-binding contract assigns to read-only PowerShell $Host automatic variable')
 
     require(
         guest,
@@ -79,7 +85,7 @@ def main() -> int:
         if forbidden in guest or forbidden in windows:
             raise SystemExit(f'forbidden mutation surface in Hyper-V Gen1 NIC-binding path: {forbidden}')
 
-    print('Hyper-V Gen1 Valkey NIC-binding guard verified: guest MAC hashes use the Windows collector algorithm; DMI UUID is informational; live authority stays fail-closed and review-only')
+    print('Hyper-V Gen1 Valkey NIC-binding guard verified: guest MAC hashes use the Windows collector algorithm; DMI UUID is informational; PowerShell automatic-variable collisions are rejected; live authority stays fail-closed and review-only')
     return 0
 
 
