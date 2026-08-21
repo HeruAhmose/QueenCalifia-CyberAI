@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import re
+import socket
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,6 +14,7 @@ from typing import Any
 PKI_ROOT = Path("/srv/queen-califia/pki/valkey")
 EVIDENCE_ROOT = Path("/srv/queen-califia/evidence")
 AUTH_MARKER = Path("/srv/queen-califia/app/cutover/SOVEREIGN_EDGE_RUNTIME_AUTHORIZED")
+CANONICAL_REPO_ROOT = Path("/opt/queen-califia")
 CERT_NAMES = ("ca", "server", "health", "api", "worker")
 CLIENT_NAMES = ("health", "api", "worker")
 CERT_SHA_RE = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){31}$")
@@ -22,12 +24,38 @@ def fail(message: str) -> None:
     raise SystemExit(f"VALKEY_PKI_EVIDENCE_ERROR={message}")
 
 
-def run(command: list[str]) -> str:
-    proc = subprocess.run(command, capture_output=True, text=True, check=False)
+def run(command: list[str], *, cwd: Path | None = None) -> str:
+    proc = subprocess.run(
+        command,
+        cwd=str(cwd) if cwd else None,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     if proc.returncode != 0:
         detail = proc.stderr.strip() or proc.stdout.strip() or f"exit {proc.returncode}"
         fail(f"command failed: {command[0]}: {detail}")
     return proc.stdout.strip()
+
+
+def host_identity_fingerprint() -> str:
+    values = [socket.gethostname()]
+    for path in (
+        Path("/etc/machine-id"),
+        Path("/sys/class/dmi/id/product_uuid"),
+        Path("/sys/class/dmi/id/board_serial"),
+    ):
+        try:
+            value = path.read_text(encoding="utf-8", errors="replace").strip()
+        except (FileNotFoundError, PermissionError, OSError):
+            value = ""
+        if value:
+            values.append(value)
+    digest = hashlib.sha256()
+    for value in values:
+        digest.update(value.encode("utf-8", errors="replace"))
+        digest.update(b"\0")
+    return digest.hexdigest()
 
 
 def file_mode(path: Path) -> int:
@@ -81,6 +109,13 @@ def verify_material() -> dict[str, Any]:
     virt = run(["systemd-detect-virt"]).strip().lower()
     if virt != "none":
         fail(f"final-host Valkey PKI evidence requires bare metal; detected {virt or 'unknown'}")
+
+    if not (CANONICAL_REPO_ROOT / ".git").exists():
+        fail(f"canonical repository checkout not found: {CANONICAL_REPO_ROOT}")
+    git_head = run(["git", "rev-parse", "HEAD"], cwd=CANONICAL_REPO_ROOT)
+    git_status = run(["git", "status", "--porcelain"], cwd=CANONICAL_REPO_ROOT)
+    if git_status:
+        fail("canonical repository checkout must be clean for final-host PKI evidence")
 
     required = [PKI_ROOT / "ca.key", PKI_ROOT / "ca.crt"]
     for name in ("server", "health", "api", "worker"):
@@ -146,6 +181,9 @@ def verify_material() -> dict[str, Any]:
 
     return {
         "bare_metal": True,
+        "host_identity_fingerprint_sha256": host_identity_fingerprint(),
+        "git_head": git_head,
+        "repository_clean": True,
         "pki_root": str(PKI_ROOT),
         "pki_material_verified": True,
         "certificate_fingerprints_sha256": fingerprints,
