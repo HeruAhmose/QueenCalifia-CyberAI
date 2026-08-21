@@ -69,23 +69,27 @@ def authorization_checks(state: dict[str, Any]) -> list[dict[str, Any]]:
 
     for key in ("database_manifest_verified", "production_backup_restore_verified"):
         checks.append(check(f"postgresql.{key}", pg.get(key), True, "postgresql"))
-    checks.append(check("postgresql.production_migration_verified", pg.get("production_migration_verified"), True, "historical-source-disposition"))
 
+    # A historical source can be resolved either by verified migration/recovery
+    # or by an explicit evidence-backed disposition. Do not force a false
+    # "migrated" claim for a provider-confirmed unrecoverable source.
     historical_resolved = (
-        historical.get("captured") is True
+        pg.get("production_migration_verified") is True
+        or historical.get("captured") is True
         or historical.get("verified_absent") is True
         or historical.get("status") in {"recovered-verified", "provider-verified-absent", "formally-dispositioned"}
     )
     checks.append(
         {
-            "gate": "historical_sources.render_live_scanner_qc_scans_db",
+            "gate": "historical_sources.render_live_scanner_qc_scans_db.disposition",
             "ready": historical_resolved,
             "observed": {
+                "production_migration_verified": pg.get("production_migration_verified"),
                 "status": historical.get("status"),
                 "captured": historical.get("captured"),
                 "verified_absent": historical.get("verified_absent"),
             },
-            "required": "provider-backed recovery, verified absence, or formal evidence-backed disposition",
+            "required": "verified migration/recovery, provider-verified absence, or formal evidence-backed disposition",
             "scope": "historical-source-disposition",
         }
     )
