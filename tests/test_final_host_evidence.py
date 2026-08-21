@@ -12,8 +12,19 @@ collector = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(collector)
 
 
+class MarkerStub:
+    def __init__(self, present: bool) -> None:
+        self.present = present
+
+    def exists(self) -> bool:
+        return self.present
+
+    def __str__(self) -> str:
+        return "/srv/queen-califia/app/cutover/SOVEREIGN_EDGE_RUNTIME_AUTHORIZED"
+
+
 def patch_common(monkeypatch, *, bare_metal: bool) -> None:
-    monkeypatch.setattr(collector.AUTH_MARKER, "exists", lambda: False)
+    monkeypatch.setattr(collector, "AUTH_MARKER", MarkerStub(False))
     monkeypatch.setattr(
         collector,
         "virtualization_evidence",
@@ -115,7 +126,7 @@ def test_bare_metal_machine_evidence_still_requires_manual_controls(monkeypatch)
 
 def test_authorization_marker_presence_blocks_machine_readiness(monkeypatch) -> None:
     patch_common(monkeypatch, bare_metal=True)
-    monkeypatch.setattr(collector.AUTH_MARKER, "exists", lambda: True)
+    monkeypatch.setattr(collector, "AUTH_MARKER", MarkerStub(True))
     evidence = collector.build_evidence(Path("/opt/queen-califia"))
     assert evidence["authorization_marker"]["present"] is True
     assert evidence["machine_evidence_ready_for_review"] is False
