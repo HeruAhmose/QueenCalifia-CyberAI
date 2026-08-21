@@ -227,14 +227,18 @@ class PurpleTeamOrchestrator:
             rule_count = detection_coverage.get(tid, 0)
             has_detection = rule_count > 0
 
-            # Simulate detection evaluation
+            # Simulate detection evaluation. If the attack simulation fails but
+            # an active rule covers the technique, detection presence still
+            # counts exactly as the coverage record states.
             if step.success and has_detection:
                 detection_fired = True
-                detected += 1
             elif step.success:
                 detection_fired = False
             else:
-                detection_fired = has_detection  # Attack failed, detection presence counts
+                detection_fired = has_detection
+
+            if detection_fired:
+                detected += 1
 
             # Coverage level
             if rule_count == 0:

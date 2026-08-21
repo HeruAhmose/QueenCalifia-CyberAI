@@ -85,10 +85,14 @@ def test_current_authorization_state_is_fail_closed() -> None:
     assert report["ready"] is False
     assert report["blocker_count"] > 0
     gates = {item["gate"] for item in report["blockers"]}
-    assert "backup.off_host_encrypted_copy_verified" in gates
-    assert "host.provisioned" in gates
-    assert "queue.authority_verified" in gates
-    assert "historical_sources.render_live_scanner_qc_scans_db.disposition" in gates
+    assert gates == {
+        "host.bios_restore_after_power_loss_verified",
+        "host.ups_verified",
+        "historical_sources.render_live_scanner_qc_scans_db.disposition",
+        "backup.off_host_encrypted_copy_verified",
+    }
+    assert "host.provisioned" not in gates
+    assert "queue.authority_verified" not in gates
 
 
 def test_formal_historical_disposition_does_not_falsify_migration() -> None:
