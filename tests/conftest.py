@@ -107,6 +107,40 @@ class DummyVuln:
         return {"asset_id": asset_id, "actions": []}
 
 
+class DummyLiveScanner:
+    """In-memory live-scanner test double for gateway-isolation fixtures."""
+
+    def scan(self, target: str, scan_type: str = "full", ports=None):
+        class _Report:
+            def to_dict(self):
+                return {
+                    "scan_id": "live-test-1",
+                    "target": target,
+                    "scan_type": scan_type,
+                    "ports": ports,
+                    "findings": [],
+                }
+
+        return _Report()
+
+    def get_scan(self, scan_id: str):
+        return None
+
+    def get_all_findings(self, severity=None, status: str = "open"):
+        return []
+
+    def get_baselines(self):
+        return []
+
+    def get_status(self):
+        return {
+            "engine": "DummyLiveScanner",
+            "storage_backend": "memory-test-double",
+            "scans_completed": 0,
+            "total_findings": 0,
+        }
+
+
 class DummyIncident:
     def __init__(self, incident_id: str, title: str, description: str):
         self.incident_id = incident_id
@@ -251,6 +285,14 @@ def app_factory(tmp_path, monkeypatch):
             monkeypatch.setenv("QC_API_KEYS_JSON", _make_keys_json("test-api-key", "pepper-test"))
         else:
             monkeypatch.delenv("QC_API_KEYS_JSON", raising=False)
+
+        # app_factory isolates gateway policy tests from live-scanner persistence.
+        # Real application composition still calls the production fail-closed
+        # build_live_scanner() factory; only this test fixture substitutes memory.
+        monkeypatch.setattr(
+            "engines.externalized_scanners.build_live_scanner",
+            lambda config=None: DummyLiveScanner(),
+        )
 
         cfg = SecurityConfig(require_api_key=require_api_key, rate_limit_requests_per_minute=120)
         app = create_security_api(DummyMesh(), DummyVuln(), DummyIR(), config=cfg)
