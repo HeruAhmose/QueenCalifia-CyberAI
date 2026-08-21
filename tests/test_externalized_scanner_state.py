@@ -155,7 +155,7 @@ def test_nonproduction_live_scanner_uses_external_runtime_path(
     )
 
     assert isinstance(scanner, LiveScanner)
-    assert Path(scanner.db_path).resolve() == requested.resolve()
+    assert os.path.samefile(scanner.db_path, requested)
     assert requested.is_file()
 
 
@@ -182,8 +182,27 @@ def test_nonproduction_live_scanner_can_fall_back_to_qc_db_path(
         }
     )
 
-    assert Path(scanner.db_path).resolve() == requested.resolve()
+    assert os.path.samefile(scanner.db_path, requested)
     assert requested.is_file()
+
+
+def test_nonproduction_live_scanner_rejects_path_outside_approved_roots(monkeypatch):
+    monkeypatch.setenv("QC_PRODUCTION", "0")
+    monkeypatch.delenv("QC_DATABASE_URL", raising=False)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv(
+        "QC_LIVE_SCANNER_DB_PATH",
+        "/etc/queen-califia/forbidden-scanner.db",
+    )
+
+    with pytest.raises(ValueError, match="outside approved state roots"):
+        build_live_scanner(
+            {
+                "scan_allowlist": "127.0.0.0/8",
+                "deny_public": True,
+                "max_threads": 1,
+            }
+        )
 
 
 def test_gateway_uses_externalized_live_scanner_factory():
