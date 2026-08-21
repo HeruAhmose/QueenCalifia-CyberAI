@@ -26,6 +26,28 @@ def parse_python(path: Path) -> str:
     return text
 
 
+def reject_marker_mutation(text: str, label: str) -> None:
+    # Reading AUTH_MARKER and checking exists() is required to prove the
+    # preauthorization boundary. Only mutation primitives against that object
+    # are forbidden here; the marker path string itself is not a mutation.
+    for primitive in (
+        "AUTH_MARKER.write_text(",
+        "AUTH_MARKER.write_bytes(",
+        "AUTH_MARKER.touch(",
+        "AUTH_MARKER.unlink(",
+        "AUTH_MARKER.rename(",
+        "AUTH_MARKER.replace(",
+        "AUTH_MARKER.mkdir(",
+        "AUTH_MARKER.rmdir(",
+        "os.remove(AUTH_MARKER",
+        "os.unlink(AUTH_MARKER",
+        "os.rename(AUTH_MARKER",
+        "os.replace(AUTH_MARKER",
+    ):
+        if primitive in text:
+            raise SystemExit(f"forbidden authorization-marker mutation in {label}: {primitive}")
+
+
 def main() -> int:
     pki = parse_python(PKI)
     runtime = parse_python(RUNTIME_BINDER)
@@ -46,6 +68,7 @@ def main() -> int:
 
     require(
         pki,
+        'AUTH_MARKER.exists()',
         'systemd-detect-virt',
         'microsoft',
         '/sys/class/dmi/id/product_uuid',
@@ -60,6 +83,7 @@ def main() -> int:
     )
     require(
         runtime,
+        'AUTH_MARKER.exists()',
         'systemd-detect-virt',
         'microsoft',
         '/sys/class/dmi/id/product_uuid',
@@ -102,12 +126,14 @@ def main() -> int:
         'HYPERV_FINAL_VALKEY_AUTHORIZATION_UPDATED=NO',
     )
 
+    reject_marker_mutation(pki, "Hyper-V PKI verifier")
+    reject_marker_mutation(runtime, "Hyper-V runtime binder")
+
     combined = "\n".join((pki, runtime, windows))
     for forbidden in (
         'automatic_ledger_promotion = $true',
         'authorization_modified = $true',
         'deployment_ledger_modified = $true',
-        'SOVEREIGN_EDGE_RUNTIME_AUTHORIZED',
         'sovereign-edge-deployment-state.json',
     ):
         if forbidden in combined:
@@ -115,8 +141,8 @@ def main() -> int:
 
     print(
         "Hyper-V Valkey authority evidence guard verified: Microsoft guest identity, VM-ID binding, "
-        "offline PKI, preauthorization runtime proof, Windows physical-host binding, and fail-closed "
-        "authorization/ledger boundaries are clean"
+        "offline PKI, preauthorization runtime proof, Windows physical-host binding, authorization-marker "
+        "absence checks without marker mutation, and fail-closed ledger boundaries are clean"
     )
     return 0
 
