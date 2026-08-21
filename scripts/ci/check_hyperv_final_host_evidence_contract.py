@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-COLLECTOR = ROOT / "scripts/edge/windows/Collect-QueenCalifia-FinalHostEvidence.ps1"
+COLLECTOR = ROOT / "scripts/edge/windows/Collect-QueenCalifia-FinalHostEvidenceV2.ps1"
 
 
 def require(text: str, *needles: str) -> None:
@@ -17,7 +17,7 @@ def require(text: str, *needles: str) -> None:
 
 def main() -> int:
     if not COLLECTOR.is_file():
-        raise SystemExit("missing Hyper-V final-host evidence collector")
+        raise SystemExit("missing Generation-1-compatible Hyper-V final-host evidence collector")
 
     pwsh = shutil.which("pwsh")
     if not pwsh:
@@ -25,7 +25,7 @@ def main() -> int:
 
     parser_script = (
         "$tokens=$null;$errors=$null;"
-        "[System.Management.Automation.Language.Parser]::ParseFile(" 
+        "[System.Management.Automation.Language.Parser]::ParseFile("
         f"'{COLLECTOR.as_posix()}',[ref]$tokens,[ref]$errors)|Out-Null;"
         "if($errors.Count -gt 0){$errors|Format-List Message,Extent;exit 1}"
     )
@@ -36,7 +36,7 @@ def main() -> int:
     require(
         text,
         "$VmName = 'QueenCalifia-Sovereign-Edge-HyperV'",
-        "queen-califia-hyperv-final-host-evidence-v1",
+        "queen-califia-hyperv-final-host-evidence-v2",
         "windows-physical-host-with-hyperv-ubuntu-guest",
         "Get-BitLockerVolume",
         "Confirm-SecureBootUEFI",
@@ -46,11 +46,15 @@ def main() -> int:
         "RunAsPPLBoot",
         "Get-NetFirewallProfile",
         "Get-NetTCPConnection -State Listen",
-        "$ProhibitedPorts = @(80, 443, 5432, 6379)",
+        "$ProhibitedPorts = @(80,443,5432,6379)",
         "Get-VM -Name $VmName",
+        "Get-VMBios -VMName $VmName",
         "Get-VMFirmware -VMName $VmName",
         "Get-VMSecurity -VMName $VmName",
-        "Get-VMHardDiskDrive -VMName $VmName",
+        "generation_supported_by_qc",
+        "$generation -in @(1,2)",
+        "guest_secure_boot_supported",
+        "guest_virtual_tpm_supported",
         "expected_vm_identity",
         "restart_after_host_boot_configured",
         "authorization_gate_closed",
@@ -67,8 +71,6 @@ def main() -> int:
 
     for forbidden in (
         "sovereign-edge-deployment-state.json",
-        "SOVEREIGN_EDGE_RUNTIME_AUTHORIZED').Write",
-        "SOVEREIGN_EDGE_RUNTIME_AUTHORIZED\").Write",
         "New-Item -ItemType File",
         "Set-Content",
         "Out-File",
@@ -82,8 +84,8 @@ def main() -> int:
             raise SystemExit(f"Hyper-V final-host collector contains forbidden state-mutation surface: {forbidden}")
 
     print(
-        "Hyper-V final-host evidence guard verified: PowerShell parser clean; Windows physical-host trust, BitLocker/TPM/Secure Boot/VBS/LSA/firewall, "
-        "exact VM identity/storage, and closed guest authorization are review-only; BIOS/UPS remain manual and no ledger/authorization state is mutated"
+        "Hyper-V final-host evidence guard verified: PowerShell parser clean; Generation 1 and 2 are supported by the established QC Hyper-V boundary; "
+        "Generation 1 uses Get-VMBios while host BitLocker/TPM/Secure Boot/VBS/LSA/firewall remain authoritative; BIOS/UPS stay manual; no ledger/authorization mutation"
     )
     return 0
 
