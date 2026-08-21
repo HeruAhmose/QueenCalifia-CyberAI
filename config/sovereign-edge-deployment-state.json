@@ -3,6 +3,7 @@
   "target": "sovereign-local-edge",
   "deployment_role": "production-candidate",
   "preferred_production_candidate": true,
+  "canonical_production_architecture": "hyperv-cloudflare-neon-valkey",
   "production_authorized": false,
   "compute_location": "sovereign-local",
   "production_compose": "deploy/edge/docker-compose.edge.yml",
@@ -127,6 +128,8 @@
   "read_only_root_filesystem_authorized": false,
   "legacy_storage_retirement_authorized": false,
   "render_blueprint_retained": true,
+  "render_deployment_authority": false,
+  "render_historical_only": true,
   "historical_sources": {
     "render_live_scanner_qc_scans_db": {
       "former_path": "/opt/render/project/src/backend/data/qc_scans.db",
@@ -134,7 +137,8 @@
       "verified_absent": false,
       "captured": false,
       "reason": "Render workspace was suspended before the container-local source could be captured or verified absent.",
-      "policy": "Do not synthesize absence, do not delete related retained evidence, and revise status only if provider-backed recovery evidence becomes available."
+      "operator_context": "Operator reports that the one-click remediation and full brain-to-brain integration never completed successfully before Render suspension, so the historical database is expected to contain no meaningful production data; this observation is not provider-backed proof of absence, capture, or migration.",
+      "policy": "Render is historical context only and is not deployment authority. Do not synthesize absence, do not delete related retained evidence, and revise status only if provider-backed recovery or disposition evidence becomes available."
     }
   }
 }
