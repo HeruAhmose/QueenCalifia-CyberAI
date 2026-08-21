@@ -35,7 +35,9 @@ def make_authorization_ready(state: dict) -> dict:
     ):
         host[key] = True
 
-    state["postgresql"]["production_migration_verified"] = True
+    # Keep migration false to prove a formally evidence-backed disposition can
+    # resolve an unrecoverable historical source without falsifying migration.
+    state["postgresql"]["production_migration_verified"] = False
     state["queue"]["pki_generated"] = True
     state["queue"]["authority_verified"] = True
     state["historical_sources"]["render_live_scanner_qc_scans_db"].update(
@@ -86,13 +88,21 @@ def test_current_authorization_state_is_fail_closed() -> None:
     assert "backup.off_host_encrypted_copy_verified" in gates
     assert "host.provisioned" in gates
     assert "queue.authority_verified" in gates
+    assert "historical_sources.render_live_scanner_qc_scans_db.disposition" in gates
+
+
+def test_formal_historical_disposition_does_not_falsify_migration() -> None:
+    state = make_authorization_ready(load_state())
+    assert state["postgresql"]["production_migration_verified"] is False
+
+    report = readiness.evaluate("authorization", state, load_topology())
+    assert report["ready"] is True, report["blockers"]
 
 
 def test_authorization_does_not_depend_on_post_authorization_or_ha_evidence() -> None:
     state = make_authorization_ready(load_state())
     topology = load_topology()
 
-    # These remain deliberately false at authorization time.
     assert state["runtime"]["health_probes_verified"] is False
     assert topology["completion_gate"]["rolling_update_tested"] is False
 
