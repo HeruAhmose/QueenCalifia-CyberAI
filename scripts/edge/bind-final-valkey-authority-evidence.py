@@ -71,6 +71,8 @@ def validate(host: dict[str, Any], pki: dict[str, Any], runtime: dict[str, Any])
     require_bool(host, ("machine_evidence_ready_for_review",), True)
     require_bool(host, ("authorization_marker", "present"), False)
     require_bool(host, ("virtualization", "bare_metal"), True)
+    require_bool(pki, ("bare_metal",), True)
+    require_bool(pki, ("repository_clean",), True)
     require_bool(pki, ("pki_material_verified",), True)
     require_bool(pki, ("live_valkey_authority_verified",), False)
     require_bool(pki, ("eligible_for_pki_generated_review",), True)
@@ -92,14 +94,16 @@ def validate(host: dict[str, Any], pki: dict[str, Any], runtime: dict[str, Any])
     require_bool(runtime, ("claims", "authorized_runtime_probed"), False)
 
     host_fp = str(host.get("identity", {}).get("fingerprint_sha256") or "")
+    pki_fp = str(pki.get("host_identity_fingerprint_sha256") or "")
     runtime_fp = str(runtime.get("host_identity_fingerprint_sha256") or "")
-    if not HEX64.fullmatch(host_fp) or host_fp != runtime_fp:
-        fail("final-host and live runtime host identity fingerprints do not match")
+    if not HEX64.fullmatch(host_fp) or host_fp != pki_fp or host_fp != runtime_fp:
+        fail("final-host, offline PKI, and live runtime host identity fingerprints do not match")
 
     host_head = str(host.get("repository", {}).get("head") or "")
+    pki_head = str(pki.get("git_head") or "")
     runtime_head = str(runtime.get("git_head") or "")
-    if not HEX40.fullmatch(host_head) or host_head != runtime_head:
-        fail("final-host and live runtime Git heads do not match")
+    if not HEX40.fullmatch(host_head) or host_head != pki_head or host_head != runtime_head:
+        fail("final-host, offline PKI, and live runtime Git heads do not match")
 
     pki_fingerprints = pki.get("certificate_fingerprints_sha256")
     runtime_fingerprints = runtime.get("valkey_certificate_fingerprints_sha256")
