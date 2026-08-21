@@ -11,7 +11,7 @@ from engines.externalized_scanners import (
     build_live_scanner,
     build_vulnerability_engine,
 )
-from engines.live_scanner import Finding, HostResult, ScanReport, ServiceInfo
+from engines.live_scanner import Finding, HostResult, LiveScanner, ScanReport, ServiceInfo
 
 
 def _postgres_url() -> str:
@@ -130,3 +130,86 @@ def test_postgres_live_scanner_state_is_shared_across_instances(monkeypatch):
         assert status["scans_completed"] == 1
     finally:
         _clean_live_tables(url)
+
+
+def test_nonproduction_live_scanner_uses_external_runtime_path(
+    monkeypatch,
+    tmp_path: Path,
+):
+    requested = tmp_path / "external-live-scanner.db"
+
+    monkeypatch.setenv("QC_PRODUCTION", "0")
+    monkeypatch.delenv("QC_DATABASE_URL", raising=False)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv(
+        "QC_LIVE_SCANNER_DB_PATH",
+        str(requested),
+    )
+
+    scanner = build_live_scanner(
+        {
+            "scan_allowlist": "127.0.0.0/8",
+            "deny_public": True,
+            "max_threads": 1,
+        }
+    )
+
+    assert isinstance(scanner, LiveScanner)
+    assert Path(scanner.db_path).resolve() == requested.resolve()
+    assert requested.is_file()
+
+
+def test_nonproduction_live_scanner_can_fall_back_to_qc_db_path(
+    monkeypatch,
+    tmp_path: Path,
+):
+    requested = tmp_path / "shared-runtime.db"
+
+    monkeypatch.setenv("QC_PRODUCTION", "0")
+    monkeypatch.delenv("QC_DATABASE_URL", raising=False)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv(
+        "QC_LIVE_SCANNER_DB_PATH",
+        raising=False,
+    )
+    monkeypatch.setenv("QC_DB_PATH", str(requested))
+
+    scanner = build_live_scanner(
+        {
+            "scan_allowlist": "127.0.0.0/8",
+            "deny_public": True,
+            "max_threads": 1,
+        }
+    )
+
+    assert Path(scanner.db_path).resolve() == requested.resolve()
+    assert requested.is_file()
+
+
+def test_gateway_uses_externalized_live_scanner_factory():
+    gateway = (
+        Path(__file__).resolve().parents[1]
+        / "api"
+        / "gateway.py"
+    )
+    source = gateway.read_text(encoding="utf-8")
+
+    assert (
+        "from engines.externalized_scanners "
+        "import build_live_scanner"
+    ) in source
+    assert "live_scanner = build_live_scanner()" in source
+
+    scanner_section = source.split(
+        "# ─── Live Scanner Endpoints",
+        1,
+    )[1].split(
+        "# ─── Remediation Endpoints",
+        1,
+    )[0]
+
+    assert (
+        "from engines.live_scanner import LiveScanner"
+        not in scanner_section
+    )
+    assert "live_scanner = LiveScanner()" not in scanner_section

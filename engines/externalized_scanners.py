@@ -384,9 +384,27 @@ def build_vulnerability_engine(config: Optional[Dict[str, Any]] = None) -> Vulne
 
 
 def build_live_scanner(config: Optional[Dict[str, Any]] = None) -> LiveScanner:
-    """Use PostgreSQL live-scanner state whenever the canonical DB is PostgreSQL."""
+    """Select the canonical live-scanner persistence backend.
+
+    Production requires PostgreSQL. Local/non-production SQLite remains
+    supported, but its writable path can be externalized through
+    QC_LIVE_SCANNER_DB_PATH or the broader QC_DB_PATH runtime-state root.
+    """
+    resolved_config = dict(config or {})
+
     if database_backend() == "postgresql":
-        return PostgresLiveScanner(config=config)
+        return PostgresLiveScanner(config=resolved_config)
+
     if os.environ.get("QC_PRODUCTION", "0").strip() == "1":
-        raise RuntimeError("QC_PRODUCTION=1 requires PostgreSQL for live-scanner state")
-    return LiveScanner(config=config)
+        raise RuntimeError(
+            "QC_PRODUCTION=1 requires PostgreSQL for live-scanner state"
+        )
+
+    external_db_path = (
+        os.environ.get("QC_LIVE_SCANNER_DB_PATH", "").strip()
+        or os.environ.get("QC_DB_PATH", "").strip()
+    )
+    if external_db_path and not resolved_config.get("db_path"):
+        resolved_config["db_path"] = external_db_path
+
+    return LiveScanner(config=resolved_config)
