@@ -32,6 +32,10 @@ def records():
     }
     pki = {
         "schema": "queen-califia-final-valkey-pki-evidence-v1",
+        "bare_metal": True,
+        "host_identity_fingerprint_sha256": "a" * 64,
+        "git_head": "b" * 40,
+        "repository_clean": True,
         "pki_material_verified": True,
         "live_valkey_authority_verified": False,
         "eligible_for_pki_generated_review": True,
@@ -72,6 +76,7 @@ def test_valid_evidence_chain_is_review_eligible_only() -> None:
     host, pki, runtime = records()
     result = binder.validate(host, pki, runtime)
     assert result["same_final_host"] is True
+    assert result["same_repository_head"] is True
     assert result["same_valkey_pki"] is True
     assert result["live_mtls_authority_verified"] is True
     assert result["eligible_for_authority_verified_review"] is True
@@ -86,11 +91,21 @@ def test_wrong_host_is_rejected() -> None:
     runtime["host_identity_fingerprint_sha256"] = "c" * 64
     assert_rejected(host, pki, runtime, "host identity fingerprints do not match")
 
+    host, pki, runtime = records()
+    pki = copy.deepcopy(pki)
+    pki["host_identity_fingerprint_sha256"] = "c" * 64
+    assert_rejected(host, pki, runtime, "host identity fingerprints do not match")
+
 
 def test_wrong_git_head_is_rejected() -> None:
     host, pki, runtime = records()
     runtime = copy.deepcopy(runtime)
     runtime["git_head"] = "c" * 40
+    assert_rejected(host, pki, runtime, "Git heads do not match")
+
+    host, pki, runtime = records()
+    pki = copy.deepcopy(pki)
+    pki["git_head"] = "c" * 40
     assert_rejected(host, pki, runtime, "Git heads do not match")
 
 
