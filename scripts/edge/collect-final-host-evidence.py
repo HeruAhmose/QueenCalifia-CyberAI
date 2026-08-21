@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import os
@@ -14,7 +13,8 @@ from pathlib import Path
 from typing import Any, Iterable
 
 AUTH_MARKER = Path("/srv/queen-califia/app/cutover/SOVEREIGN_EDGE_RUNTIME_AUTHORIZED")
-DEFAULT_STATE_ROOT = Path("/srv/queen-califia")
+CANONICAL_REPO_ROOT = Path("/opt/queen-califia")
+EVIDENCE_ROOT = Path("/srv/queen-califia/evidence")
 REQUIRED_COMMANDS = (
     "systemd-detect-virt",
     "findmnt",
@@ -194,11 +194,11 @@ def listener_evidence() -> dict[str, Any]:
     }
 
 
-def repository_evidence(repo_root: Path) -> dict[str, Any]:
-    head_rc, head, head_error = run(["git", "rev-parse", "HEAD"], cwd=repo_root)
-    dirty_rc, dirty, dirty_error = run(["git", "status", "--porcelain"], cwd=repo_root)
+def repository_evidence() -> dict[str, Any]:
+    head_rc, head, head_error = run(["git", "rev-parse", "HEAD"], cwd=CANONICAL_REPO_ROOT)
+    dirty_rc, dirty, dirty_error = run(["git", "status", "--porcelain"], cwd=CANONICAL_REPO_ROOT)
     return {
-        "repository": str(repo_root),
+        "repository": str(CANONICAL_REPO_ROOT),
         "head": head if head_rc == 0 else None,
         "head_probe_error": head_error or None,
         "clean": dirty_rc == 0 and dirty == "",
@@ -206,14 +206,14 @@ def repository_evidence(repo_root: Path) -> dict[str, Any]:
     }
 
 
-def build_evidence(repo_root: Path) -> dict[str, Any]:
+def build_evidence() -> dict[str, Any]:
     marker_present = AUTH_MARKER.exists()
     virt = virtualization_evidence()
     identity = identity_fingerprint()
     storage = storage_evidence()
     firewall = firewall_evidence()
     listeners = listener_evidence()
-    repo = repository_evidence(repo_root)
+    repo = repository_evidence()
 
     machine_ready = all(
         (
@@ -263,20 +263,6 @@ def build_evidence(repo_root: Path) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Collect read-only final production-host evidence for Queen Califia."
-    )
-    parser.add_argument(
-        "--repo-root",
-        default="/opt/queen-califia",
-        help="Canonical repository checkout to fingerprint.",
-    )
-    parser.add_argument(
-        "--output",
-        help="Evidence JSON path. Defaults to /srv/queen-califia/evidence/final-host-<UTC>.json.",
-    )
-    args = parser.parse_args()
-
     if os.geteuid() != 0:
         raise SystemExit("FINAL_HOST_EVIDENCE_ERROR=run as root so firewall/storage evidence is complete")
 
@@ -289,18 +275,18 @@ def main() -> int:
             "FINAL_HOST_EVIDENCE_ERROR=authorization marker exists; refusing to label this collection preauthorization evidence"
         )
 
-    repo_root = Path(args.repo_root).resolve()
-    if not (repo_root / ".git").exists():
-        raise SystemExit(f"FINAL_HOST_EVIDENCE_ERROR=repository checkout not found: {repo_root}")
+    if not (CANONICAL_REPO_ROOT / ".git").exists():
+        raise SystemExit(
+            f"FINAL_HOST_EVIDENCE_ERROR=canonical repository checkout not found: {CANONICAL_REPO_ROOT}"
+        )
 
-    evidence = build_evidence(repo_root)
+    evidence = build_evidence()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    output = Path(args.output) if args.output else DEFAULT_STATE_ROOT / "evidence" / f"final-host-{stamp}.json"
-    output = output.resolve()
+    output = EVIDENCE_ROOT / f"final-host-{stamp}.json"
     if output.exists():
         raise SystemExit(f"FINAL_HOST_EVIDENCE_ERROR=refusing to overwrite existing evidence: {output}")
 
-    output.parent.mkdir(parents=True, exist_ok=True)
+    EVIDENCE_ROOT.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(evidence, indent=2, sort_keys=True) + "\n"
     output.write_text(payload, encoding="utf-8")
     os.chmod(output, 0o600)
