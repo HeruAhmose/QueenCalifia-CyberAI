@@ -30,19 +30,29 @@ Local evidence directory:
 
 These paths are fixed by contract. The operator does not accept alternate command-line paths.
 
-## 1. Prepare independent storage
+## 1. Prepare genuinely independent storage
 
-Mount an independent filesystem at exactly:
+Mount the selected off-host filesystem at exactly:
 
 ```bash
 sudo mkdir -p /mnt/qc-offhost-backup
-# Mount the selected external/off-host filesystem here using the platform's approved procedure.
+# Mount the selected external disk or approved network filesystem here.
 findmnt --target /mnt/qc-offhost-backup
 ```
 
-The proof operator requires `/mnt/qc-offhost-backup` itself to be the mount target and requires its filesystem device ID to differ from `/srv/queen-califia/backups`.
+A successful proof requires one of two independence modes:
 
-A directory on the same root filesystem does **not** qualify.
+1. **distinct physical disk** — the off-host mount is backed by a block device whose top-level physical disk differs from the physical disk backing `/srv/queen-califia/backups`; or
+2. **network filesystem** — the mount uses an explicitly supported remote filesystem (`nfs`, `nfs4`, `cifs`, `smb3`, or `fuse.sshfs`).
+
+The operator also requires `/mnt/qc-offhost-backup` itself to be the dedicated mount target and requires its filesystem device ID to differ from the source backup filesystem.
+
+The following do **not** qualify:
+
+- another directory on the Sovereign Edge root filesystem;
+- a second partition or logical volume on the same physical disk;
+- `/dev/loop*` storage;
+- `tmpfs`, RAM-backed, overlay, or other unrecognized pseudo-filesystems.
 
 ## 2. Create or refresh the encrypted source backup
 
@@ -67,26 +77,31 @@ sudo bash scripts/edge/copy-offhost-backup.sh
 The operator:
 
 1. refuses to run if the production authorization marker exists;
-2. requires the canonical off-host mount to be a dedicated mount point;
-3. requires source and destination filesystem device IDs to differ;
-4. selects only a canonical `edge-state-YYYYMMDDTHHMMSSZ.tar.age` source archive;
-5. validates that archive against its existing SHA-256 manifest;
-6. refuses to overwrite an existing off-host archive or manifest;
-7. copies only the already-encrypted archive;
-8. re-hashes the off-host copy and requires exact SHA-256 equality;
-9. creates a secret-free evidence JSON locally;
-10. copies that evidence record to the independent mount and verifies its hash too.
+2. requires the canonical off-host path to be a dedicated mount point;
+3. rejects same-filesystem storage;
+4. proves either a different top-level physical disk or a supported network filesystem;
+5. rejects loop-device and pseudo-filesystem shortcuts;
+6. selects only a canonical `edge-state-YYYYMMDDTHHMMSSZ.tar.age` source archive;
+7. validates that archive against its existing SHA-256 manifest;
+8. refuses to overwrite an existing off-host archive or manifest;
+9. copies only the already-encrypted archive;
+10. re-hashes the off-host copy and requires exact SHA-256 equality;
+11. creates a secret-free evidence JSON locally, including the independence mode;
+12. copies that evidence record to the independent storage and verifies its hash too.
 
 Expected successful output includes:
 
 ```text
 OFFHOST_BACKUP_PROOF=PASS
+OFFHOST_BACKUP_INDEPENDENCE=distinct-physical-disk
 OFFHOST_BACKUP_ARCHIVE_SHA256=<sha256>
 OFFHOST_BACKUP_EVIDENCE=/srv/queen-califia/evidence/offhost-backup-<UTC>.json
 OFFHOST_BACKUP_EVIDENCE_SHA256=<sha256>
 OFFHOST_BACKUP_LEDGER_UPDATED=NO
 OFFHOST_BACKUP_AUTHORIZATION_UPDATED=NO
 ```
+
+For an approved network mount, `OFFHOST_BACKUP_INDEPENDENCE=network-filesystem`.
 
 ## 4. Evidence review
 
@@ -105,6 +120,7 @@ review and retain:
 - the encrypted archive SHA-256;
 - the matching off-host encrypted archive;
 - the off-host evidence copy;
+- the recorded independence mode and hashed mount/device identity evidence;
 - confirmation that the authorization marker was absent during the operation;
 - the protected-main repository SHA used for the procedure.
 
@@ -112,7 +128,7 @@ If the external mount is later removed, the historical evidence remains valid fo
 
 ## Failure behavior
 
-Any source manifest mismatch, same-filesystem destination, mount ambiguity, destination collision, copy hash mismatch, or evidence-copy hash mismatch aborts the procedure.
+Any source manifest mismatch, same-filesystem or same-physical-disk destination, unapproved mount type, mount ambiguity, destination collision, copy hash mismatch, or evidence-copy hash mismatch aborts the procedure.
 
 Do not change the deployment ledger to compensate for a failed proof. Correct the actual storage or backup problem and run a new proof.
 
