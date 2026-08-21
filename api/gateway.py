@@ -2358,10 +2358,10 @@ def create_security_api(
 
     # ─── Live Scanner Endpoints ────────────────────────────────────────────
 
-    from engines.live_scanner import LiveScanner
+    from engines.externalized_scanners import build_live_scanner
     from engines.auto_remediation import AutoRemediation
 
-    live_scanner = LiveScanner()
+    live_scanner = build_live_scanner()
     remediator = remediator or AutoRemediation()
 
     @app.route("/api/v1/scanner/scan", methods=["POST"])

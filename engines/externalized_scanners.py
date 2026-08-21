@@ -383,10 +383,65 @@ def build_vulnerability_engine(config: Optional[Dict[str, Any]] = None) -> Vulne
     return cls(config=config)
 
 
+def _approved_local_scanner_roots() -> List[str]:
+    """Return normalized roots permitted for non-production SQLite scanner state."""
+    repo_data_root = os.path.realpath(
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
+    )
+    roots = [repo_data_root]
+    if os.name != "nt":
+        roots.extend(["/tmp", "/var/tmp", "/dev/shm"])
+    return [os.path.realpath(os.path.abspath(root)) for root in roots]
+
+
+def _validated_local_scanner_db_path(raw_path: str) -> str:
+    """Normalize an external SQLite path and require containment in a safe root."""
+    value = str(raw_path or "").strip()
+    if not value or "\x00" in value:
+        raise ValueError("invalid local live-scanner database path")
+
+    candidate = os.path.realpath(os.path.abspath(os.path.expanduser(value)))
+    for safe_root in _approved_local_scanner_roots():
+        prefix = safe_root if safe_root.endswith(os.sep) else safe_root + os.sep
+        if candidate.startswith(prefix):
+            return candidate
+
+    raise ValueError(
+        "local live-scanner database path is outside approved state roots"
+    )
+
+
 def build_live_scanner(config: Optional[Dict[str, Any]] = None) -> LiveScanner:
-    """Use PostgreSQL live-scanner state whenever the canonical DB is PostgreSQL."""
+    """Select the canonical live-scanner persistence backend.
+
+    Production requires PostgreSQL. Local/non-production SQLite remains
+    supported only inside approved local state roots. External local paths may
+    be supplied through config, QC_LIVE_SCANNER_DB_PATH, or QC_DB_PATH, but are
+    normalized with realpath and containment-checked before filesystem access.
+    """
+    resolved_config = dict(config or {})
+
     if database_backend() == "postgresql":
-        return PostgresLiveScanner(config=config)
+        # Local SQLite paths are irrelevant to the PostgreSQL adapter; remove
+        # them rather than carrying unused filesystem authority into production.
+        resolved_config.pop("db_path", None)
+        return PostgresLiveScanner(config=resolved_config)
+
     if os.environ.get("QC_PRODUCTION", "0").strip() == "1":
-        raise RuntimeError("QC_PRODUCTION=1 requires PostgreSQL for live-scanner state")
-    return LiveScanner(config=config)
+        raise RuntimeError(
+            "QC_PRODUCTION=1 requires PostgreSQL for live-scanner state"
+        )
+
+    requested_db_path = str(resolved_config.get("db_path") or "").strip()
+    if not requested_db_path:
+        requested_db_path = (
+            os.environ.get("QC_LIVE_SCANNER_DB_PATH", "").strip()
+            or os.environ.get("QC_DB_PATH", "").strip()
+        )
+
+    if requested_db_path:
+        resolved_config["db_path"] = _validated_local_scanner_db_path(
+            requested_db_path
+        )
+
+    return LiveScanner(config=resolved_config)
