@@ -203,7 +203,8 @@ class TestSecurityHardening:
         body = json.dumps(data)
         # Input sanitizer blocks prohibited patterns — XSS must not be reflected
         assert "<script>" not in body
-        assert status in (400, 500)
+        assert status == 400
+        assert data.get("error") == "invalid input"
 
     def test_path_traversal_in_scan_id(self, app_factory):
         app = app_factory(require_api_key=False)
