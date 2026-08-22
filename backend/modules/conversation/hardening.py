@@ -16,7 +16,7 @@ import re
 from typing import Iterable
 
 from core.database import get_db
-from modules.conversation import engine as _engine
+from . import engine as _engine
 from sovereignty.prompt_guard import sanitize_untrusted_text, scan_for_injection
 
 
