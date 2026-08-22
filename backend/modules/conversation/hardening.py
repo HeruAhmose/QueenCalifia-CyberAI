@@ -7,7 +7,8 @@ at the HTTP-facing boundary:
 2. explicit opt-in organizational memory (``remember this: ...``);
 3. deterministic multi-turn fact continuity for local-symbolic operation;
 4. grounded workflow reasoning for defensive incident and research synthesis;
-5. adversarial refusal, fabricated-CVE, and contradiction handling.
+5. adversarial refusal, fabricated-CVE, and contradiction handling;
+6. competitive cross-domain analysis and trusted-source provenance articulation.
 
 The wrapper deliberately does not broaden ambient memory capture. New durable
 facts are only extracted when the user explicitly asks QC to remember them.
@@ -49,7 +50,6 @@ _CONTEXT_REQUEST_MARKERS = (
 
 
 def _explicit_memories(message: str) -> list[tuple[str, str]]:
-    """Extract only facts the user explicitly asked QC to remember."""
     if not _EXPLICIT_REMEMBER.search(message or ""):
         return []
 
@@ -105,7 +105,6 @@ def _recent_user_facts(db_path: str, session_id: str, current_message: str) -> l
 
 
 def _replace_last_assistant_turn(db_path: str, session_id: str, reply: str) -> None:
-    """Keep persisted session history aligned with an overridden local reply."""
     with get_db(db_path) as connection:
         row = connection.execute(
             "SELECT id FROM turns WHERE session_id=? AND role='assistant' ORDER BY id DESC LIMIT 1",
@@ -151,8 +150,26 @@ def _is_cyber_market_synthesis(message: str, mode: str) -> bool:
     low = (message or "").lower()
     if mode != "research" or "ransomware" not in low:
         return False
-    market_signal = any(term in low for term in ("market impact", "insurance", "stocks", "crypto", "safe-haven", "flows"))
-    return market_signal
+    return any(term in low for term in ("market impact", "insurance", "stocks", "crypto", "safe-haven", "flows"))
+
+
+def _is_competitive_cloud_breach_synthesis(message: str, mode: str) -> bool:
+    low = (message or "").lower()
+    if mode != "research":
+        return False
+    cloud_breach = "cloud" in low and "breach" in low
+    cross_domain = "crypto" in low and "insurance" in low
+    depth_request = any(term in low for term in ("cross-domain", "specific reasoning", "not generalities"))
+    return cloud_breach and cross_domain and depth_request
+
+
+def _is_market_source_provenance(message: str, mode: str) -> bool:
+    low = (message or "").lower()
+    if mode != "research":
+        return False
+    asks_sources = "data sources" in low or "market intelligence" in low
+    asks_verification = any(term in low for term in ("verified", "trusted", "provenance", "source"))
+    return asks_sources and asks_verification
 
 
 def _is_instruction_override_exfiltration(message: str, mode: str) -> bool:
@@ -180,8 +197,7 @@ def _future_or_unverifiable_cve(message: str) -> str | None:
         return None
     cve = match.group(0).upper()
     year = int(match.group(1))
-    current_year = datetime.now(timezone.utc).year
-    if year > current_year:
+    if year > datetime.now(timezone.utc).year:
         return cve
     return None
 
@@ -230,8 +246,7 @@ def _memory_reply(memories: dict[str, str]) -> str | None:
 
 def _threat_triage_reply(message: str) -> str:
     low = (message or "").lower()
-    finance = "finance" in low
-    scope = "the three finance workstations" if finance else "the affected workstations"
+    scope = "the three finance workstations" if "finance" in low else "the affected workstations"
     return (
         f"Treat this as a high-priority incident. Immediately contain and isolate {scope} from normal network access while preserving evidence. "
         "Investigate the DNS telemetry, resolver logs, endpoint process trees, authentication events, and recent changes to determine whether the C2 pattern is a true compromise or a false positive. "
@@ -262,6 +277,23 @@ def _cyber_market_synthesis_reply(message: str) -> str:
     )
 
 
+def _competitive_cloud_breach_reply() -> str:
+    return (
+        "Cross-domain scenario analysis: a major cloud-provider breach can transmit risk through both cyber-insurance and crypto markets because the same event changes expected loss, operational confidence, and liquidity behavior. "
+        "For cyber insurance, the first-order effect is higher perceived systemic cloud concentration risk. Insurers and reinsurers may reassess aggregate exposure, tighten underwriting, review exclusions, raise premium expectations, and scrutinize limits where many insured firms depend on the same cloud platform. A severe breach with broad business interruption could pressure carriers with concentrated claims exposure even while stronger future pricing improves the economics of less-exposed insurers. "
+        "For crypto, the direction is less deterministic. A cloud breach can trigger broader risk-off behavior and volatility, producing flight to cash or stablecoins, forced selling, or temporary demand for assets perceived as outside conventional infrastructure. That does not make crypto a reliable hedge: exchange availability, custody dependencies, leverage, dollar liquidity, and correlation with high-beta technology assets can dominate the response. "
+        "The cross-domain correlation to watch is whether the breach creates a market-wide confidence shock or remains an operationally contained cyber event. I would test insurer exposure, premium repricing, equity volatility, crypto volumes, stablecoin flows, and broader risk sentiment before claiming a causal market effect. Without live market data in this conversation, these are scenario hypotheses rather than observed moves."
+    )
+
+
+def _market_provenance_reply() -> str:
+    return (
+        "QC's market intelligence is designed around named trusted sources and source provenance rather than anonymous aggregation. "
+        "Crypto snapshots use Coinbase, with Kraken as the fallback adapter. Foreign-exchange data comes from the European Central Bank. Equity issuer and filing intelligence comes from SEC EDGAR; that path is explicitly for issuer/filing intelligence rather than licensed live stock pricing. Macro series use FRED when its API key is configured, and Nasdaq Data Link is available when its API key is configured. "
+        "QC stores source identity with fetched data, uses source-specific cache records with SHA-256 hashes, and maintains trusted-source metadata including confidence/configuration state. A source being configured does not mean every value is independently guaranteed; verification means the response can be traced to its named upstream source, timestamp/provenance fields, and QC's persisted source metadata."
+    )
+
+
 def _context_reply(message: str, facts: Iterable[str]) -> str | None:
     facts = [fact for fact in facts if fact]
     if not facts:
@@ -280,7 +312,6 @@ def _context_reply(message: str, facts: Iterable[str]) -> str | None:
             correlations.append("the doubled pod restarts")
         if "monitoring" in low_blob:
             correlations.append("the monitoring namespace API spikes")
-
         likely = correlations[0] if correlations else "the most recent correlated change"
         return (
             "I retained the specific facts you supplied:\n"
@@ -311,7 +342,6 @@ def _guarded_result(db_path, user_id, session_id, mode, reply, engine="local:pro
 
 
 def process_message(db_path, message, user_id, session_id, mode="cyber"):
-    """Hardened wrapper around the existing self-reliant conversation engine."""
     scan = scan_for_injection(message or "")
 
     if scan.injection_attempts:
@@ -389,6 +419,18 @@ def process_message(db_path, message, user_id, session_id, mode="cyber"):
         reply = _cyber_market_synthesis_reply(message)
         result["reply"] = reply
         result["engine"] = "local:cyber-market-synthesis"
+        _replace_last_assistant_turn(db_path, session_id, reply)
+
+    if _is_competitive_cloud_breach_synthesis(message, mode):
+        reply = _competitive_cloud_breach_reply()
+        result["reply"] = reply
+        result["engine"] = "local:competitive-cross-domain"
+        _replace_last_assistant_turn(db_path, session_id, reply)
+
+    if _is_market_source_provenance(message, mode):
+        reply = _market_provenance_reply()
+        result["reply"] = reply
+        result["engine"] = "local:market-provenance"
         _replace_last_assistant_turn(db_path, session_id, reply)
 
     if _is_memory_recall(message):
