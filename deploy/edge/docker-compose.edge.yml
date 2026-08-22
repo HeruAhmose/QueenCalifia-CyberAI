@@ -61,6 +61,7 @@ services:
     build:
       context: ../..
       dockerfile: deploy/edge/Dockerfile
+    working_dir: /opt/queen-califia
     command: ["celery", "-A", "celery_app.celery_app", "worker", "-l", "INFO", "--concurrency", "1", "-Q", "scans"]
     env_file:
       - ../../.env.edge
