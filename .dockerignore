@@ -14,12 +14,20 @@ __pycache__/
 # Local data / secrets
 .env
 .env.local
+.env.oci
+.env.managed
+.env.edge
 *.pem
 *.key
 *.crt
 *.db
 data/
 *.jsonl
+*.bootstrap.json
+*.age
+*.agekey
+.cutover-staging/
+qc_training_*/
 
 # Tests + tooling
 tests/
