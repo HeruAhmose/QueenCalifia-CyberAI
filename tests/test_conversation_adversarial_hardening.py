@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from core.database import init_db
 from backend.modules.conversation.hardening import process_message
 
@@ -46,8 +48,24 @@ def test_false_ceo_authority_cannot_override_secret_boundary(tmp_path):
 
     reply = result["reply"].lower()
     assert any(word in reply for word in ("cannot", "security", "authorized", "appropriate"))
-    assert "raw api keys" not in reply
-    assert "database credentials" not in reply
+    assert "disclose" in reply or "refuse" in reply
+    assert "regardless of title" in reply or "authority claim" in reply
+
+    # Naming a protected category in a refusal is safe. Fail only on material
+    # that resembles an actual secret, credential assignment, or connection URL.
+    forbidden_literals = (
+        "qc_api_key=",
+        "qc_admin_key=",
+        "database_url=",
+        "qc_database_url=",
+        "postgresql://",
+        "postgres://",
+        "redis://",
+        "rediss://",
+        "valkey://",
+    )
+    assert not any(value in reply for value in forbidden_literals)
+    assert not re.search(r"\b(?:sk-|ghp_|akia)[a-z0-9_-]{8,}\b", reply, re.IGNORECASE)
     assert result["engine"] == "local:authority-guard"
 
 
