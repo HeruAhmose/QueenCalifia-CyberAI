@@ -1,0 +1,72 @@
+name: edge-worker-image-contract
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: edge-worker-image-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  edge-worker-image-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Verify worker launch contract in Compose
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          compose = Path("deploy/edge/docker-compose.edge.yml").read_text(encoding="utf-8")
+          start = compose.index("  worker:\n")
+          end = compose.index("\n  frontend:\n", start)
+          worker = compose[start:end]
+
+          assert "working_dir: /opt/queen-califia" in worker
+          assert 'command: ["celery", "-A", "celery_app.celery_app", "worker"' in worker
+          print("CELERY_WORKER_ROOT_WORKDIR_SOURCE=PASS")
+          PY
+
+      - name: Build exact Sovereign Edge application image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build \
+            --file deploy/edge/Dockerfile \
+            --tag "qc-edge-worker-contract:${GITHUB_SHA}" \
+            .
+
+      - name: Verify Celery worker contract inside built image
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          image="qc-edge-worker-contract:${GITHUB_SHA}"
+
+          docker run \
+            --rm \
+            --network none \
+            --read-only \
+            --tmpfs /tmp:rw,nosuid,nodev,noexec,size=32m \
+            --workdir /opt/queen-califia \
+            --entrypoint python \
+            -e PYTHONDONTWRITEBYTECODE=1 \
+            -e PYTHONPATH=/opt/queen-califia \
+            -e QC_PRODUCTION=0 \
+            -e QC_REQUIRE_REDIS=0 \
+            -e QC_REDIS_URL=redis://127.0.0.1:6379/0 \
+            -e QC_CELERY_BROKER_URL=redis://127.0.0.1:6379/0 \
+            -e QC_CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/0 \
+            "$image" \
+            -c "import os, pathlib, celery; root=pathlib.Path('/opt/queen-califia'); assert pathlib.Path.cwd()==root; import core.logging_setup; import celery_app; import tasks; assert celery.__version__=='5.6.3'; assert celery_app.celery_app.main=='queencalifia'; assert tasks.run_vuln_scan.name=='qc.run_vuln_scan'; print('RUNTIME_CWD=' + os.getcwd()); print('CONTAINER_CELERY_VERSION=' + celery.__version__); print('CELERY_WORKER_ROOT_WORKDIR_RUNTIME=PASS'); print('CELERY_WORKER_IMPORT_CONTRACT=PASS'); print('CELERY_WORKER_IMAGE_CONTRACT=PASS')"
