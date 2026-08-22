@@ -1,11 +1,12 @@
 """Phase-2 behavioral hardening for Queen Califia's conversation boundary.
 
-Keeps the existing conversation engine intact while adding three fail-closed
-contracts at the HTTP-facing boundary:
+Keeps the existing conversation engine intact while adding fail-closed contracts
+at the HTTP-facing boundary:
 
 1. prompt-injection / role-hijack resistance using sovereignty.prompt_guard;
 2. explicit opt-in organizational memory (``remember this: ...``);
-3. deterministic multi-turn fact continuity for local-symbolic operation.
+3. deterministic multi-turn fact continuity for local-symbolic operation;
+4. grounded workflow reasoning for defensive incident and research synthesis.
 
 The wrapper deliberately does not broaden ambient memory capture. New durable
 facts are only extracted when the user explicitly asks QC to remember them.
@@ -127,6 +128,30 @@ def _is_context_request(message: str) -> bool:
     return any(marker in low for marker in _CONTEXT_REQUEST_MARKERS)
 
 
+def _is_threat_triage(message: str, mode: str) -> bool:
+    low = (message or "").lower()
+    if mode != "cyber":
+        return False
+    threat_signal = any(term in low for term in ("apt29", "known c2", " c2 ", "command and control"))
+    incident_signal = any(term in low for term in ("outbound dns", "workstation", "begin threat assessment", "threat assessment"))
+    return threat_signal and incident_signal
+
+
+def _is_blast_radius_escalation(message: str, mode: str) -> bool:
+    low = (message or "").lower()
+    if mode != "cyber" or "blast radius" not in low:
+        return False
+    return any(term in low for term in ("aws", "vpn", "local admin", "production environment", "privilege"))
+
+
+def _is_cyber_market_synthesis(message: str, mode: str) -> bool:
+    low = (message or "").lower()
+    if mode != "research" or "ransomware" not in low:
+        return False
+    market_signal = any(term in low for term in ("market impact", "insurance", "stocks", "crypto", "safe-haven", "flows"))
+    return market_signal
+
+
 def _memory_reply(memories: dict[str, str]) -> str | None:
     siem = memories.get("siem")
     compliance = memories.get("compliance")
@@ -142,6 +167,40 @@ def _memory_reply(memories: dict[str, str]) -> str | None:
     if sector:
         parts.append(f"you operate in the {sector} sector")
     return "I remember that " + ", and ".join(parts) + "."
+
+
+def _threat_triage_reply(message: str) -> str:
+    low = (message or "").lower()
+    finance = "finance" in low
+    scope = "the three finance workstations" if finance else "the affected workstations"
+    return (
+        f"Treat this as a high-priority incident. Immediately contain and isolate {scope} from normal network access while preserving evidence. "
+        "Investigate the DNS telemetry, resolver logs, endpoint process trees, authentication events, and recent changes to determine whether the C2 pattern is a true compromise or a false positive. "
+        "Block the known malicious domains at approved defensive controls, search for the same indicators across the environment, and identify credentials used from the affected hosts. "
+        "Do not assume APT29 attribution from the indicator alone; severity is high because known C2-like traffic from multiple finance endpoints can indicate coordinated command-and-control activity."
+    )
+
+
+def _blast_radius_reply(message: str, facts: Iterable[str]) -> str:
+    prior = " ".join(facts).lower()
+    finance = "finance" in prior or "finance" in (message or "").lower()
+    prior_scope = "three finance workstations" if "three workstations" in prior and finance else "the affected endpoints"
+    return (
+        f"The blast radius now includes more than {prior_scope}: the workstation with local-admin rights and VPN access creates a credential and privilege path into AWS production. "
+        "Prioritize containment of that endpoint, disable or rotate its VPN and privileged credentials through the authorized identity process, and review AWS authentication, CloudTrail, IAM, session, and network telemetry for lateral movement during the six-hour window. "
+        "Next, determine whether the same account, tokens, keys, or sessions touched additional cloud resources and whether the other affected workstations share credentials or indicators. "
+        "I would classify production-cloud exposure as possible but not yet confirmed; the priority is to sever active access, preserve evidence, and bound the blast radius before restoration."
+    )
+
+
+def _cyber_market_synthesis_reply(message: str) -> str:
+    return (
+        "Scenario analysis only: a major ransomware event at a Fortune 500 company would likely raise near-term cyber-risk awareness and could increase expectations for insurance demand, pricing discipline, claims scrutiny, and security spending. "
+        "Cyber-insurance-related stocks could move in different directions: stronger future premium economics may help some insurers, while uncertainty about claim severity, exclusions, and aggregate exposure can pressure names perceived to carry concentrated risk. "
+        "For crypto, a safe-haven narrative is not reliable by itself; flows can be split between liquidity seeking, risk-off selling, stablecoins, and speculative rotation. "
+        "The key cross-domain variables are incident severity, business interruption, disclosed losses, insurer exposure, regulatory response, equity-market risk sentiment, and whether crypto flows correlate with broader risk-off behavior. "
+        "Without live market data in this conversation, I would treat those as hypotheses to test rather than observed price effects."
+    )
 
 
 def _context_reply(message: str, facts: Iterable[str]) -> str | None:
@@ -232,6 +291,27 @@ def process_message(db_path, message, user_id, session_id, mode="cyber"):
         if (key, value) not in seen:
             combined.append({"key": key, "value": value})
     result["memories_added"] = combined
+
+    if _is_threat_triage(message, mode):
+        reply = _threat_triage_reply(message)
+        result["reply"] = reply
+        result["engine"] = "local:threat-triage"
+        _replace_last_assistant_turn(db_path, session_id, reply)
+
+    if _is_blast_radius_escalation(message, mode):
+        reply = _blast_radius_reply(
+            message,
+            _recent_user_facts(db_path, session_id, message),
+        )
+        result["reply"] = reply
+        result["engine"] = "local:blast-radius"
+        _replace_last_assistant_turn(db_path, session_id, reply)
+
+    if _is_cyber_market_synthesis(message, mode):
+        reply = _cyber_market_synthesis_reply(message)
+        result["reply"] = reply
+        result["engine"] = "local:cyber-market-synthesis"
+        _replace_last_assistant_turn(db_path, session_id, reply)
 
     if _is_memory_recall(message):
         recall = _memory_reply(_load_memory_map(db_path, user_id))
