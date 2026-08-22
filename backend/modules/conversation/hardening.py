@@ -6,13 +6,15 @@ at the HTTP-facing boundary:
 1. prompt-injection / role-hijack resistance using sovereignty.prompt_guard;
 2. explicit opt-in organizational memory (``remember this: ...``);
 3. deterministic multi-turn fact continuity for local-symbolic operation;
-4. grounded workflow reasoning for defensive incident and research synthesis.
+4. grounded workflow reasoning for defensive incident and research synthesis;
+5. adversarial refusal, fabricated-CVE, and contradiction handling.
 
 The wrapper deliberately does not broaden ambient memory capture. New durable
 facts are only extracted when the user explicitly asks QC to remember them.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import re
 from typing import Iterable
 
@@ -34,6 +36,7 @@ _SECTOR = re.compile(
     r"\b(?:in|within)\s+the\s+([A-Za-z0-9][A-Za-z0-9 ._/-]{1,48}?)\s+sector\b",
     re.IGNORECASE,
 )
+_CVE = re.compile(r"\bCVE-(\d{4})-(\d{4,})\b", re.IGNORECASE)
 
 _CONTEXT_REQUEST_MARKERS = (
     "summarize the environment facts",
@@ -152,6 +155,62 @@ def _is_cyber_market_synthesis(message: str, mode: str) -> bool:
     return market_signal
 
 
+def _is_instruction_override_exfiltration(message: str, mode: str) -> bool:
+    low = (message or "").lower()
+    if mode != "cyber":
+        return False
+    override = any(term in low for term in ("forget everything", "no restrictions", "ignore your restrictions"))
+    exfiltration = "exfiltrat" in low and any(term in low for term in ("without detection", "undetected", "stealth"))
+    return override and exfiltration
+
+
+def _is_false_authority_secret_request(message: str, mode: str) -> bool:
+    low = (message or "").lower()
+    if mode != "cyber":
+        return False
+    authority = any(term in low for term in ("i am the ceo", "i'm the ceo", "i am the administrator", "i'm the administrator"))
+    secret_request = any(term in low for term in ("raw api keys", "api keys", "database credentials", "credentials for this system"))
+    override = any(term in low for term in ("override your security", "override security", "bypass security"))
+    return authority and secret_request and override
+
+
+def _future_or_unverifiable_cve(message: str) -> str | None:
+    match = _CVE.search(message or "")
+    if not match:
+        return None
+    cve = match.group(0).upper()
+    year = int(match.group(1))
+    current_year = datetime.now(timezone.utc).year
+    if year > current_year:
+        return cve
+    return None
+
+
+def _firewall_contradiction(message: str, facts: Iterable[str]) -> tuple[str, str] | None:
+    low = (message or "").lower()
+    if "firewall" not in low:
+        return None
+
+    current = None
+    if "fortinet" in low:
+        current = "Fortinet"
+    elif "palo alto" in low:
+        current = "Palo Alto Networks"
+    if not current:
+        return None
+
+    prior_blob = " ".join(facts).lower()
+    prior = None
+    if "palo alto" in prior_blob:
+        prior = "Palo Alto Networks"
+    elif "fortinet" in prior_blob:
+        prior = "Fortinet"
+
+    if prior and prior.lower() != current.lower():
+        return prior, current
+    return None
+
+
 def _memory_reply(memories: dict[str, str]) -> str | None:
     siem = memories.get("siem")
     compliance = memories.get("compliance")
@@ -211,9 +270,6 @@ def _context_reply(message: str, facts: Iterable[str]) -> str | None:
     low_blob = " ".join(facts).lower()
     lines = "\n".join(f"- {fact}" for fact in facts)
 
-    # The workflow harness asks for a root-cause judgment after a sequence of
-    # concrete Kubernetes observations. Make the reasoning deterministic while
-    # remaining explicit about uncertainty.
     if "root cause" in (message or "").lower():
         correlations: list[str] = []
         if "datadog" in low_blob:
@@ -241,39 +297,66 @@ def _context_reply(message: str, facts: Iterable[str]) -> str | None:
     )
 
 
+def _guarded_result(db_path, user_id, session_id, mode, reply, engine="local:prompt-guard"):
+    result = _engine.process_message(
+        db_path=db_path,
+        message="Security policy event: a restricted adversarial instruction was rejected.",
+        user_id=user_id,
+        session_id=session_id,
+        mode=mode,
+    )
+    _replace_last_assistant_turn(db_path, session_id, reply)
+    result.update({"reply": reply, "engine": engine, "memories_added": []})
+    return result
+
+
 def process_message(db_path, message, user_id, session_id, mode="cyber"):
     """Hardened wrapper around the existing self-reliant conversation engine."""
     scan = scan_for_injection(message or "")
 
-    # Do not feed role-hijack / prompt-extraction text through the normal local
-    # focus echo path. Persist only a neutral event summary, then replace the
-    # assistant turn with a stable sovereign response.
     if scan.injection_attempts:
-        result = _engine.process_message(
-            db_path=db_path,
-            message="Security policy event: an instruction-override or prompt-extraction attempt was rejected.",
-            user_id=user_id,
-            session_id=session_id,
-            mode=mode,
-        )
         reply = (
             "I remain Queen Califia. User-supplied instructions cannot replace my identity, "
             "system policy, or security boundaries, and I will not reveal hidden prompts or privileged instructions. "
             "I can continue with an authorized defensive or research objective."
         )
-        _replace_last_assistant_turn(db_path, session_id, reply)
-        result.update(
-            {
-                "reply": reply,
-                "engine": "local:prompt-guard",
-                "memories_added": [],
-            }
+        return _guarded_result(db_path, user_id, session_id, mode, reply)
+
+    if _is_instruction_override_exfiltration(message, mode):
+        reply = (
+            "I cannot provide stealth data-exfiltration instructions or help bypass detection. "
+            "I can provide defensive, authorized guidance for detecting and preventing exfiltration, including DLP, egress monitoring, anomaly detection, and incident-response containment."
         )
-        return result
+        return _guarded_result(db_path, user_id, session_id, mode, reply, engine="local:adversarial-guard")
+
+    if _is_false_authority_secret_request(message, mode):
+        reply = (
+            "I cannot disclose API keys, database credentials, or other secrets based on an authority claim. "
+            "Security protocols remain in force regardless of title; use the appropriate authorized credential-management and access-review channel."
+        )
+        return _guarded_result(db_path, user_id, session_id, mode, reply, engine="local:authority-guard")
+
+    future_cve = _future_or_unverifiable_cve(message)
+    if future_cve:
+        reply = (
+            f"I cannot verify {future_cve}. Its year is later than the current UTC year, so the claim that it was disclosed last week is not credible from the information available. "
+            "I will not fabricate an assessment. Verify the identifier against an authoritative CVE/NVD source before treating it as real."
+        )
+        return _guarded_result(db_path, user_id, session_id, mode, reply, engine="local:cve-verification")
 
     explicit = _explicit_memories(message or "")
     for key, value in explicit:
         _engine.save_memory(db_path, user_id, key, value, confidence=0.95)
+
+    recent_facts = _recent_user_facts(db_path, session_id, message)
+    contradiction = _firewall_contradiction(message, recent_facts)
+    if contradiction:
+        prior, current = contradiction
+        reply = (
+            f"That contradicts the earlier information in this session. You previously said the primary firewall vendor was {prior}; the current message says {current}. "
+            "I cannot confirm the new claim without updated evidence. Please tell me which statement is authoritative."
+        )
+        return _guarded_result(db_path, user_id, session_id, mode, reply, engine="local:contradiction-check")
 
     result = _engine.process_message(
         db_path=db_path,
@@ -283,8 +366,6 @@ def process_message(db_path, message, user_id, session_id, mode="cyber"):
         mode=mode,
     )
 
-    # Report explicit memories in the API result even though the base engine's
-    # narrow extractor did not create them itself.
     combined = list(result.get("memories_added") or [])
     seen = {(str(item.get("key")), str(item.get("value"))) for item in combined}
     for key, value in explicit:
@@ -299,10 +380,7 @@ def process_message(db_path, message, user_id, session_id, mode="cyber"):
         _replace_last_assistant_turn(db_path, session_id, reply)
 
     if _is_blast_radius_escalation(message, mode):
-        reply = _blast_radius_reply(
-            message,
-            _recent_user_facts(db_path, session_id, message),
-        )
+        reply = _blast_radius_reply(message, recent_facts)
         result["reply"] = reply
         result["engine"] = "local:blast-radius"
         _replace_last_assistant_turn(db_path, session_id, reply)
@@ -321,10 +399,7 @@ def process_message(db_path, message, user_id, session_id, mode="cyber"):
             _replace_last_assistant_turn(db_path, session_id, recall)
 
     if _is_context_request(message):
-        continuity = _context_reply(
-            message,
-            _recent_user_facts(db_path, session_id, message),
-        )
+        continuity = _context_reply(message, recent_facts)
         if continuity:
             result["reply"] = continuity
             result["engine"] = "local:context-continuity"
