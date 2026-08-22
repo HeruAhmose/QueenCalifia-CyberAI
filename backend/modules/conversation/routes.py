@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from flask import Blueprint, jsonify, request, current_app
 from core.auth import require_api_key
-from modules.conversation.engine import process_message
+from modules.conversation.hardening import process_message
 
 conversation_bp = Blueprint("conversation", __name__)
 
