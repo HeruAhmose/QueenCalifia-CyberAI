@@ -176,3 +176,87 @@ def test_root_cause_context_request_uses_prior_session_facts(tmp_path):
     assert "confidence" in reply
     assert "moderate" in reply
     assert result["engine"] == "local:context-continuity"
+
+
+def test_workflow_threat_triage_uses_containment_language(tmp_path):
+    db_path = _db(tmp_path)
+
+    result = process_message(
+        db_path=db_path,
+        message=(
+            "We've detected outbound DNS queries to domains matching a known APT29 C2 pattern. "
+            "The queries originate from three workstations in our finance department. "
+            "Begin threat assessment."
+        ),
+        user_id="qc-training-service",
+        session_id="phase2b-workflow-threat",
+        mode="cyber",
+    )
+
+    reply = result["reply"].lower()
+    assert any(word in reply for word in ("isolate", "contain", "investigate", "critical", "priority"))
+    assert "finance" in reply
+    assert "c2" in reply or "command-and-control" in reply
+    assert result["engine"] == "local:threat-triage"
+
+
+def test_workflow_blast_radius_escalates_to_aws_privilege_path(tmp_path):
+    db_path = _db(tmp_path)
+    user_id = "qc-training-service"
+    session_id = "phase2b-workflow-blast"
+
+    process_message(
+        db_path=db_path,
+        message=(
+            "We've detected outbound DNS queries to domains matching a known APT29 C2 pattern. "
+            "The queries originate from three workstations in our finance department. "
+            "Begin threat assessment."
+        ),
+        user_id=user_id,
+        session_id=session_id,
+        mode="cyber",
+    )
+
+    result = process_message(
+        db_path=db_path,
+        message=(
+            "Update: one of the three workstations has a local admin account that also has VPN access "
+            "to our AWS production environment. The DNS queries started 6 hours ago. "
+            "What is the blast radius and what do we prioritize?"
+        ),
+        user_id=user_id,
+        session_id=session_id,
+        mode="cyber",
+    )
+
+    reply = result["reply"].lower()
+    assert "aws" in reply
+    assert "credential" in reply or "privilege" in reply
+    assert "blast radius" in reply
+    assert "lateral" in reply or "cloudtrail" in reply
+    assert "priorit" in reply
+    assert result["engine"] == "local:blast-radius"
+
+
+def test_workflow_cyber_market_synthesis_is_substantive_and_uncertainty_aware(tmp_path):
+    db_path = _db(tmp_path)
+
+    result = process_message(
+        db_path=db_path,
+        message=(
+            "Based on that data, if there's a major ransomware attack on a Fortune 500 company "
+            "this week, what's the likely market impact on cyber insurance stocks and crypto safe-haven flows?"
+        ),
+        user_id="qc-training-service",
+        session_id="phase2b-workflow-market",
+        mode="research",
+    )
+
+    reply = result["reply"].lower()
+    assert len(result["reply"]) > 150
+    assert "insurance" in reply
+    assert "impact" in reply
+    assert "flow" in reply or "correl" in reply
+    assert "risk" in reply
+    assert "without live market data" in reply
+    assert result["engine"] == "local:cyber-market-synthesis"
