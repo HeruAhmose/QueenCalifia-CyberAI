@@ -967,6 +967,10 @@ class AuditLog:
 
 # ─── Input Sanitization ──────────────────────────────────────────────────────
 
+class InputValidationError(ValueError):
+    """Raised when untrusted request input fails API sanitization."""
+
+
 class InputSanitizer:
     """Conservative request sanitization (API layer only)."""
 
@@ -986,20 +990,20 @@ class InputSanitizer:
     @classmethod
     def sanitize_string(cls, value: str, max_length: int) -> str:
         if not isinstance(value, str):
-            raise ValueError("expected string")
+            raise InputValidationError("expected string")
         if len(value) > max_length:
-            raise ValueError("input too long")
+            raise InputValidationError("input too long")
         for pat in cls._COMPILED:
             if pat.search(value):
-                raise ValueError("prohibited pattern")
+                raise InputValidationError("prohibited pattern")
         return value.replace("\x00", "")
 
     @classmethod
     def sanitize_json_body(cls, data: Dict[str, Any], max_depth: int = 6) -> Dict[str, Any]:
         if max_depth <= 0:
-            raise ValueError("json nesting too deep")
+            raise InputValidationError("json nesting too deep")
         if not isinstance(data, dict):
-            raise ValueError("expected object")
+            raise InputValidationError("expected object")
         sanitized: Dict[str, Any] = {}
         for k, v in data.items():
             key = re.sub(r"[^\w_.-]", "", str(k))[:128]
@@ -1378,6 +1382,10 @@ def create_security_api(
         if request.path.startswith("/api/") and valid_methods == ["OPTIONS"]:
             return jsonify({"error": "not found"}), 404
         return jsonify({"error": "method not allowed"}), 405
+
+    @app.errorhandler(InputValidationError)
+    def _invalid_input(_):
+        return jsonify({"error": "invalid input"}), 400
 
     @app.errorhandler(500)
     def _internal(_):
