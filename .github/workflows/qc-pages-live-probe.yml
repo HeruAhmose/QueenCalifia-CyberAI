@@ -2,7 +2,9 @@ name: QC Pages Live Probe
 
 on:
   push:
-    branches: [probe/qc-pages-live-c33b8a22-20260823]
+    branches: [probe/qc-pages-live-c33b8a22-pr-20260823]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
