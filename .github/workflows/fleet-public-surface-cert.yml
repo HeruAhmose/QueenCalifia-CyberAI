@@ -17,13 +17,11 @@ jobs:
         with:
           ref: 5a5a89c509b4315efe11c431b327d46ef3e6af29
           persist-credentials: false
-
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-
       - name: Build exact current QC frontend
         shell: bash
         run: |
@@ -39,7 +37,6 @@ jobs:
           echo "EXPECTED_CSS=$built_css"
           echo "EXPECTED_JS_SHA256=$(sha256sum "dist${built_js}" | cut -d' ' -f1)"
           echo "EXPECTED_CSS_SHA256=$(sha256sum "dist${built_css}" | cut -d' ' -f1)"
-
       - name: Inspect legacy Firebase demo identity
         id: firebase_identity
         continue-on-error: true
@@ -68,7 +65,6 @@ jobs:
             echo 'QC_FIREBASE_EXACT_CURRENT_MAIN=FAIL'
             exit 21
           fi
-
       - name: Execute legacy Firebase demo in Chrome
         shell: bash
         run: |
@@ -80,31 +76,23 @@ jobs:
           trap 'kill "$chrome_pid" 2>/dev/null || true' EXIT
           for _ in $(seq 1 30); do curl --fail --silent http://127.0.0.1:9222/json/version >/dev/null 2>&1 && break; sleep 1; done
           cat >/tmp/qc-browser.mjs <<'NODE'
-          const list = await (await fetch('http://127.0.0.1:9222/json/list')).json();
-          const page = list.find(x => x.type === 'page');
-          if (!page?.webSocketDebuggerUrl) throw new Error('No Chrome page target');
-          const ws = new WebSocket(page.webSocketDebuggerUrl);
-          let id=0; const pending=new Map();
+          const list=await (await fetch('http://127.0.0.1:9222/json/list')).json();
+          const page=list.find(x=>x.type==='page'); if(!page?.webSocketDebuggerUrl)throw new Error('No Chrome page target');
+          const ws=new WebSocket(page.webSocketDebuggerUrl);let id=0;const pending=new Map();
           ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.id&&pending.has(m.id)){const p=pending.get(m.id);pending.delete(m.id);m.error?p.reject(new Error(JSON.stringify(m.error))):p.resolve(m.result)}};
           await new Promise((r,j)=>{ws.onopen=r;ws.onerror=j});
           const send=(method,params={})=>new Promise((resolve,reject)=>{const callId=++id;pending.set(callId,{resolve,reject});ws.send(JSON.stringify({id:callId,method,params}))});
           const ev=async expression=>(await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true})).result?.value;
-          await send('Page.enable'); await send('Runtime.enable'); await send('Network.enable'); await send('Network.setCacheDisabled',{cacheDisabled:true});
-          await send('Page.navigate',{url:'https://queencalifia-cyberai.web.app/?fleet-browser-cert=1'});
+          await send('Page.enable');await send('Runtime.enable');await send('Network.enable');await send('Network.setCacheDisabled',{cacheDisabled:true});
+          await send('Page.navigate',{url:'https://queencalifia-cyberai.web.app/?fleet-browser-cert=2'});
           let snap;
-          for(let i=0;i<40;i++){
-            await new Promise(r=>setTimeout(r,500));
-            snap=await ev(`(() => ({title:document.title,text:(document.body?.innerText||'').slice(0,12000),rootChildren:document.getElementById('root')?.childElementCount||0}))()`);
-            if(snap?.rootChildren>0 && /Queen Califia|QC OS|Cyber Guardian|Research Companion/i.test(snap.text||'')) break;
-          }
+          for(let i=0;i<40;i++){await new Promise(r=>setTimeout(r,500));snap=await ev(`(() => ({title:document.title,text:(document.body?.innerText||'').slice(0,12000),rootChildren:document.getElementById('root')?.childElementCount||0}))()`);if(snap?.rootChildren>0&&/SOVEREIGN AWAKENING|Queen Califia|QC OS|Cyber Guardian|Research Companion/i.test(snap.text||''))break;}
           console.log('QC_FIREBASE_BROWSER='+JSON.stringify(snap));
-          if(!snap || snap.rootChildren<=0) throw new Error('QC Firebase React root did not commit');
-          if(!/Queen Califia|QC OS|Cyber Guardian|Research Companion/i.test(snap.text||'')) throw new Error('Expected QC dashboard content not found');
-          console.log('QC_FIREBASE_BROWSER_RENDER=PASS');
-          ws.close();
+          if(!snap||snap.rootChildren<=0)throw new Error('QC Firebase React root did not commit');
+          if(!/SOVEREIGN AWAKENING|Queen Califia|QC OS|Cyber Guardian|Research Companion/i.test(snap.text||''))throw new Error('Expected QC application content not found');
+          console.log('QC_FIREBASE_BROWSER_RENDER=PASS');ws.close();
           NODE
           node /tmp/qc-browser.mjs
-
       - name: Verify sovereign edge remains dormant while unauthorized
         shell: bash
         run: |
@@ -123,14 +111,11 @@ jobs:
           echo "QC_SOVEREIGN_PUBLIC_HTTP=$status"
           echo '--- headers ---'; cat /tmp/edge.headers || true
           echo '--- body prefix ---'; head -c 2000 /tmp/edge.out || true; echo
-          if [ "$status" = 200 ]; then
-            if grep -Eqi 'Queen Califia|QC OS|Cyber Guardian|Research Companion|<div[^>]+id=["'"']root' /tmp/edge.out; then
-              echo '::error::Unauthorized sovereign edge unexpectedly serves the active QC application.'
-              exit 31
-            fi
+          if [ "$status" = 200 ] && grep -Eqi 'Queen Califia|QC OS|Cyber Guardian|Research Companion|<div[^>]+id=["'"']root' /tmp/edge.out; then
+            echo '::error::Unauthorized sovereign edge unexpectedly serves the active QC application.'
+            exit 31
           fi
           echo 'QC_SOVEREIGN_UNAUTHORIZED_NOT_ACTIVE=PASS'
-
       - name: Inspect historical Render endpoint without treating it as authority
         shell: bash
         run: |
@@ -139,15 +124,10 @@ jobs:
           echo "QC_HISTORICAL_RENDER_HTTP=$status"
           head -c 1000 /tmp/render.out || true; echo
           echo 'QC_RENDER_INFORMATIONAL_ONLY=PASS'
-
       - name: Summarize legacy demo currency
         shell: bash
         env:
           FIREBASE_IDENTITY_OUTCOME: ${{ steps.firebase_identity.outcome }}
         run: |
           echo "QC_FIREBASE_IDENTITY_OUTCOME=$FIREBASE_IDENTITY_OUTCOME"
-          if [ "$FIREBASE_IDENTITY_OUTCOME" = success ]; then
-            echo 'QC_LEGACY_DEMO_CURRENCY=PASS'
-          else
-            echo 'QC_LEGACY_DEMO_CURRENCY=STALE'
-          fi
+          if [ "$FIREBASE_IDENTITY_OUTCOME" = success ]; then echo 'QC_LEGACY_DEMO_CURRENCY=PASS'; else echo 'QC_LEGACY_DEMO_CURRENCY=STALE'; fi
