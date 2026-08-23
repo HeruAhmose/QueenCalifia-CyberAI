@@ -3,6 +3,8 @@ name: QC Public Presentation 31d2 Probe
 on:
   push:
     branches: [probe/qc-public-presentation-31d2c6e8-20260823]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
