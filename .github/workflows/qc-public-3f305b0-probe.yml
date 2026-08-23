@@ -1,0 +1,167 @@
+name: QC Public 3f305b0 Probe
+
+on:
+  push:
+    branches: [probe/qc-public-3f305b0-20260823]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Certify exact current public presentation
+        shell: bash
+        env:
+          EXPECTED_SHA: 3f305b005e8e9c52c229250ee0238626647d3640
+          BASE_URL: https://heruahmose.github.io/QueenCalifia-CyberAI/
+        run: |
+          set -euo pipefail
+          observed=''
+          for i in $(seq 1 50); do
+            observed="$(curl -fsSL "${BASE_URL}deploy-commit.txt" 2>/dev/null | tr -d '\r\n' || true)"
+            [ "$observed" = "$EXPECTED_SHA" ] && break
+            sleep 6
+          done
+          echo "QC_PUBLIC_EXPECTED_SHA=$EXPECTED_SHA"
+          echo "QC_PUBLIC_OBSERVED_SHA=$observed"
+          test "$observed" = "$EXPECTED_SHA"
+
+          html="$(curl -fsSL "$BASE_URL")"
+          asset="$(printf '%s' "$html" | grep -oE 'src="[^"]+\.js"' | head -n1 | cut -d'"' -f2)"
+          test -n "$asset"
+          case "$asset" in
+            http://*|https://*) asset_url="$asset" ;;
+            /*) asset_url="https://heruahmose.github.io${asset}" ;;
+            *) asset_url="${BASE_URL}${asset#./}" ;;
+          esac
+          echo "QC_PUBLIC_JS_ENTRY=$asset_url"
+          curl -fsSL "$asset_url" > /tmp/qc-entry.js
+
+          ENTRY_URL="$asset_url" python3 - <<'PY'
+          import os
+          import re
+          from urllib.parse import urljoin
+          from urllib.request import Request, urlopen
+          from urllib.error import HTTPError, URLError
+
+          entry_url = os.environ['ENTRY_URL']
+          text = open('/tmp/qc-entry.js', encoding='utf-8', errors='replace').read()
+          refs = set()
+          patterns = [
+              r'(?:from|import)\s*(?:\(\s*)?["\']([^"\']+\.js)["\']',
+              r'__vite__mapDeps\([^)]*\).*?["\']([^"\']+\.js)["\']',
+          ]
+          for pattern in patterns:
+              refs.update(re.findall(pattern, text))
+          print(f'QC_ENTRY_STATIC_JS_REF_COUNT={len(refs)}')
+          for ref in sorted(refs):
+              url = urljoin(entry_url, ref)
+              try:
+                  request = Request(url, headers={'User-Agent': 'qc-module-cert/1.0'})
+                  with urlopen(request, timeout=20) as response:
+                      status = response.status
+                      size = len(response.read())
+                  print(f'QC_MODULE_HTTP={status} bytes={size} url={url}')
+              except HTTPError as error:
+                  print(f'QC_MODULE_HTTP={error.code} bytes=0 url={url}')
+              except URLError as error:
+                  print(f'QC_MODULE_HTTP=ERROR bytes=0 url={url} reason={error.reason}')
+          PY
+
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
+          test -n "$chrome"
+          timeout 70s "$chrome" \
+            --headless --no-sandbox --disable-gpu \
+            --enable-logging=stderr --v=1 \
+            --virtual-time-budget=18000 --dump-dom "$BASE_URL" \
+            > /tmp/qc-live.html 2> /tmp/qc-chrome.log || true
+
+          echo "QC_PUBLIC_DOM_BYTES=$(wc -c < /tmp/qc-live.html | tr -d ' ')"
+          echo '=== QC_BROWSER_CONSOLE_DIAGNOSTICS ==='
+          grep -Ei 'CONSOLE|Uncaught|SyntaxError|TypeError|ReferenceError|Failed to load|ERR_|404|module script' /tmp/qc-chrome.log | tail -n 120 || true
+          echo '=== QC_ROOT_DIAGNOSTIC ==='
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          raw = Path('/tmp/qc-live.html').read_text(encoding='utf-8', errors='replace')
+          match = re.search(r'<div[^>]+id=["\']root["\'][^>]*>', raw, flags=re.I)
+          if not match:
+              print('QC_ROOT_FOUND=NO')
+          else:
+              print('QC_ROOT_FOUND=YES')
+              snippet = raw[match.start():match.start()+3200]
+              print('QC_ROOT_SNIPPET=' + re.sub(r'\s+', ' ', snippet))
+          PY
+
+          browser_ok=1
+          for marker in 'Queen Califia' 'SOVEREIGN COGNITIVE DEFENSE' 'HUMAN AUTHORITY'; do
+            if grep -Fqi "$marker" /tmp/qc-live.html; then
+              echo "QC_PUBLIC_MARKER_${marker// /_}=PASS"
+            else
+              echo "QC_PUBLIC_MARKER_${marker// /_}=MISSING"
+              browser_ok=0
+            fi
+          done
+
+          binding_ok=0
+          if ENTRY_URL="$asset_url" python3 - <<'PY'
+          import os
+          import re
+          import sys
+          from urllib.parse import urljoin, urlparse
+          from urllib.request import Request, urlopen
+          from urllib.error import HTTPError, URLError
+
+          target = 'qc.tamerian-materials.com'
+          allowed_host = 'heruahmose.github.io'
+          allowed_path = '/QueenCalifia-CyberAI/'
+          queue = [os.environ['ENTRY_URL']]
+          seen = set()
+          matched = None
+
+          while queue and len(seen) < 250:
+              url = queue.pop(0)
+              if url in seen:
+                  continue
+              parsed = urlparse(url)
+              if parsed.netloc != allowed_host or not parsed.path.startswith(allowed_path):
+                  continue
+              seen.add(url)
+              try:
+                  request = Request(url, headers={'User-Agent': 'qc-public-cert/1.0'})
+                  with urlopen(request, timeout=20) as response:
+                      text = response.read().decode('utf-8', errors='replace')
+              except (HTTPError, URLError) as error:
+                  print(f'QC_CHUNK_FETCH_SKIPPED={url} error={error}')
+                  continue
+              if target in text:
+                  matched = url
+                  break
+              refs = set(re.findall(r'["\']([^"\']+\.js(?:\?[^"\']*)?)["\']', text))
+              for ref in refs:
+                  resolved = urljoin(url, ref)
+                  if resolved not in seen:
+                      queue.append(resolved)
+
+          print(f'QC_PUBLIC_JS_CHUNKS_SCANNED={len(seen)}')
+          print(f'QC_PUBLIC_API_BINDING_CHUNK={matched or ""}')
+          if not matched:
+              sys.exit(1)
+          PY
+          then
+            binding_ok=1
+          else
+            echo 'QC_PUBLIC_CANONICAL_API_BINDING=MISSING'
+          fi
+
+          test "$browser_ok" = 1
+          test "$binding_ok" = 1
+          echo 'QC_PUBLIC_EXACT_SHA=PASS'
+          echo 'QC_PUBLIC_PRESTIGE_BROWSER=PASS'
+          echo 'QC_PUBLIC_CANONICAL_API_BINDING=PASS'
