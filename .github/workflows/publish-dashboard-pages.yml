@@ -1,0 +1,71 @@
+name: Publish Queen Califia Dashboard
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/publish-dashboard-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: qc-dashboard-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build exact protected-main dashboard
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+          printf '%s\n' "$GITHUB_SHA" > dist/deploy-commit.txt
+      - name: Assert canonical backend binding and prestige surface
+        run: |
+          set -euo pipefail
+          grep -R -q 'qc.tamerian-materials.com' frontend/dist
+          grep -R -q 'SOVEREIGN COGNITIVE DEFENSE' frontend/dist
+          grep -R -q 'HUMAN AUTHORITY' frontend/dist
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Deploy exact dashboard artifact
+        id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Certify public revision and prestige content
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          set -euo pipefail
+          for i in {1..20}; do
+            live_sha="$(curl -fsSL "${PAGE_URL}deploy-commit.txt" 2>/dev/null || true)"
+            [ "$live_sha" = "$GITHUB_SHA" ] && break
+            sleep 6
+          done
+          test "$live_sha" = "$GITHUB_SHA"
+          curl -fsSL "$PAGE_URL" > /tmp/qc.html
+          grep -qi '<html' /tmp/qc.html
+          echo "QC_DASHBOARD_PUBLIC_SHA=$live_sha"
+          echo "QC_DASHBOARD_PUBLIC=PASS"
