@@ -11,9 +11,9 @@ permissions:
   contents: read
 
 jobs:
-  certify:
+  frontend:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 8
     steps:
       - name: Require current public dashboard revision
         shell: bash
@@ -21,11 +21,13 @@ jobs:
           set -euo pipefail
           EXPECTED='ed6dfe47af9230406e4ba116dfb862283a4b74d8'
           BASE='https://heruahmose.github.io/QueenCalifia-CyberAI/'
-          observed="$(curl -fsSL "${BASE}deploy-commit.txt" | tr -d '\r\n')"
+          code="$(curl -sS -L --max-time 20 -o /tmp/sha -w '%{http_code}' "${BASE}deploy-commit.txt" || true)"
+          observed="$(tr -d '\r\n' < /tmp/sha 2>/dev/null || true)"
+          echo "QC_DASHBOARD_HTTP=$code"
           echo "QC_DASHBOARD_EXPECTED=$EXPECTED"
           echo "QC_DASHBOARD_OBSERVED=$observed"
+          test "$code" = '200'
           test "$observed" = "$EXPECTED"
-
       - name: Certify sovereign presentation in Chrome
         shell: bash
         run: |
@@ -38,18 +40,23 @@ jobs:
           grep -Eiq 'SOVEREIGN SEAL|QUEEN CALIFIA|COMMAND FIELD' /tmp/qc.html
           echo 'QC_PUBLIC_PRESTIGE=PASS'
 
+  backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
       - name: Probe canonical sovereign backend
         shell: bash
         run: |
           set -euo pipefail
           base='https://qc.tamerian-materials.com'
           for path in '/health' '/api/health' '/'; do
-            code="$(curl -k -sS -L --max-time 20 -o /tmp/body -w '%{http_code}' "${base}${path}" || true)"
+            code="$(curl -sS -L --max-time 20 -o /tmp/body -w '%{http_code}' "${base}${path}" || true)"
             echo "QC_BACKEND ${path} HTTP=${code}"
             head -c 400 /tmp/body 2>/dev/null || true
             echo
           done
-          code="$(curl -k -sS -L --max-time 20 -o /tmp/health -w '%{http_code}' "${base}/health" || true)"
+          code="$(curl -sS -L --max-time 20 -o /tmp/health -w '%{http_code}' "${base}/health" || true)"
+          echo "QC_BACKEND_HEALTH_HTTP=$code"
           test "$code" = '200'
           grep -Eiq 'ok|healthy|status|service|queen|califia' /tmp/health
           echo 'QC_CANONICAL_BACKEND=PASS'
