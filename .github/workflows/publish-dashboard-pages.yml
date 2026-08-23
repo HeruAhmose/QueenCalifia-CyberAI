@@ -40,9 +40,9 @@ jobs:
           grep -R -q 'SOVEREIGN COGNITIVE DEFENSE' frontend/dist
           grep -R -q 'HUMAN AUTHORITY' frontend/dist
           grep -Fq '/QueenCalifia-CyberAI/assets/' frontend/dist/index.html
+      # GitHub Pages must be enabled once in repository Settings with Source = GitHub Actions.
+      # First-time Pages creation cannot use the workflow's ordinary GITHUB_TOKEN.
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: frontend/dist
