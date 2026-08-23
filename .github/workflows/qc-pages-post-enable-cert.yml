@@ -43,7 +43,7 @@ jobs:
       - name: Certify exact deployed revision and sovereign UI
         shell: bash
         env:
-          EXPECTED_SHA: c33b8a22d68db7f4b86268f8a4f8c4f48c12a86b
+          EXPECTED_SHA: 31d2c6e8d521c63dbe60dec54bb2c28678a36e03
           BASE_URL: https://heruahmose.github.io/QueenCalifia-CyberAI/
         run: |
           set -euo pipefail
