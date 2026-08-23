@@ -1,19 +1,41 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Cell, PieChart, Pie } from "recharts";
+import {
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  RadarChart,
+  Radar,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Cell,
+  PieChart,
+  Pie,
+} from "recharts";
 import QueenCalifiaAvatar from "./components/QueenCalifiaAvatar.jsx";
 import { useSound } from "./contexts/SoundContext.jsx";
-import { normalizeRemediationPlan, enrichScanResultForUi } from "./utils/qcNormalize.js";
+import {
+  normalizeRemediationPlan,
+  enrichScanResultForUi,
+} from "./utils/qcNormalize.js";
 import { getQcApiBase } from "./utils/qcApiBase.js";
 
 /*
  * QueenCalifia CyberAI — Unified Command Dashboard
- * 
+ *
  * Defense-Grade Cybersecurity Intelligence Platform
  * Zero-Day Prediction • Threat Mesh • Incident Response • DevOps Ops
- * 
+ *
  * Tamerian Materials / QueenCalifia-CyberAI
- * 
+ *
  * Architecture:
  *   ┌─ STRATEGIC OVERVIEW ──────────────────────────────┐
  *   │  Threat posture • Mesh health • Predictions       │
@@ -26,26 +48,26 @@ import { getQcApiBase } from "./utils/qcApiBase.js";
  *   ├─ VULNERABILITY SCANNER ───────────────────────────┤
  *   │  Asset inventory • CVE correlation • Compliance    │
  *   └─ DEVOPS OPERATIONS ───────────────────────────────┘
- *     K8s bootstrap • Branch protection • DNS sanity     
+ *     K8s bootstrap • Branch protection • DNS sanity
  */
 
 // ─── Color System ─────────────────────────────────────────────────────────
 const C = {
-  void: "#020409",
-  bg: "#060a14",
-  panel: "#0a0f1e",
-  panelHover: "#0e1528",
-  surface: "#111b2e",
-  border: "#131d33",
-  borderLit: "#1a2d50",
+  void: "#010307",
+  bg: "#04070c",
+  panel: "#070c14",
+  panelHover: "#0b1320",
+  surface: "#0c1624",
+  border: "#182433",
+  borderLit: "#294359",
   borderHot: "#2563eb",
   glow: "rgba(37,99,235,0.06)",
   glowHot: "rgba(37,99,235,0.14)",
   text: "#d4dff0",
   textSoft: "#8a9dbd",
   textDim: "#4a6080",
-  accent: "#2563eb",
-  accentBright: "#60a5fa",
+  accent: "#d4af37",
+  accentBright: "#7dd3fc",
   green: "#10b981",
   greenDim: "rgba(16,185,129,0.10)",
   greenGlow: "rgba(16,185,129,0.04)",
@@ -62,19 +84,34 @@ const C = {
   magentaDim: "rgba(236,72,153,0.08)",
 };
 
-const FONT = "'DM Sans', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif";
+const FONT =
+  "'DM Sans', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif";
 const MONO = "'JetBrains Mono', 'SF Mono', 'Fira Code', Consolas, monospace";
 
 // ─── Micro Components ─────────────────────────────────────────────────────
 
 const Badge = ({ children, color = C.accent, bg, style }) => (
-  <span style={{
-    display: "inline-flex", alignItems: "center", gap: 4,
-    padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: 600,
-    fontFamily: MONO, letterSpacing: 0.5, textTransform: "uppercase",
-    color, background: bg || `${color}18`, border: `1px solid ${color}30`,
-    whiteSpace: "nowrap", ...style,
-  }}>{children}</span>
+  <span
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 4,
+      padding: "2px 8px",
+      borderRadius: 4,
+      fontSize: 10,
+      fontWeight: 600,
+      fontFamily: MONO,
+      letterSpacing: 0.5,
+      textTransform: "uppercase",
+      color,
+      background: bg || `${color}18`,
+      border: `1px solid ${color}30`,
+      whiteSpace: "nowrap",
+      ...style,
+    }}
+  >
+    {children}
+  </span>
 );
 
 const SeverityBadge = ({ severity }) => {
@@ -118,31 +155,101 @@ const HorizonBadge = ({ horizon }) => {
 
 const Stat = ({ label, value, sub, color = C.text, trend, small }) => (
   <div style={{ textAlign: "center", minWidth: small ? 60 : 80 }}>
-    <div style={{ fontSize: small ? 22 : 28, fontWeight: 700, fontFamily: MONO, color, lineHeight: 1.1 }}>
+    <div
+      style={{
+        fontSize: small ? 22 : 28,
+        fontWeight: 700,
+        fontFamily: MONO,
+        color,
+        lineHeight: 1.1,
+      }}
+    >
       {typeof value === "number" ? value.toLocaleString() : value}
     </div>
-    {sub && <div style={{ fontSize: 10, color: C.textDim, fontFamily: MONO, marginTop: 2 }}>{sub}</div>}
-    <div style={{ fontSize: 10, color: C.textSoft, marginTop: 2, letterSpacing: 0.3, textTransform: "uppercase" }}>{label}</div>
-    {trend && <div style={{ fontSize: 9, color: trend === "up" ? C.green : trend === "down" ? C.red : C.textDim, marginTop: 1 }}>{trend === "up" ? "▲" : trend === "down" ? "▼" : "─"}</div>}
+    {sub && (
+      <div
+        style={{
+          fontSize: 10,
+          color: C.textDim,
+          fontFamily: MONO,
+          marginTop: 2,
+        }}
+      >
+        {sub}
+      </div>
+    )}
+    <div
+      style={{
+        fontSize: 10,
+        color: C.textSoft,
+        marginTop: 2,
+        letterSpacing: 0.3,
+        textTransform: "uppercase",
+      }}
+    >
+      {label}
+    </div>
+    {trend && (
+      <div
+        style={{
+          fontSize: 9,
+          color:
+            trend === "up" ? C.green : trend === "down" ? C.red : C.textDim,
+          marginTop: 1,
+        }}
+      >
+        {trend === "up" ? "▲" : trend === "down" ? "▼" : "─"}
+      </div>
+    )}
   </div>
 );
 
-const Panel = ({ children, title, icon, accent = C.accent, style, headerRight, glow }) => (
-  <div style={{
-    background: C.panel, border: `1px solid ${C.border}`,
-    borderRadius: 8, overflow: "hidden",
-    boxShadow: glow ? `0 0 30px ${accent}08, inset 0 1px 0 ${accent}10` : `inset 0 1px 0 ${C.borderLit}20`,
-    ...style,
-  }}>
+const Panel = ({
+  children,
+  title,
+  icon,
+  accent = C.accent,
+  style,
+  headerRight,
+  glow,
+}) => (
+  <div
+    style={{
+      background: `linear-gradient(145deg, ${C.panel}, ${C.void})`,
+      border: `1px solid ${C.border}`,
+      borderRadius: 14,
+      overflow: "hidden",
+      boxShadow: glow
+        ? `0 24px 70px rgba(0,0,0,.24), 0 0 42px ${accent}0b, inset 0 1px 0 ${accent}12`
+        : `0 16px 46px rgba(0,0,0,.16), inset 0 1px 0 ${C.borderLit}24`,
+      ...style,
+    }}
+  >
     {title && (
-      <div style={{
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-        padding: "10px 16px", borderBottom: `1px solid ${C.border}`,
-        background: `linear-gradient(135deg, ${accent}06 0%, transparent 60%)`,
-      }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "12px 16px",
+          borderBottom: `1px solid ${C.border}`,
+          background: `linear-gradient(135deg, ${accent}06 0%, transparent 60%)`,
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {icon && <span style={{ fontSize: 14 }}>{icon}</span>}
-          <span style={{ fontSize: 11, fontWeight: 600, color: C.textSoft, letterSpacing: 0.8, textTransform: "uppercase", fontFamily: FONT }}>{title}</span>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: C.textSoft,
+              letterSpacing: 0.8,
+              textTransform: "uppercase",
+              fontFamily: FONT,
+            }}
+          >
+            {title}
+          </span>
         </div>
         {headerRight}
       </div>
@@ -151,33 +258,96 @@ const Panel = ({ children, title, icon, accent = C.accent, style, headerRight, g
   </div>
 );
 
-const MiniSparkline = ({ data, color = C.accent, height = 32, width = 100 }) => {
+const MiniSparkline = ({
+  data,
+  color = C.accent,
+  height = 32,
+  width = 100,
+}) => {
   if (!data || data.length < 2) return null;
   const max = Math.max(...data);
   const min = Math.min(...data);
   const range = max - min || 1;
-  const points = data.map((v, i) => `${(i / (data.length - 1)) * width},${height - ((v - min) / range) * (height - 4) - 2}`).join(" ");
+  const points = data
+    .map(
+      (v, i) =>
+        `${(i / (data.length - 1)) * width},${height - ((v - min) / range) * (height - 4) - 2}`,
+    )
+    .join(" ");
   return (
     <svg width={width} height={height} style={{ display: "block" }}>
-      <polyline points={points} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={(data.length - 1) / (data.length - 1) * width} cy={height - ((data[data.length - 1] - min) / range) * (height - 4) - 2} r={2.5} fill={color} />
+      <polyline
+        points={points}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle
+        cx={((data.length - 1) / (data.length - 1)) * width}
+        cy={height - ((data[data.length - 1] - min) / range) * (height - 4) - 2}
+        r={2.5}
+        fill={color}
+      />
     </svg>
   );
 };
 
 const PulseDot = ({ color = C.green, size = 8 }) => (
-  <span style={{ position: "relative", display: "inline-block", width: size, height: size }}>
-    <span style={{
-      position: "absolute", inset: 0, borderRadius: "50%", background: color,
-      animation: "qcPulse 2s ease-in-out infinite",
-    }} />
-    <span style={{ position: "absolute", inset: -2, borderRadius: "50%", border: `1px solid ${color}40`, animation: "qcPulseRing 2s ease-in-out infinite" }} />
+  <span
+    style={{
+      position: "relative",
+      display: "inline-block",
+      width: size,
+      height: size,
+    }}
+  >
+    <span
+      style={{
+        position: "absolute",
+        inset: 0,
+        borderRadius: "50%",
+        background: color,
+        animation: "qcPulse 2s ease-in-out infinite",
+      }}
+    />
+    <span
+      style={{
+        position: "absolute",
+        inset: -2,
+        borderRadius: "50%",
+        border: `1px solid ${color}40`,
+        animation: "qcPulseRing 2s ease-in-out infinite",
+      }}
+    />
   </span>
 );
 
-const ProgressBar = ({ value, max = 100, color = C.accent, height = 4, bg }) => (
-  <div style={{ height, borderRadius: height, background: bg || `${color}15`, overflow: "hidden" }}>
-    <div style={{ height: "100%", width: `${Math.min(100, (value / max) * 100)}%`, background: `linear-gradient(90deg, ${color}, ${color}cc)`, borderRadius: height, transition: "width 0.8s ease" }} />
+const ProgressBar = ({
+  value,
+  max = 100,
+  color = C.accent,
+  height = 4,
+  bg,
+}) => (
+  <div
+    style={{
+      height,
+      borderRadius: height,
+      background: bg || `${color}15`,
+      overflow: "hidden",
+    }}
+  >
+    <div
+      style={{
+        height: "100%",
+        width: `${Math.min(100, (value / max) * 100)}%`,
+        background: `linear-gradient(90deg, ${color}, ${color}cc)`,
+        borderRadius: height,
+        transition: "width 0.8s ease",
+      }}
+    />
   </div>
 );
 
@@ -212,8 +382,12 @@ function TelemetryTab({ telemetry: t }) {
   return (
     <div>
       {/* Sub-navigation */}
-      <div role="tablist" aria-label="Telemetry views" style={{ display: "flex", gap: 4, marginBottom: 16, flexWrap: "wrap" }}>
-        {subTabs.map(st => (
+      <div
+        role="tablist"
+        aria-label="Telemetry views"
+        style={{ display: "flex", gap: 4, marginBottom: 16, flexWrap: "wrap" }}
+      >
+        {subTabs.map((st) => (
           <button
             key={st.id}
             role="tab"
@@ -222,28 +396,65 @@ function TelemetryTab({ telemetry: t }) {
             aria-controls="telemetry-subtabpanel"
             onClick={() => setSubTab(st.id)}
             style={{
-              padding: "6px 12px", borderRadius: 6, border: `1px solid ${subTab === st.id ? C.cyan : C.border}`,
-              background: subTab === st.id ? C.cyanDim : C.panel, color: subTab === st.id ? C.cyan : C.textSoft,
-              fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: FONT,
-              display: "flex", alignItems: "center", gap: 5, transition: "all 0.2s",
-            }}>
+              padding: "6px 12px",
+              borderRadius: 6,
+              border: `1px solid ${subTab === st.id ? C.cyan : C.border}`,
+              background: subTab === st.id ? C.cyanDim : C.panel,
+              color: subTab === st.id ? C.cyan : C.textSoft,
+              fontSize: 10,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: FONT,
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+              transition: "all 0.2s",
+            }}
+          >
             <span aria-hidden="true">{st.icon}</span> {st.label}
           </button>
         ))}
       </div>
 
       {/* Telemetry KPI Banner */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8, marginBottom: 16 }}>
-        <Stat label="Events Processed" value={t.events_processed.toLocaleString()} />
-        <Stat label="Signals Generated" value={t.signals_generated} color={C.cyan} />
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(6, 1fr)",
+          gap: 8,
+          marginBottom: 16,
+        }}
+      >
+        <Stat
+          label="Events Processed"
+          value={t.events_processed.toLocaleString()}
+        />
+        <Stat
+          label="Signals Generated"
+          value={t.signals_generated}
+          color={C.cyan}
+        />
         <Stat label="TLS Fingerprints" value={t.fingerprints.total} />
-        <Stat label="Beacons Detected" value={t.beacons.length} color={t.beacons.length > 0 ? C.red : C.green} />
+        <Stat
+          label="Beacons Detected"
+          value={t.beacons.length}
+          color={t.beacons.length > 0 ? C.red : C.green}
+        />
         <Stat label="Graph Nodes" value={t.graph.total_nodes} />
-        <Stat label="Collection Health" value={t.overall_health === "healthy" ? "HEALTHY" : "GAPS"} color={t.overall_health === "healthy" ? C.green : C.amber} />
+        <Stat
+          label="Collection Health"
+          value={t.overall_health === "healthy" ? "HEALTHY" : "GAPS"}
+          color={t.overall_health === "healthy" ? C.green : C.amber}
+        />
       </div>
 
       {/* Sub-tab content */}
-      <div role="tabpanel" id="telemetry-subtabpanel" aria-labelledby={`subtab-${subTab}`} tabIndex={0}>
+      <div
+        role="tabpanel"
+        id="telemetry-subtabpanel"
+        aria-labelledby={`subtab-${subTab}`}
+        tabIndex={0}
+      >
         {subTab === "network" && <TelemetryNetworkPanel t={t} />}
         {subTab === "temporal" && <TelemetryTemporalPanel t={t} />}
         {subTab === "kernel" && <TelemetryKernelPanel t={t} />}
@@ -260,35 +471,112 @@ function TelemetryNetworkPanel({ t }) {
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
       {/* TLS Fingerprint Intelligence */}
       <Panel title="🔐 TLS Fingerprint Intelligence">
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr 1fr",
+            gap: 8,
+            marginBottom: 12,
+          }}
+        >
           <Stat label="Catalogued" value={t.fingerprints.total} />
-          <Stat label="Known Bad Matches" value={t.fingerprints.known_bad} color={t.fingerprints.known_bad > 0 ? C.red : C.green} />
-          <Stat label="New (1h)" value={t.fingerprints.new_last_hour} color={C.cyan} />
+          <Stat
+            label="Known Bad Matches"
+            value={t.fingerprints.known_bad}
+            color={t.fingerprints.known_bad > 0 ? C.red : C.green}
+          />
+          <Stat
+            label="New (1h)"
+            value={t.fingerprints.new_last_hour}
+            color={C.cyan}
+          />
         </div>
-        {Array.isArray(t.fingerprints.recent_matches) && t.fingerprints.recent_matches.length > 0 ? (
+        {Array.isArray(t.fingerprints.recent_matches) &&
+        t.fingerprints.recent_matches.length > 0 ? (
           <div>
-            <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Active Threat Matches</div>
+            <div
+              style={{
+                fontSize: 10,
+                color: C.textDim,
+                marginBottom: 6,
+                textTransform: "uppercase",
+                letterSpacing: 1,
+              }}
+            >
+              Active Threat Matches
+            </div>
             {t.fingerprints.recent_matches.map((m, i) => (
-              <div key={i} style={{ padding: "8px 10px", background: C.redDim, borderRadius: 6, border: `1px solid ${C.red}33`, marginBottom: 6 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+              <div
+                key={i}
+                style={{
+                  padding: "8px 10px",
+                  background: C.redDim,
+                  borderRadius: 6,
+                  border: `1px solid ${C.red}33`,
+                  marginBottom: 6,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 4,
+                  }}
+                >
                   <SeverityBadge severity="critical">{m.family}</SeverityBadge>
-                  <ConfidenceBadge tier={m.confidence >= 0.95 ? "near_certain" : m.confidence >= 0.8 ? "high" : m.confidence >= 0.6 ? "probable" : "emerging"} confidence={m.confidence} />
+                  <ConfidenceBadge
+                    tier={
+                      m.confidence >= 0.95
+                        ? "near_certain"
+                        : m.confidence >= 0.8
+                          ? "high"
+                          : m.confidence >= 0.6
+                            ? "probable"
+                            : "emerging"
+                    }
+                    confidence={m.confidence}
+                  />
                 </div>
-                <div style={{ fontSize: 10, color: C.textSoft, fontFamily: MONO }}>
+                <div
+                  style={{ fontSize: 10, color: C.textSoft, fontFamily: MONO }}
+                >
                   {m.source} → {m.dest}
                 </div>
-                <div style={{ fontSize: 9, color: C.textDim, fontFamily: MONO, marginTop: 2 }}>
+                <div
+                  style={{
+                    fontSize: 9,
+                    color: C.textDim,
+                    fontFamily: MONO,
+                    marginTop: 2,
+                  }}
+                >
                   JA3: {m.ja3.slice(0, 24)}…
                 </div>
               </div>
             ))}
           </div>
         ) : t.fingerprints.recent_matches === null ? (
-          <div style={{ textAlign: "center", padding: 20, color: C.textDim, fontSize: 11 }}>
-            Detailed fingerprint match history is not yet exposed by the active telemetry collector.
+          <div
+            style={{
+              textAlign: "center",
+              padding: 20,
+              color: C.textDim,
+              fontSize: 11,
+            }}
+          >
+            Detailed fingerprint match history is not yet exposed by the active
+            telemetry collector.
           </div>
         ) : (
-          <div style={{ textAlign: "center", padding: 20, color: C.green, fontSize: 11 }}>
+          <div
+            style={{
+              textAlign: "center",
+              padding: 20,
+              color: C.green,
+              fontSize: 11,
+            }}
+          >
             ✓ No malicious fingerprints detected
           </div>
         )}
@@ -296,27 +584,101 @@ function TelemetryNetworkPanel({ t }) {
 
       {/* DNS Intelligence */}
       <Panel title="🌐 DNS Transaction Intelligence">
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 8,
+            marginBottom: 12,
+          }}
+        >
           <Stat label="Sources Profiled" value={t.dns.sources_profiled} />
-          <Stat label="Queries/min" value={t.dns.queries_per_min == null ? "N/A" : t.dns.queries_per_min.toLocaleString()} />
+          <Stat
+            label="Queries/min"
+            value={
+              t.dns.queries_per_min == null
+                ? "N/A"
+                : t.dns.queries_per_min.toLocaleString()
+            }
+          />
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
-          <div style={{ padding: "10px", background: (t.dns.dga_detected || 0) > 0 ? C.redDim : C.greenDim, borderRadius: 6, textAlign: "center" }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: (t.dns.dga_detected || 0) > 0 ? C.red : C.green, fontFamily: MONO }}>{t.dns.dga_detected == null ? "N/A" : t.dns.dga_detected}</div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr 1fr",
+            gap: 6,
+          }}
+        >
+          <div
+            style={{
+              padding: "10px",
+              background: (t.dns.dga_detected || 0) > 0 ? C.redDim : C.greenDim,
+              borderRadius: 6,
+              textAlign: "center",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 18,
+                fontWeight: 700,
+                color: (t.dns.dga_detected || 0) > 0 ? C.red : C.green,
+                fontFamily: MONO,
+              }}
+            >
+              {t.dns.dga_detected == null ? "N/A" : t.dns.dga_detected}
+            </div>
             <div style={{ fontSize: 9, color: C.textSoft }}>DGA Domains</div>
           </div>
-          <div style={{ padding: "10px", background: (t.dns.tunneling_alerts || 0) > 0 ? C.amberDim : C.greenDim, borderRadius: 6, textAlign: "center" }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: (t.dns.tunneling_alerts || 0) > 0 ? C.amber : C.green, fontFamily: MONO }}>{t.dns.tunneling_alerts == null ? "N/A" : t.dns.tunneling_alerts}</div>
+          <div
+            style={{
+              padding: "10px",
+              background:
+                (t.dns.tunneling_alerts || 0) > 0 ? C.amberDim : C.greenDim,
+              borderRadius: 6,
+              textAlign: "center",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 18,
+                fontWeight: 700,
+                color: (t.dns.tunneling_alerts || 0) > 0 ? C.amber : C.green,
+                fontFamily: MONO,
+              }}
+            >
+              {t.dns.tunneling_alerts == null ? "N/A" : t.dns.tunneling_alerts}
+            </div>
             <div style={{ fontSize: 9, color: C.textSoft }}>Tunneling</div>
           </div>
-          <div style={{ padding: "10px", background: (t.dns.exfil_indicators || 0) > 0 ? C.redDim : C.greenDim, borderRadius: 6, textAlign: "center" }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: (t.dns.exfil_indicators || 0) > 0 ? C.red : C.green, fontFamily: MONO }}>{t.dns.exfil_indicators == null ? "N/A" : t.dns.exfil_indicators}</div>
-            <div style={{ fontSize: 9, color: C.textSoft }}>Exfil Indicators</div>
+          <div
+            style={{
+              padding: "10px",
+              background:
+                (t.dns.exfil_indicators || 0) > 0 ? C.redDim : C.greenDim,
+              borderRadius: 6,
+              textAlign: "center",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 18,
+                fontWeight: 700,
+                color: (t.dns.exfil_indicators || 0) > 0 ? C.red : C.green,
+                fontFamily: MONO,
+              }}
+            >
+              {t.dns.exfil_indicators == null ? "N/A" : t.dns.exfil_indicators}
+            </div>
+            <div style={{ fontSize: 9, color: C.textSoft }}>
+              Exfil Indicators
+            </div>
           </div>
         </div>
         {t.dns.queries_per_min == null && (
           <div style={{ marginTop: 10, fontSize: 10, color: C.textDim }}>
-            DNS rate and detection counters require DNS telemetry ingestion; unavailable values are shown as `N/A` instead of fabricated activity.
+            DNS rate and detection counters require DNS telemetry ingestion;
+            unavailable values are shown as `N/A` instead of fabricated
+            activity.
           </div>
         )}
       </Panel>
@@ -325,36 +687,112 @@ function TelemetryNetworkPanel({ t }) {
 }
 
 function TelemetryTemporalPanel({ t }) {
-  const beaconColors = { periodic_exact: C.red, periodic_jittered: C.amber, adaptive: C.purple, slow_drip: C.cyan };
+  const beaconColors = {
+    periodic_exact: C.red,
+    periodic_jittered: C.amber,
+    adaptive: C.purple,
+    slow_drip: C.cyan,
+  };
   return (
     <div>
       <Panel title="⏱ Beacon Detection — Communication Cadence Analysis">
         {t.beacons.length > 0 ? (
           <div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 10 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+                gap: 10,
+              }}
+            >
               {t.beacons.map((b, i) => (
-                <div key={i} style={{ padding: "10px 12px", background: C.surface, borderRadius: 6, border: `1px solid ${beaconColors[b.classification] || C.border}44` }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                    <Badge color={beaconColors[b.classification] || C.textDim}>{b.classification.replace(/_/g, " ")}</Badge>
-                    <ConfidenceBadge tier={b.confidence >= 0.95 ? "near_certain" : b.confidence >= 0.8 ? "high" : b.confidence >= 0.6 ? "probable" : "emerging"} confidence={b.confidence} />
+                <div
+                  key={i}
+                  style={{
+                    padding: "10px 12px",
+                    background: C.surface,
+                    borderRadius: 6,
+                    border: `1px solid ${beaconColors[b.classification] || C.border}44`,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      marginBottom: 6,
+                    }}
+                  >
+                    <Badge color={beaconColors[b.classification] || C.textDim}>
+                      {b.classification.replace(/_/g, " ")}
+                    </Badge>
+                    <ConfidenceBadge
+                      tier={
+                        b.confidence >= 0.95
+                          ? "near_certain"
+                          : b.confidence >= 0.8
+                            ? "high"
+                            : b.confidence >= 0.6
+                              ? "probable"
+                              : "emerging"
+                      }
+                      confidence={b.confidence}
+                    />
                   </div>
-                  <div style={{ fontSize: 11, fontFamily: MONO, color: C.text, marginBottom: 4 }}>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontFamily: MONO,
+                      color: C.text,
+                      marginBottom: 4,
+                    }}
+                  >
                     {b.source} → {b.destination}
                   </div>
-                  <div style={{ display: "flex", gap: 16, fontSize: 10, color: C.textSoft }}>
-                    <span>Interval: <span style={{ color: C.cyan, fontFamily: MONO }}>{b.mean_interval}s</span></span>
-                    <span>Jitter: <span style={{ color: C.amber, fontFamily: MONO }}>{b.jitter}</span></span>
-                    <span>Samples: <span style={{ fontFamily: MONO }}>{b.samples}</span></span>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 16,
+                      fontSize: 10,
+                      color: C.textSoft,
+                    }}
+                  >
+                    <span>
+                      Interval:{" "}
+                      <span style={{ color: C.cyan, fontFamily: MONO }}>
+                        {b.mean_interval}s
+                      </span>
+                    </span>
+                    <span>
+                      Jitter:{" "}
+                      <span style={{ color: C.amber, fontFamily: MONO }}>
+                        {b.jitter}
+                      </span>
+                    </span>
+                    <span>
+                      Samples:{" "}
+                      <span style={{ fontFamily: MONO }}>{b.samples}</span>
+                    </span>
                   </div>
                   <div style={{ marginTop: 6 }}>
-                    <ProgressBar value={b.confidence} max={1} color={beaconColors[b.classification] || C.cyan} />
+                    <ProgressBar
+                      value={b.confidence}
+                      max={1}
+                      color={beaconColors[b.classification] || C.cyan}
+                    />
                   </div>
                 </div>
               ))}
             </div>
           </div>
         ) : (
-          <div style={{ textAlign: "center", padding: 30, color: C.green, fontSize: 11 }}>
+          <div
+            style={{
+              textAlign: "center",
+              padding: 30,
+              color: C.green,
+              fontSize: 11,
+            }}
+          >
             ✓ No beaconing patterns detected — communications appear organic
           </div>
         )}
@@ -367,37 +805,104 @@ function TelemetryKernelPanel({ t }) {
   const k = t.kernel;
   const kernelMetrics = [
     { label: "Syscall Profiles", value: k.syscall_profiles, color: C.text },
-    { label: "Injection Alerts", value: k.injection_alerts, color: k.injection_alerts > 0 ? C.red : C.green },
-    { label: "Credential Access", value: k.credential_alerts, color: k.credential_alerts > 0 ? C.red : C.green },
-    { label: "Ransomware Patterns", value: k.ransomware_patterns, color: k.ransomware_patterns > 0 ? C.red : C.green },
+    {
+      label: "Injection Alerts",
+      value: k.injection_alerts,
+      color: k.injection_alerts > 0 ? C.red : C.green,
+    },
+    {
+      label: "Credential Access",
+      value: k.credential_alerts,
+      color: k.credential_alerts > 0 ? C.red : C.green,
+    },
+    {
+      label: "Ransomware Patterns",
+      value: k.ransomware_patterns,
+      color: k.ransomware_patterns > 0 ? C.red : C.green,
+    },
     { label: "File I/O Assets", value: k.file_io_assets, color: C.text },
-    { label: "Memory Anomalies", value: k.memory_anomalies, color: k.memory_anomalies > 0 ? C.amber : C.green },
-    { label: "Privilege Transitions", value: k.privilege_transitions, color: k.privilege_transitions > 10 ? C.amber : C.text },
+    {
+      label: "Memory Anomalies",
+      value: k.memory_anomalies,
+      color: k.memory_anomalies > 0 ? C.amber : C.green,
+    },
+    {
+      label: "Privilege Transitions",
+      value: k.privilege_transitions,
+      color: k.privilege_transitions > 10 ? C.amber : C.text,
+    },
   ];
   return (
     <div>
       <Panel title="🧬 Kernel & Endpoint Telemetry">
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 16 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(4, 1fr)",
+            gap: 10,
+            marginBottom: 16,
+          }}
+        >
           {kernelMetrics.map((m, i) => (
-            <div key={i} style={{ padding: "12px", background: C.surface, borderRadius: 6, textAlign: "center" }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: m.color, fontFamily: MONO }}>{m.value}</div>
-              <div style={{ fontSize: 9, color: C.textSoft, marginTop: 4 }}>{m.label}</div>
+            <div
+              key={i}
+              style={{
+                padding: "12px",
+                background: C.surface,
+                borderRadius: 6,
+                textAlign: "center",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 22,
+                  fontWeight: 700,
+                  color: m.color,
+                  fontFamily: MONO,
+                }}
+              >
+                {m.value}
+              </div>
+              <div style={{ fontSize: 9, color: C.textSoft, marginTop: 4 }}>
+                {m.label}
+              </div>
             </div>
           ))}
         </div>
         {k.injection_alerts > 0 && (
-          <div style={{ padding: "10px 12px", background: C.redDim, borderRadius: 6, border: `1px solid ${C.red}33`, marginBottom: 8 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: C.red }}>⚠ Active injection syscall patterns detected</div>
+          <div
+            style={{
+              padding: "10px 12px",
+              background: C.redDim,
+              borderRadius: 6,
+              border: `1px solid ${C.red}33`,
+              marginBottom: 8,
+            }}
+          >
+            <div style={{ fontSize: 11, fontWeight: 600, color: C.red }}>
+              ⚠ Active injection syscall patterns detected
+            </div>
             <div style={{ fontSize: 10, color: C.textSoft, marginTop: 4 }}>
-              {k.injection_alerts} process(es) showing NtWriteVirtualMemory / CreateRemoteThread patterns — recommend immediate memory forensics
+              {k.injection_alerts} process(es) showing NtWriteVirtualMemory /
+              CreateRemoteThread patterns — recommend immediate memory forensics
             </div>
           </div>
         )}
         {k.ransomware_patterns > 0 && (
-          <div style={{ padding: "10px 12px", background: C.redDim, borderRadius: 6, border: `1px solid ${C.red}33` }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: C.red }}>🔴 RANSOMWARE FILE I/O PATTERN DETECTED</div>
+          <div
+            style={{
+              padding: "10px 12px",
+              background: C.redDim,
+              borderRadius: 6,
+              border: `1px solid ${C.red}33`,
+            }}
+          >
+            <div style={{ fontSize: 11, fontWeight: 600, color: C.red }}>
+              🔴 RANSOMWARE FILE I/O PATTERN DETECTED
+            </div>
             <div style={{ fontSize: 10, color: C.textSoft, marginTop: 4 }}>
-              Rapid read→write→rename across multiple files — ISOLATE AFFECTED ASSETS IMMEDIATELY
+              Rapid read→write→rename across multiple files — ISOLATE AFFECTED
+              ASSETS IMMEDIATELY
             </div>
           </div>
         )}
@@ -411,33 +916,70 @@ function TelemetryGraphPanel({ t }) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
       <Panel title="🔗 Cross-Asset Communication Graph">
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr 1fr",
+            gap: 8,
+            marginBottom: 12,
+          }}
+        >
           <Stat label="Nodes" value={g.total_nodes} />
           <Stat label="Edges" value={g.total_edges} />
-          <Stat label="Lateral Movements" value={g.lateral_movements} color={g.lateral_movements > 0 ? C.red : C.green} />
+          <Stat
+            label="Lateral Movements"
+            value={g.lateral_movements}
+            color={g.lateral_movements > 0 ? C.red : C.green}
+          />
         </div>
         {/* Simplified graph visualization */}
-        <div style={{ height: 160, background: C.surface, borderRadius: 6, padding: 12, position: "relative", overflow: "hidden" }}>
+        <div
+          style={{
+            height: 160,
+            background: C.surface,
+            borderRadius: 6,
+            padding: 12,
+            position: "relative",
+            overflow: "hidden",
+          }}
+        >
           {Array.from({ length: Math.min(g.total_nodes, 30) }, (_, i) => {
             const angle = (i / Math.min(g.total_nodes, 30)) * Math.PI * 2;
             const r = 55 + (i % 3) * 15;
             const x = 50 + Math.cos(angle) * r * 0.7;
             const y = 50 + Math.sin(angle) * r * 0.85;
-            const isRisky = g.high_risk_assets.some(a => i < g.high_risk_assets.length);
+            const isRisky = g.high_risk_assets.some(
+              (a) => i < g.high_risk_assets.length,
+            );
             return (
-              <div key={i} style={{
-                position: "absolute", left: `${x}%`, top: `${y}%`,
-                width: isRisky && i < g.high_risk_assets.length ? 8 : 4,
-                height: isRisky && i < g.high_risk_assets.length ? 8 : 4,
-                borderRadius: "50%",
-                background: i < g.high_risk_assets.length ? C.red : C.cyan,
-                opacity: i < g.high_risk_assets.length ? 1 : 0.4,
-                boxShadow: i < g.high_risk_assets.length ? `0 0 8px ${C.red}` : "none",
-                transform: "translate(-50%, -50%)",
-              }} />
+              <div
+                key={i}
+                style={{
+                  position: "absolute",
+                  left: `${x}%`,
+                  top: `${y}%`,
+                  width: isRisky && i < g.high_risk_assets.length ? 8 : 4,
+                  height: isRisky && i < g.high_risk_assets.length ? 8 : 4,
+                  borderRadius: "50%",
+                  background: i < g.high_risk_assets.length ? C.red : C.cyan,
+                  opacity: i < g.high_risk_assets.length ? 1 : 0.4,
+                  boxShadow:
+                    i < g.high_risk_assets.length ? `0 0 8px ${C.red}` : "none",
+                  transform: "translate(-50%, -50%)",
+                }}
+              />
             );
           })}
-          <div style={{ position: "absolute", bottom: 6, right: 8, fontSize: 8, color: C.textDim, fontFamily: MONO }}>
+          <div
+            style={{
+              position: "absolute",
+              bottom: 6,
+              right: 8,
+              fontSize: 8,
+              color: C.textDim,
+              fontFamily: MONO,
+            }}
+          >
             {g.total_nodes} nodes / {g.total_edges} connections
           </div>
         </div>
@@ -446,23 +988,75 @@ function TelemetryGraphPanel({ t }) {
       <Panel title="⚡ High-Risk Assets — Blast Radius">
         {g.high_risk_assets.length > 0 ? (
           g.high_risk_assets.map((a, i) => (
-            <div key={i} style={{ padding: "10px 12px", background: C.surface, borderRadius: 6, marginBottom: 6, border: `1px solid ${a.risk > 0.8 ? C.red : C.amber}33` }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                <span style={{ fontSize: 11, fontFamily: MONO, color: C.text }}>{a.asset}</span>
-                <span style={{
-                  fontSize: 10, fontFamily: MONO, fontWeight: 700,
-                  color: a.risk > 0.8 ? C.red : a.risk > 0.6 ? C.amber : C.green,
-                }}>RISK: {a.risk}</span>
+            <div
+              key={i}
+              style={{
+                padding: "10px 12px",
+                background: C.surface,
+                borderRadius: 6,
+                marginBottom: 6,
+                border: `1px solid ${a.risk > 0.8 ? C.red : C.amber}33`,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 4,
+                }}
+              >
+                <span style={{ fontSize: 11, fontFamily: MONO, color: C.text }}>
+                  {a.asset}
+                </span>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontFamily: MONO,
+                    fontWeight: 700,
+                    color:
+                      a.risk > 0.8 ? C.red : a.risk > 0.6 ? C.amber : C.green,
+                  }}
+                >
+                  RISK: {a.risk}
+                </span>
               </div>
-              <ProgressBar value={a.risk} max={1} color={a.risk > 0.8 ? C.red : C.amber} />
-              <div style={{ display: "flex", gap: 12, marginTop: 4, fontSize: 9, color: C.textSoft }}>
-                <span>Direct: {a.direct_targets == null ? "N/A" : a.direct_targets}</span>
-                <span>Blast Radius: <span style={{ color: C.amber }}>{a.blast_radius == null ? "N/A" : a.blast_radius}</span>{a.blast_radius == null ? "" : " assets"}</span>
+              <ProgressBar
+                value={a.risk}
+                max={1}
+                color={a.risk > 0.8 ? C.red : C.amber}
+              />
+              <div
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  marginTop: 4,
+                  fontSize: 9,
+                  color: C.textSoft,
+                }}
+              >
+                <span>
+                  Direct: {a.direct_targets == null ? "N/A" : a.direct_targets}
+                </span>
+                <span>
+                  Blast Radius:{" "}
+                  <span style={{ color: C.amber }}>
+                    {a.blast_radius == null ? "N/A" : a.blast_radius}
+                  </span>
+                  {a.blast_radius == null ? "" : " assets"}
+                </span>
               </div>
             </div>
           ))
         ) : (
-          <div style={{ textAlign: "center", padding: 30, color: C.green, fontSize: 11 }}>
+          <div
+            style={{
+              textAlign: "center",
+              padding: 30,
+              color: C.green,
+              fontSize: 11,
+            }}
+          >
             ✓ No high-risk assets detected
           </div>
         )}
@@ -474,7 +1068,7 @@ function TelemetryGraphPanel({ t }) {
 function TelemetryFeedbackPanel({ t }) {
   const f = t.feedback;
   const layerNames = Object.keys(f.layer_accuracy);
-  const barData = layerNames.map(name => ({
+  const barData = layerNames.map((name) => ({
     name: name.replace(/_/g, " "),
     accuracy: +(f.layer_accuracy[name].accuracy * 100).toFixed(0),
     fp_rate: +(f.layer_accuracy[name].fp_rate * 100).toFixed(0),
@@ -486,19 +1080,85 @@ function TelemetryFeedbackPanel({ t }) {
       <Panel title="🧠 Layer Accuracy — Adaptive Feedback Loop">
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={barData} barGap={2}>
-            <XAxis dataKey="name" tick={{ fill: C.textDim, fontSize: 9 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: C.textDim, fontSize: 9 }} axisLine={false} tickLine={false} domain={[0, 100]} />
-            <Tooltip contentStyle={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 10 }} />
-            <Bar dataKey="accuracy" fill={C.green} radius={[3, 3, 0, 0]} name="Accuracy %" />
-            <Bar dataKey="fp_rate" fill={C.red} radius={[3, 3, 0, 0]} name="FP Rate %" />
+            <XAxis
+              dataKey="name"
+              tick={{ fill: C.textDim, fontSize: 9 }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis
+              tick={{ fill: C.textDim, fontSize: 9 }}
+              axisLine={false}
+              tickLine={false}
+              domain={[0, 100]}
+            />
+            <Tooltip
+              contentStyle={{
+                background: C.panel,
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                fontSize: 10,
+              }}
+            />
+            <Bar
+              dataKey="accuracy"
+              fill={C.green}
+              radius={[3, 3, 0, 0]}
+              name="Accuracy %"
+            />
+            <Bar
+              dataKey="fp_rate"
+              fill={C.red}
+              radius={[3, 3, 0, 0]}
+              name="FP Rate %"
+            />
           </BarChart>
         </ResponsiveContainer>
-        <div style={{ display: "flex", gap: 16, justifyContent: "center", marginTop: 8 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.textSoft }}>
-            <div style={{ width: 8, height: 8, borderRadius: 2, background: C.green }} /> Accuracy %
+        <div
+          style={{
+            display: "flex",
+            gap: 16,
+            justifyContent: "center",
+            marginTop: 8,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              fontSize: 9,
+              color: C.textSoft,
+            }}
+          >
+            <div
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 2,
+                background: C.green,
+              }}
+            />{" "}
+            Accuracy %
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.textSoft }}>
-            <div style={{ width: 8, height: 8, borderRadius: 2, background: C.red }} /> False Positive %
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              fontSize: 9,
+              color: C.textSoft,
+            }}
+          >
+            <div
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 2,
+                background: C.red,
+              }}
+            />{" "}
+            False Positive %
           </div>
         </div>
       </Panel>
@@ -506,15 +1166,39 @@ function TelemetryFeedbackPanel({ t }) {
       <Panel title="⚙ Calibration Status">
         <div style={{ display: "grid", gap: 10 }}>
           <Stat label="Feedback Entries" value={f.total_entries} />
-          <Stat label="Threshold Adjustments" value={f.active_adjustments} color={f.active_adjustments > 0 ? C.amber : C.green} />
-          <Stat label="Suppression Rules" value={f.suppression_rules} color={f.suppression_rules > 0 ? C.amber : C.text} />
-          <Stat label="Tuned Signal Weights" value={f.tuned_weights} color={C.cyan} />
-          <div style={{ padding: "8px 10px", background: C.surface, borderRadius: 6, textAlign: "center", marginTop: 4 }}>
-            <div style={{ fontSize: 9, color: C.textDim, marginBottom: 4 }}>SYSTEM LEARNING</div>
+          <Stat
+            label="Threshold Adjustments"
+            value={f.active_adjustments}
+            color={f.active_adjustments > 0 ? C.amber : C.green}
+          />
+          <Stat
+            label="Suppression Rules"
+            value={f.suppression_rules}
+            color={f.suppression_rules > 0 ? C.amber : C.text}
+          />
+          <Stat
+            label="Tuned Signal Weights"
+            value={f.tuned_weights}
+            color={C.cyan}
+          />
+          <div
+            style={{
+              padding: "8px 10px",
+              background: C.surface,
+              borderRadius: 6,
+              textAlign: "center",
+              marginTop: 4,
+            }}
+          >
+            <div style={{ fontSize: 9, color: C.textDim, marginBottom: 4 }}>
+              SYSTEM LEARNING
+            </div>
             <div style={{ fontSize: 10, color: C.green }}>
-              {f.total_entries > 100 ? "Mature — high confidence calibration" :
-               f.total_entries > 30 ? "Developing — improving accuracy" :
-               "Early stage — building baselines"}
+              {f.total_entries > 100
+                ? "Mature — high confidence calibration"
+                : f.total_entries > 30
+                  ? "Developing — improving accuracy"
+                  : "Early stage — building baselines"}
             </div>
           </div>
         </div>
@@ -524,54 +1208,141 @@ function TelemetryFeedbackPanel({ t }) {
 }
 
 function TelemetryHealthPanel({ t }) {
-  const healthColor = { healthy: C.green, degraded: C.amber, stale: C.amber, offline: C.red };
+  const healthColor = {
+    healthy: C.green,
+    degraded: C.amber,
+    stale: C.amber,
+    offline: C.red,
+  };
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
       <Panel title="💊 Sensor Collection Health">
         <div style={{ display: "grid", gap: 6 }}>
-          {t.sensors.length > 0 ? t.sensors.map((s, i) => (
-            <div key={i} style={{ padding: "8px 12px", background: C.surface, borderRadius: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: C.text, textTransform: "capitalize" }}>
-                  {s.type} <Badge color={healthColor[s.health] || C.textDim}>{s.health}</Badge>
+          {t.sensors.length > 0 ? (
+            t.sensors.map((s, i) => (
+              <div
+                key={i}
+                style={{
+                  padding: "8px 12px",
+                  background: C.surface,
+                  borderRadius: 6,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: C.text,
+                      textTransform: "capitalize",
+                    }}
+                  >
+                    {s.type}{" "}
+                    <Badge color={healthColor[s.health] || C.textDim}>
+                      {s.health}
+                    </Badge>
+                  </div>
+                  <div style={{ fontSize: 9, color: C.textSoft, marginTop: 2 }}>
+                    {s.count} sensors · {s.events_per_min} events/min ·{" "}
+                    {s.avg_latency_ms}ms latency
+                  </div>
                 </div>
-                <div style={{ fontSize: 9, color: C.textSoft, marginTop: 2 }}>
-                  {s.count} sensors · {s.events_per_min} events/min · {s.avg_latency_ms}ms latency
+                <div style={{ textAlign: "right" }}>
+                  <div
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 700,
+                      fontFamily: MONO,
+                      color:
+                        s.coverage_pct > 90
+                          ? C.green
+                          : s.coverage_pct > 70
+                            ? C.amber
+                            : C.red,
+                    }}
+                  >
+                    {s.coverage_pct}%
+                  </div>
+                  <div style={{ fontSize: 8, color: C.textDim }}>coverage</div>
                 </div>
               </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 14, fontWeight: 700, fontFamily: MONO, color: s.coverage_pct > 90 ? C.green : s.coverage_pct > 70 ? C.amber : C.red }}>
-                  {s.coverage_pct}%
-                </div>
-                <div style={{ fontSize: 8, color: C.textDim }}>coverage</div>
-              </div>
-            </div>
-          )) : (
+            ))
+          ) : (
             <div style={{ fontSize: 10, color: C.textDim }}>
-              No real sensor registrations have been reported yet by the telemetry collector.
+              No real sensor registrations have been reported yet by the
+              telemetry collector.
             </div>
           )}
         </div>
       </Panel>
 
       <Panel title="🗺 Coverage & Blind Spots">
-        <div style={{ padding: "12px", background: t.overall_health === "healthy" ? C.greenDim : C.amberDim, borderRadius: 6, marginBottom: 12, textAlign: "center" }}>
-          <div style={{ fontSize: 20, fontWeight: 700, fontFamily: MONO, color: t.overall_health === "healthy" ? C.green : C.amber }}>
+        <div
+          style={{
+            padding: "12px",
+            background:
+              t.overall_health === "healthy" ? C.greenDim : C.amberDim,
+            borderRadius: 6,
+            marginBottom: 12,
+            textAlign: "center",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 20,
+              fontWeight: 700,
+              fontFamily: MONO,
+              color: t.overall_health === "healthy" ? C.green : C.amber,
+            }}
+          >
             {t.overall_health === "healthy" ? "FULL COVERAGE" : "GAPS DETECTED"}
           </div>
           <div style={{ fontSize: 10, color: C.textSoft, marginTop: 4 }}>
-            {t.blind_spots === 0 ? "All asset types have sensor coverage" : `${t.blind_spots} blind spot(s) identified — review sensor deployment`}
+            {t.blind_spots === 0
+              ? "All asset types have sensor coverage"
+              : `${t.blind_spots} blind spot(s) identified — review sensor deployment`}
           </div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          {t.sensors.length > 0 ? t.sensors.map((s, i) => (
-            <div key={i} style={{ padding: "8px", background: C.surface, borderRadius: 6, textAlign: "center" }}>
-              <ProgressBar value={s.coverage_pct} max={100} color={s.coverage_pct > 90 ? C.green : C.amber} />
-              <div style={{ fontSize: 9, color: C.textSoft, marginTop: 4, textTransform: "capitalize" }}>{s.type}</div>
-            </div>
-          )) : (
-            <div style={{ gridColumn: "1 / -1", fontSize: 10, color: C.textDim }}>
-              Coverage bars will appear when the collector begins registering sensors and coverage summaries.
+        <div
+          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}
+        >
+          {t.sensors.length > 0 ? (
+            t.sensors.map((s, i) => (
+              <div
+                key={i}
+                style={{
+                  padding: "8px",
+                  background: C.surface,
+                  borderRadius: 6,
+                  textAlign: "center",
+                }}
+              >
+                <ProgressBar
+                  value={s.coverage_pct}
+                  max={100}
+                  color={s.coverage_pct > 90 ? C.green : C.amber}
+                />
+                <div
+                  style={{
+                    fontSize: 9,
+                    color: C.textSoft,
+                    marginTop: 4,
+                    textTransform: "capitalize",
+                  }}
+                >
+                  {s.type}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div
+              style={{ gridColumn: "1 / -1", fontSize: 10, color: C.textDim }}
+            >
+              Coverage bars will appear when the collector begins registering
+              sensors and coverage summaries.
             </div>
           )}
         </div>
@@ -582,92 +1353,270 @@ function TelemetryHealthPanel({ t }) {
 
 // ─── OVERVIEW TAB ─────────────────────────────────────────────────────────
 
-function OverviewTab({ mesh, predictions, incidents, snapshotData, landscape }) {
+function OverviewTab({
+  mesh,
+  predictions,
+  incidents,
+  snapshotData,
+  landscape,
+}) {
   const topPreds = predictions.slice(0, 3);
-  const criticalIncidents = incidents.filter(i => i.severity === "CRITICAL").length;
-  const highPreds = predictions.filter(p => p.confidence > 0.7).length;
+  const criticalIncidents = incidents.filter(
+    (i) => i.severity === "CRITICAL",
+  ).length;
+  const highPreds = predictions.filter((p) => p.confidence > 0.7).length;
 
   // Threat posture score: 0-100 (lower is better)
   const postureScore = Math.round(
-    100 - (
-      mesh.threat_posture.active_attack_chains * 15 +
-      criticalIncidents * 10 +
-      highPreds * 8
-    )
+    100 -
+      (mesh.threat_posture.active_attack_chains * 15 +
+        criticalIncidents * 10 +
+        highPreds * 8),
   );
-  const postureColor = postureScore >= 80 ? C.green : postureScore >= 50 ? C.amber : C.red;
-  const postureLabel = postureScore >= 80 ? "SECURE" : postureScore >= 50 ? "ELEVATED" : "CRITICAL";
+  const postureColor =
+    postureScore >= 80 ? C.green : postureScore >= 50 ? C.amber : C.red;
+  const postureLabel =
+    postureScore >= 80
+      ? "SECURE"
+      : postureScore >= 50
+        ? "ELEVATED"
+        : "CRITICAL";
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
       {/* Hero: Threat Posture */}
-      <div style={{
-        display: "grid", gridTemplateColumns: "260px 1fr 300px", gap: 16,
-      }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "260px 1fr 300px",
+          gap: 16,
+        }}
+      >
         <Panel title="Threat Posture" icon="◉" accent={postureColor} glow>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
             <div style={{ position: "relative", width: 120, height: 120 }}>
               <svg width={120} height={120} viewBox="0 0 120 120">
-                <circle cx={60} cy={60} r={52} fill="none" stroke={`${postureColor}15`} strokeWidth={8} />
-                <circle cx={60} cy={60} r={52} fill="none" stroke={postureColor} strokeWidth={8}
+                <circle
+                  cx={60}
+                  cy={60}
+                  r={52}
+                  fill="none"
+                  stroke={`${postureColor}15`}
+                  strokeWidth={8}
+                />
+                <circle
+                  cx={60}
+                  cy={60}
+                  r={52}
+                  fill="none"
+                  stroke={postureColor}
+                  strokeWidth={8}
                   strokeDasharray={`${(postureScore / 100) * 327} 327`}
-                  strokeLinecap="round" transform="rotate(-90 60 60)"
-                  style={{ transition: "stroke-dasharray 1.2s ease" }} />
+                  strokeLinecap="round"
+                  transform="rotate(-90 60 60)"
+                  style={{ transition: "stroke-dasharray 1.2s ease" }}
+                />
               </svg>
-              <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                <div style={{ fontSize: 32, fontWeight: 800, fontFamily: MONO, color: postureColor, lineHeight: 1 }}>{postureScore}</div>
-                <div style={{ fontSize: 9, fontWeight: 700, color: postureColor, letterSpacing: 1.5 }}>{postureLabel}</div>
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 32,
+                    fontWeight: 800,
+                    fontFamily: MONO,
+                    color: postureColor,
+                    lineHeight: 1,
+                  }}
+                >
+                  {postureScore}
+                </div>
+                <div
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 700,
+                    color: postureColor,
+                    letterSpacing: 1.5,
+                  }}
+                >
+                  {postureLabel}
+                </div>
               </div>
             </div>
             <div style={{ display: "flex", gap: 16, marginTop: 4 }}>
-              <Stat label="Attack Chains" value={mesh.threat_posture.active_attack_chains} color={mesh.threat_posture.active_attack_chains > 0 ? C.red : C.green} small />
-              <Stat label="Predictions" value={highPreds} color={highPreds > 0 ? C.amber : C.green} sub="HIGH+" small />
+              <Stat
+                label="Attack Chains"
+                value={mesh.threat_posture.active_attack_chains}
+                color={
+                  mesh.threat_posture.active_attack_chains > 0 ? C.red : C.green
+                }
+                small
+              />
+              <Stat
+                label="Predictions"
+                value={highPreds}
+                color={highPreds > 0 ? C.amber : C.green}
+                sub="HIGH+"
+                small
+              />
             </div>
           </div>
         </Panel>
 
         <Panel title="Current Operational Snapshot" icon="📊" accent={C.accent}>
           <ResponsiveContainer width="100%" height={160}>
-            <BarChart data={snapshotData} margin={{ top: 12, right: 8, bottom: 0, left: -20 }}>
-              <XAxis dataKey="metric" tick={{ fill: C.textDim, fontSize: 9, fontFamily: MONO }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: C.textDim, fontSize: 9, fontFamily: MONO }} axisLine={false} tickLine={false} width={40} />
-              <Tooltip contentStyle={{ background: C.panel, border: `1px solid ${C.borderLit}`, borderRadius: 6, fontFamily: MONO, fontSize: 11, color: C.text }} />
+            <BarChart
+              data={snapshotData}
+              margin={{ top: 12, right: 8, bottom: 0, left: -20 }}
+            >
+              <XAxis
+                dataKey="metric"
+                tick={{ fill: C.textDim, fontSize: 9, fontFamily: MONO }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fill: C.textDim, fontSize: 9, fontFamily: MONO }}
+                axisLine={false}
+                tickLine={false}
+                width={40}
+              />
+              <Tooltip
+                contentStyle={{
+                  background: C.panel,
+                  border: `1px solid ${C.borderLit}`,
+                  borderRadius: 6,
+                  fontFamily: MONO,
+                  fontSize: 11,
+                  color: C.text,
+                }}
+              />
               <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                {snapshotData.map((entry, index) => <Cell key={`${entry.metric}-${index}`} fill={entry.color} fillOpacity={0.85} />)}
+                {snapshotData.map((entry, index) => (
+                  <Cell
+                    key={`${entry.metric}-${index}`}
+                    fill={entry.color}
+                    fillOpacity={0.85}
+                  />
+                ))}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
           <div style={{ marginTop: 8, fontSize: 10, color: C.textDim }}>
-            This panel now shows live current-state counts from the backend instead of synthetic 24h history.
+            This panel now shows live current-state counts from the backend
+            instead of synthetic 24h history.
           </div>
         </Panel>
 
         <Panel title="Mesh Health" icon="🕷" accent={C.green}>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <Stat label="Nodes Active" value={`${mesh.topology.active_nodes}/${mesh.topology.total_nodes}`} color={C.green} small />
-              <Stat label="Circuits" value={`${mesh.topology.healthy_circuits}/${mesh.topology.total_circuits}`} color={C.green} small />
-              <Stat label="Heals" value={mesh.statistics.mesh_heals} color={C.cyan} small />
+              <Stat
+                label="Nodes Active"
+                value={`${mesh.topology.active_nodes}/${mesh.topology.total_nodes}`}
+                color={C.green}
+                small
+              />
+              <Stat
+                label="Circuits"
+                value={`${mesh.topology.healthy_circuits}/${mesh.topology.total_circuits}`}
+                color={C.green}
+                small
+              />
+              <Stat
+                label="Heals"
+                value={mesh.statistics.mesh_heals}
+                color={C.cyan}
+                small
+              />
             </div>
             <div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{ fontSize: 10, color: C.textSoft }}>Mesh Integrity</span>
-                <span style={{ fontSize: 10, color: C.green, fontFamily: MONO }}>{Math.round(mesh.topology.active_nodes / mesh.topology.total_nodes * 100)}%</span>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginBottom: 4,
+                }}
+              >
+                <span style={{ fontSize: 10, color: C.textSoft }}>
+                  Mesh Integrity
+                </span>
+                <span
+                  style={{ fontSize: 10, color: C.green, fontFamily: MONO }}
+                >
+                  {Math.round(
+                    (mesh.topology.active_nodes / mesh.topology.total_nodes) *
+                      100,
+                  )}
+                  %
+                </span>
               </div>
-              <ProgressBar value={mesh.topology.active_nodes} max={mesh.topology.total_nodes} color={C.green} />
+              <ProgressBar
+                value={mesh.topology.active_nodes}
+                max={mesh.topology.total_nodes}
+                color={C.green}
+              />
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 11 }}>
-              <div style={{ padding: "6px 8px", background: C.redDim, borderRadius: 4, display: "flex", justifyContent: "space-between" }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 8,
+                fontSize: 11,
+              }}
+            >
+              <div
+                style={{
+                  padding: "6px 8px",
+                  background: C.redDim,
+                  borderRadius: 4,
+                  display: "flex",
+                  justifyContent: "space-between",
+                }}
+              >
                 <span style={{ color: C.textSoft }}>IPs Blocked</span>
-                <span style={{ color: C.red, fontFamily: MONO, fontWeight: 600 }}>{mesh.threat_posture.ips_blocked}</span>
+                <span
+                  style={{ color: C.red, fontFamily: MONO, fontWeight: 600 }}
+                >
+                  {mesh.threat_posture.ips_blocked}
+                </span>
               </div>
-              <div style={{ padding: "6px 8px", background: C.amberDim, borderRadius: 4, display: "flex", justifyContent: "space-between" }}>
+              <div
+                style={{
+                  padding: "6px 8px",
+                  background: C.amberDim,
+                  borderRadius: 4,
+                  display: "flex",
+                  justifyContent: "space-between",
+                }}
+              >
                 <span style={{ color: C.textSoft }}>IOCs Active</span>
-                <span style={{ color: C.amber, fontFamily: MONO, fontWeight: 600 }}>{mesh.threat_posture.iocs_active}</span>
+                <span
+                  style={{ color: C.amber, fontFamily: MONO, fontWeight: 600 }}
+                >
+                  {mesh.threat_posture.iocs_active}
+                </span>
               </div>
             </div>
             <div style={{ fontSize: 10, color: C.textDim }}>
-              Events Ingested: <span style={{ color: C.text, fontFamily: MONO }}>{mesh.statistics.events_ingested.toLocaleString()}</span>
+              Events Ingested:{" "}
+              <span style={{ color: C.text, fontFamily: MONO }}>
+                {mesh.statistics.events_ingested.toLocaleString()}
+              </span>
             </div>
           </div>
         </Panel>
@@ -675,7 +1624,12 @@ function OverviewTab({ mesh, predictions, incidents, snapshotData, landscape }) 
 
       {/* Top Predictions + Active Incidents */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <Panel title="Top Threat Predictions" icon="🔮" accent={C.purple} glow={topPreds.length > 0}>
+        <Panel
+          title="Top Threat Predictions"
+          icon="🔮"
+          accent={C.purple}
+          glow={topPreds.length > 0}
+        >
           {topPreds.length === 0 ? (
             <div style={{ textAlign: "center", padding: 20, color: C.green }}>
               <div style={{ fontSize: 24, marginBottom: 4 }}>✓</div>
@@ -683,21 +1637,66 @@ function OverviewTab({ mesh, predictions, incidents, snapshotData, landscape }) 
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {topPreds.map(p => (
-                <div key={p.prediction_id} style={{
-                  padding: "10px 12px", background: C.surface, borderRadius: 6,
-                  border: `1px solid ${p.confidence > 0.8 ? C.red + "30" : C.border}`,
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+              {topPreds.map((p) => (
+                <div
+                  key={p.prediction_id}
+                  style={{
+                    padding: "10px 12px",
+                    background: C.surface,
+                    borderRadius: 6,
+                    border: `1px solid ${p.confidence > 0.8 ? C.red + "30" : C.border}`,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      gap: 8,
+                    }}
+                  >
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</div>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        <ConfidenceBadge tier={p.confidence_tier} confidence={p.confidence} />
+                      <div
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: C.text,
+                          marginBottom: 4,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {p.title}
+                      </div>
+                      <div
+                        style={{ display: "flex", gap: 6, flexWrap: "wrap" }}
+                      >
+                        <ConfidenceBadge
+                          tier={p.confidence_tier}
+                          confidence={p.confidence}
+                        />
                         <HorizonBadge horizon={p.threat_horizon} />
-                        <Badge color={C.textSoft}>{p.category.replace(/_/g, " ")}</Badge>
+                        <Badge color={C.textSoft}>
+                          {p.category.replace(/_/g, " ")}
+                        </Badge>
                       </div>
                     </div>
-                    <div style={{ fontSize: 18, fontWeight: 800, fontFamily: MONO, color: p.risk_score >= 8 ? C.red : p.risk_score >= 5 ? C.amber : C.accentBright }}>{p.risk_score.toFixed(1)}</div>
+                    <div
+                      style={{
+                        fontSize: 18,
+                        fontWeight: 800,
+                        fontFamily: MONO,
+                        color:
+                          p.risk_score >= 8
+                            ? C.red
+                            : p.risk_score >= 5
+                              ? C.amber
+                              : C.accentBright,
+                      }}
+                    >
+                      {p.risk_score.toFixed(1)}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -705,7 +1704,12 @@ function OverviewTab({ mesh, predictions, incidents, snapshotData, landscape }) 
           )}
         </Panel>
 
-        <Panel title="Active Incidents" icon="🚨" accent={C.red} glow={criticalIncidents > 0}>
+        <Panel
+          title="Active Incidents"
+          icon="🚨"
+          accent={C.red}
+          glow={criticalIncidents > 0}
+        >
           {incidents.length === 0 ? (
             <div style={{ textAlign: "center", padding: 20, color: C.green }}>
               <div style={{ fontSize: 24, marginBottom: 4 }}>✓</div>
@@ -713,23 +1717,55 @@ function OverviewTab({ mesh, predictions, incidents, snapshotData, landscape }) 
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {incidents.slice(0, 4).map(inc => (
-                <div key={inc.incident_id} style={{
-                  padding: "10px 12px", background: C.surface, borderRadius: 6,
-                  border: `1px solid ${inc.severity === "CRITICAL" ? C.red + "30" : C.border}`,
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+              {incidents.slice(0, 4).map((inc) => (
+                <div
+                  key={inc.incident_id}
+                  style={{
+                    padding: "10px 12px",
+                    background: C.surface,
+                    borderRadius: 6,
+                    border: `1px solid ${inc.severity === "CRITICAL" ? C.red + "30" : C.border}`,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      gap: 8,
+                    }}
+                  >
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{inc.title}</div>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: C.text,
+                          marginBottom: 4,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {inc.title}
+                      </div>
+                      <div
+                        style={{ display: "flex", gap: 6, flexWrap: "wrap" }}
+                      >
                         <SeverityBadge severity={inc.severity} />
                         <Badge color={C.cyan}>{inc.status}</Badge>
                         <Badge color={C.textSoft}>{inc.incident_id}</Badge>
                       </div>
                     </div>
                     <div style={{ textAlign: "right" }}>
-                      <div style={{ fontSize: 10, color: C.textDim }}>{inc.affected_assets} assets</div>
-                      {inc.actions_pending > 0 && <div style={{ fontSize: 10, color: C.amber }}>{inc.actions_pending} pending</div>}
+                      <div style={{ fontSize: 10, color: C.textDim }}>
+                        {inc.affected_assets} assets
+                      </div>
+                      {inc.actions_pending > 0 && (
+                        <div style={{ fontSize: 10, color: C.amber }}>
+                          {inc.actions_pending} pending
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -741,29 +1777,110 @@ function OverviewTab({ mesh, predictions, incidents, snapshotData, landscape }) 
 
       {/* Threat Landscape Radar */}
       <Panel title="Strategic Threat Landscape" icon="🌐" accent={C.cyan}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div
+          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}
+        >
           {landscape.length > 0 ? (
             <ResponsiveContainer width="100%" height={220}>
               <RadarChart cx="50%" cy="50%" outerRadius="70%" data={landscape}>
                 <PolarGrid stroke={C.border} />
-                <PolarAngleAxis dataKey="vector" tick={{ fill: C.textSoft, fontSize: 9 }} />
-                <PolarRadiusAxis tick={false} domain={[0, 100]} axisLine={false} />
-                <Radar name="Risk" dataKey="risk" stroke={C.red} fill={C.red} fillOpacity={0.12} strokeWidth={2} />
+                <PolarAngleAxis
+                  dataKey="vector"
+                  tick={{ fill: C.textSoft, fontSize: 9 }}
+                />
+                <PolarRadiusAxis
+                  tick={false}
+                  domain={[0, 100]}
+                  axisLine={false}
+                />
+                <Radar
+                  name="Risk"
+                  dataKey="risk"
+                  stroke={C.red}
+                  fill={C.red}
+                  fillOpacity={0.12}
+                  strokeWidth={2}
+                />
               </RadarChart>
             </ResponsiveContainer>
           ) : (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 220, color: C.textDim, fontSize: 11 }}>
-              Threat landscape will populate once the predictor ingests real signals.
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                height: 220,
+                color: C.textDim,
+                fontSize: 11,
+              }}
+            >
+              Threat landscape will populate once the predictor ingests real
+              signals.
             </div>
           )}
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, justifyContent: "center" }}>
-            {landscape.map(l => (
-              <div key={l.vector} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ width: 80, fontSize: 10, color: C.textSoft, textAlign: "right" }}>{l.vector}</div>
-                <div style={{ flex: 1 }}><ProgressBar value={l.risk} color={l.risk > 80 ? C.red : l.risk > 60 ? C.amber : C.accentBright} height={6} /></div>
-                <div style={{ width: 28, fontSize: 10, fontFamily: MONO, color: l.risk > 80 ? C.red : l.risk > 60 ? C.amber : C.text }}>{Math.round(l.risk)}</div>
-                <Badge color={l.trend === "accelerating" || l.trend === "escalating" ? C.red : l.trend === "emerging" || l.trend === "expanding" ? C.amber : C.textDim} style={{ fontSize: 8 }}>
-                  {l.trend === "accelerating" ? "▲▲" : l.trend === "escalating" ? "▲" : l.trend === "emerging" || l.trend === "expanding" ? "↗" : "─"}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              justifyContent: "center",
+            }}
+          >
+            {landscape.map((l) => (
+              <div
+                key={l.vector}
+                style={{ display: "flex", alignItems: "center", gap: 8 }}
+              >
+                <div
+                  style={{
+                    width: 80,
+                    fontSize: 10,
+                    color: C.textSoft,
+                    textAlign: "right",
+                  }}
+                >
+                  {l.vector}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <ProgressBar
+                    value={l.risk}
+                    color={
+                      l.risk > 80
+                        ? C.red
+                        : l.risk > 60
+                          ? C.amber
+                          : C.accentBright
+                    }
+                    height={6}
+                  />
+                </div>
+                <div
+                  style={{
+                    width: 28,
+                    fontSize: 10,
+                    fontFamily: MONO,
+                    color: l.risk > 80 ? C.red : l.risk > 60 ? C.amber : C.text,
+                  }}
+                >
+                  {Math.round(l.risk)}
+                </div>
+                <Badge
+                  color={
+                    l.trend === "accelerating" || l.trend === "escalating"
+                      ? C.red
+                      : l.trend === "emerging" || l.trend === "expanding"
+                        ? C.amber
+                        : C.textDim
+                  }
+                  style={{ fontSize: 8 }}
+                >
+                  {l.trend === "accelerating"
+                    ? "▲▲"
+                    : l.trend === "escalating"
+                      ? "▲"
+                      : l.trend === "emerging" || l.trend === "expanding"
+                        ? "↗"
+                        : "─"}
                 </Badge>
               </div>
             ))}
@@ -777,7 +1894,9 @@ function OverviewTab({ mesh, predictions, incidents, snapshotData, landscape }) 
 // ─── PREDICTOR TAB ─────────────────────────────────────────────────────────
 
 function PredictorTab({ predictions, predictorStatus }) {
-  const categoryData = Object.entries(predictorStatus.active_predictions.by_category || {}).map(([name, count]) => ({
+  const categoryData = Object.entries(
+    predictorStatus.active_predictions.by_category || {},
+  ).map(([name, count]) => ({
     name: humanizeMetricKey(name),
     count,
   }));
@@ -787,33 +1906,142 @@ function PredictorTab({ predictions, predictorStatus }) {
       {/* Prediction Engine Status */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <Panel title="Predictor Engine Status" icon="⚡" accent={C.purple}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <Stat label="Events Analyzed" value={predictorStatus.statistics.events_analyzed || 0} color={C.accentBright} />
-            <Stat label="Predictions Generated" value={predictorStatus.statistics.predictions_generated || predictions.length} color={C.purple} />
-            <Stat label="Zero-Days Predicted" value={predictorStatus.statistics.zero_days_predicted || 0} color={C.red} />
-            <Stat label="Preemptive Actions" value={predictorStatus.statistics.preemptive_actions_taken || 0} color={C.amber} />
-            <Stat label="Signal Bus Depth" value={predictorStatus.signal_bus_depth || 0} color={C.cyan} />
-            <Stat label="Genomes Tracked" value={predictorStatus.behavioral_genomes_tracked || 0} color={C.green} />
+          <div
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}
+          >
+            <Stat
+              label="Events Analyzed"
+              value={predictorStatus.statistics.events_analyzed || 0}
+              color={C.accentBright}
+            />
+            <Stat
+              label="Predictions Generated"
+              value={
+                predictorStatus.statistics.predictions_generated ||
+                predictions.length
+              }
+              color={C.purple}
+            />
+            <Stat
+              label="Zero-Days Predicted"
+              value={predictorStatus.statistics.zero_days_predicted || 0}
+              color={C.red}
+            />
+            <Stat
+              label="Preemptive Actions"
+              value={predictorStatus.statistics.preemptive_actions_taken || 0}
+              color={C.amber}
+            />
+            <Stat
+              label="Signal Bus Depth"
+              value={predictorStatus.signal_bus_depth || 0}
+              color={C.cyan}
+            />
+            <Stat
+              label="Genomes Tracked"
+              value={predictorStatus.behavioral_genomes_tracked || 0}
+              color={C.green}
+            />
           </div>
-          <div style={{ marginTop: 12, padding: "8px 10px", background: C.surface, borderRadius: 6, fontSize: 10, color: C.textSoft }}>
-            <strong style={{ color: C.purple }}>Live backend status:</strong> this panel now reflects real predictor engine counters instead of simulated per-layer activity.
+          <div
+            style={{
+              marginTop: 12,
+              padding: "8px 10px",
+              background: C.surface,
+              borderRadius: 6,
+              fontSize: 10,
+              color: C.textSoft,
+            }}
+          >
+            <strong style={{ color: C.purple }}>Live backend status:</strong>{" "}
+            this panel now reflects real predictor engine counters instead of
+            simulated per-layer activity.
           </div>
         </Panel>
 
-        <Panel title={categoryData.length ? "Prediction Category Distribution" : "Prediction Distribution"} icon="📊" accent={C.purple}>
+        <Panel
+          title={
+            categoryData.length
+              ? "Prediction Category Distribution"
+              : "Prediction Distribution"
+          }
+          icon="📊"
+          accent={C.purple}
+        >
           <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={categoryData.length ? categoryData : [
-              { tier: "Near Certain", count: predictions.filter(p => p.confidence_tier === "near_certain").length, color: C.red },
-              { tier: "High", count: predictions.filter(p => p.confidence_tier === "high").length, color: C.amber },
-              { tier: "Probable", count: predictions.filter(p => p.confidence_tier === "probable").length, color: C.accentBright },
-              { tier: "Emerging", count: predictions.filter(p => p.confidence_tier === "emerging").length, color: C.cyan },
-              { tier: "Speculative", count: predictions.filter(p => p.confidence_tier === "speculative").length, color: C.textDim },
-            ]} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
-              <XAxis dataKey={categoryData.length ? "name" : "tier"} tick={{ fill: C.textSoft, fontSize: 9 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: C.textDim, fontSize: 9, fontFamily: MONO }} axisLine={false} tickLine={false} allowDecimals={false} />
-              <Tooltip contentStyle={{ background: C.panel, border: `1px solid ${C.borderLit}`, borderRadius: 6, fontFamily: MONO, fontSize: 11, color: C.text }} />
+            <BarChart
+              data={
+                categoryData.length
+                  ? categoryData
+                  : [
+                      {
+                        tier: "Near Certain",
+                        count: predictions.filter(
+                          (p) => p.confidence_tier === "near_certain",
+                        ).length,
+                        color: C.red,
+                      },
+                      {
+                        tier: "High",
+                        count: predictions.filter(
+                          (p) => p.confidence_tier === "high",
+                        ).length,
+                        color: C.amber,
+                      },
+                      {
+                        tier: "Probable",
+                        count: predictions.filter(
+                          (p) => p.confidence_tier === "probable",
+                        ).length,
+                        color: C.accentBright,
+                      },
+                      {
+                        tier: "Emerging",
+                        count: predictions.filter(
+                          (p) => p.confidence_tier === "emerging",
+                        ).length,
+                        color: C.cyan,
+                      },
+                      {
+                        tier: "Speculative",
+                        count: predictions.filter(
+                          (p) => p.confidence_tier === "speculative",
+                        ).length,
+                        color: C.textDim,
+                      },
+                    ]
+              }
+              margin={{ top: 8, right: 8, bottom: 0, left: -20 }}
+            >
+              <XAxis
+                dataKey={categoryData.length ? "name" : "tier"}
+                tick={{ fill: C.textSoft, fontSize: 9 }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fill: C.textDim, fontSize: 9, fontFamily: MONO }}
+                axisLine={false}
+                tickLine={false}
+                allowDecimals={false}
+              />
+              <Tooltip
+                contentStyle={{
+                  background: C.panel,
+                  border: `1px solid ${C.borderLit}`,
+                  borderRadius: 6,
+                  fontFamily: MONO,
+                  fontSize: 11,
+                  color: C.text,
+                }}
+              />
               <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                {(categoryData.length ? categoryData.map(() => C.purple) : [C.red, C.amber, C.accentBright, C.cyan, C.textDim]).map((c, i) => <Cell key={i} fill={c} fillOpacity={0.8} />)}
+                {(categoryData.length
+                  ? categoryData.map(() => C.purple)
+                  : [C.red, C.amber, C.accentBright, C.cyan, C.textDim]
+                ).map((c, i) => (
+                  <Cell key={i} fill={c} fillOpacity={0.8} />
+                ))}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -821,38 +2049,126 @@ function PredictorTab({ predictions, predictorStatus }) {
       </div>
 
       {/* All Predictions */}
-      <Panel title={`Active Predictions (${predictions.length})`} icon="🔮" accent={C.purple} glow>
+      <Panel
+        title={`Active Predictions (${predictions.length})`}
+        icon="🔮"
+        accent={C.purple}
+        glow
+      >
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {predictions.map(p => (
-            <div key={p.prediction_id} style={{
-              padding: "12px 14px", background: C.surface, borderRadius: 6,
-              border: `1px solid ${p.confidence > 0.8 ? C.red + "30" : p.confidence > 0.6 ? C.amber + "20" : C.border}`,
-              boxShadow: p.confidence > 0.8 ? `0 0 15px ${C.red}08` : "none",
-            }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+          {predictions.map((p) => (
+            <div
+              key={p.prediction_id}
+              style={{
+                padding: "12px 14px",
+                background: C.surface,
+                borderRadius: 6,
+                border: `1px solid ${p.confidence > 0.8 ? C.red + "30" : p.confidence > 0.6 ? C.amber + "20" : C.border}`,
+                boxShadow: p.confidence > 0.8 ? `0 0 15px ${C.red}08` : "none",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  gap: 12,
+                }}
+              >
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 6 }}>{p.title}</div>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
-                    <ConfidenceBadge tier={p.confidence_tier} confidence={p.confidence} />
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: C.text,
+                      marginBottom: 6,
+                    }}
+                  >
+                    {p.title}
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 6,
+                      flexWrap: "wrap",
+                      marginBottom: 6,
+                    }}
+                  >
+                    <ConfidenceBadge
+                      tier={p.confidence_tier}
+                      confidence={p.confidence}
+                    />
                     <HorizonBadge horizon={p.threat_horizon} />
-                    <Badge color={C.purple}>{p.category.replace(/_/g, " ")}</Badge>
-                    <Badge color={C.textSoft}>{p.contributing_signals} signals</Badge>
+                    <Badge color={C.purple}>
+                      {p.category.replace(/_/g, " ")}
+                    </Badge>
+                    <Badge color={C.textSoft}>
+                      {p.contributing_signals} signals
+                    </Badge>
                   </div>
                   <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                    {p.predicted_techniques.map(t => (
-                      <span key={t} style={{ fontSize: 9, fontFamily: MONO, color: C.cyan, background: C.cyanDim, padding: "1px 5px", borderRadius: 3 }}>{t}</span>
+                    {p.predicted_techniques.map((t) => (
+                      <span
+                        key={t}
+                        style={{
+                          fontSize: 9,
+                          fontFamily: MONO,
+                          color: C.cyan,
+                          background: C.cyanDim,
+                          padding: "1px 5px",
+                          borderRadius: 3,
+                        }}
+                      >
+                        {t}
+                      </span>
                     ))}
-                    {p.affected_assets.slice(0, 2).map(a => (
-                      <span key={a} style={{ fontSize: 9, fontFamily: MONO, color: C.textDim, background: `${C.textDim}15`, padding: "1px 5px", borderRadius: 3 }}>{a}</span>
+                    {p.affected_assets.slice(0, 2).map((a) => (
+                      <span
+                        key={a}
+                        style={{
+                          fontSize: 9,
+                          fontFamily: MONO,
+                          color: C.textDim,
+                          background: `${C.textDim}15`,
+                          padding: "1px 5px",
+                          borderRadius: 3,
+                        }}
+                      >
+                        {a}
+                      </span>
                     ))}
                   </div>
                 </div>
                 <div style={{ textAlign: "right", flexShrink: 0 }}>
-                  <div style={{ fontSize: 24, fontWeight: 800, fontFamily: MONO, color: p.risk_score >= 8 ? C.red : p.risk_score >= 5 ? C.amber : C.accentBright, lineHeight: 1 }}>
+                  <div
+                    style={{
+                      fontSize: 24,
+                      fontWeight: 800,
+                      fontFamily: MONO,
+                      color:
+                        p.risk_score >= 8
+                          ? C.red
+                          : p.risk_score >= 5
+                            ? C.amber
+                            : C.accentBright,
+                      lineHeight: 1,
+                    }}
+                  >
                     {p.risk_score.toFixed(1)}
                   </div>
-                  <div style={{ fontSize: 9, color: C.textDim, marginTop: 2 }}>RISK SCORE</div>
-                  <div style={{ fontSize: 9, fontFamily: MONO, color: C.textDim, marginTop: 4 }}>{p.prediction_id}</div>
+                  <div style={{ fontSize: 9, color: C.textDim, marginTop: 2 }}>
+                    RISK SCORE
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 9,
+                      fontFamily: MONO,
+                      color: C.textDim,
+                      marginTop: 4,
+                    }}
+                  >
+                    {p.prediction_id}
+                  </div>
                 </div>
               </div>
             </div>
@@ -867,64 +2183,185 @@ function PredictorTab({ predictions, predictorStatus }) {
 
 function MeshTab({ mesh, iocs }) {
   const topologyCards = [
-    { type: "Total Nodes", icon: "◆", count: mesh.topology.total_nodes, color: C.accent, desc: "Registered detection nodes" },
-    { type: "Active Nodes", icon: "●", count: mesh.topology.active_nodes, color: C.green, desc: "Nodes currently online" },
-    { type: "Degraded Nodes", icon: "◐", count: mesh.topology.degraded_nodes, color: mesh.topology.degraded_nodes > 0 ? C.amber : C.cyan, desc: "Nodes requiring operator attention" },
+    {
+      type: "Total Nodes",
+      icon: "◆",
+      count: mesh.topology.total_nodes,
+      color: C.accent,
+      desc: "Registered detection nodes",
+    },
+    {
+      type: "Active Nodes",
+      icon: "●",
+      count: mesh.topology.active_nodes,
+      color: C.green,
+      desc: "Nodes currently online",
+    },
+    {
+      type: "Degraded Nodes",
+      icon: "◐",
+      count: mesh.topology.degraded_nodes,
+      color: mesh.topology.degraded_nodes > 0 ? C.amber : C.cyan,
+      desc: "Nodes requiring operator attention",
+    },
   ];
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
-        {topologyCards.map(n => (
+      <div
+        style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}
+      >
+        {topologyCards.map((n) => (
           <Panel key={n.type} title={n.type} icon={n.icon} accent={n.color}>
             <div style={{ textAlign: "center", marginBottom: 8 }}>
-              <div style={{ fontSize: 36, fontWeight: 800, fontFamily: MONO, color: n.color }}>{n.count}</div>
+              <div
+                style={{
+                  fontSize: 36,
+                  fontWeight: 800,
+                  fontFamily: MONO,
+                  color: n.color,
+                }}
+              >
+                {n.count}
+              </div>
               <div style={{ fontSize: 10, color: C.textSoft }}>{n.desc}</div>
             </div>
-            <ProgressBar value={n.count} max={n.count} color={n.color} height={3} />
+            <ProgressBar
+              value={n.count}
+              max={n.count}
+              color={n.color}
+              height={3}
+            />
           </Panel>
         ))}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <Panel title="Tamerian Circuits" icon="⚡" accent={C.green}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <div
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}
+          >
             {[
-              { name: "Healthy Circuits", value: mesh.topology.healthy_circuits, color: C.green },
-              { name: "Total Circuits", value: mesh.topology.total_circuits, color: C.text },
-              { name: "Attack Chains", value: mesh.threat_posture.active_attack_chains, color: mesh.threat_posture.active_attack_chains > 0 ? C.red : C.green },
-              { name: "Mesh Heals", value: mesh.statistics.mesh_heals, color: C.cyan },
-            ].map(c => (
-              <div key={c.name} style={{ padding: "8px 10px", background: C.surface, borderRadius: 6, display: "flex", alignItems: "center", gap: 8 }}>
+              {
+                name: "Healthy Circuits",
+                value: mesh.topology.healthy_circuits,
+                color: C.green,
+              },
+              {
+                name: "Total Circuits",
+                value: mesh.topology.total_circuits,
+                color: C.text,
+              },
+              {
+                name: "Attack Chains",
+                value: mesh.threat_posture.active_attack_chains,
+                color:
+                  mesh.threat_posture.active_attack_chains > 0
+                    ? C.red
+                    : C.green,
+              },
+              {
+                name: "Mesh Heals",
+                value: mesh.statistics.mesh_heals,
+                color: C.cyan,
+              },
+            ].map((c) => (
+              <div
+                key={c.name}
+                style={{
+                  padding: "8px 10px",
+                  background: C.surface,
+                  borderRadius: 6,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
                 <PulseDot color={c.color} size={6} />
                 <span style={{ fontSize: 11, color: C.text }}>{c.name}</span>
-                <span style={{ marginLeft: "auto", fontSize: 11, color: c.color, fontFamily: MONO }}>{c.value}</span>
+                <span
+                  style={{
+                    marginLeft: "auto",
+                    fontSize: 11,
+                    color: c.color,
+                    fontFamily: MONO,
+                  }}
+                >
+                  {c.value}
+                </span>
               </div>
             ))}
           </div>
-          <div style={{ marginTop: 12, padding: 8, background: C.greenGlow, borderRadius: 6, border: `1px solid ${C.green}15` }}>
+          <div
+            style={{
+              marginTop: 12,
+              padding: 8,
+              background: C.greenGlow,
+              borderRadius: 6,
+              border: `1px solid ${C.green}15`,
+            }}
+          >
             <div style={{ fontSize: 10, color: C.green }}>
-              Circuit health now reflects live mesh counters rather than hard-coded topology claims.
+              Circuit health now reflects live mesh counters rather than
+              hard-coded topology claims.
             </div>
           </div>
         </Panel>
 
         <Panel title="Threat Intelligence" icon="🔒" accent={C.amber}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <Stat label="IOCs Active" value={mesh.threat_posture.iocs_active} color={C.amber} />
-            <Stat label="IPs Blocked" value={mesh.threat_posture.ips_blocked} color={C.red} />
-            <Stat label="Domains Blocked" value={mesh.threat_posture.blocked_domains} color={C.red} />
-            <Stat label="Events / Session" value={mesh.statistics.events_ingested.toLocaleString()} color={C.accent} />
+          <div
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
+          >
+            <Stat
+              label="IOCs Active"
+              value={mesh.threat_posture.iocs_active}
+              color={C.amber}
+            />
+            <Stat
+              label="IPs Blocked"
+              value={mesh.threat_posture.ips_blocked}
+              color={C.red}
+            />
+            <Stat
+              label="Domains Blocked"
+              value={mesh.threat_posture.blocked_domains}
+              color={C.red}
+            />
+            <Stat
+              label="Events / Session"
+              value={mesh.statistics.events_ingested.toLocaleString()}
+              color={C.accent}
+            />
           </div>
         </Panel>
       </div>
 
       <Panel title="Active IOC Indicators" icon="📝" accent={C.accent}>
         {iocs.length > 0 ? (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, 1fr)",
+              gap: 6,
+            }}
+          >
             {iocs.slice(0, 12).map((ioc, index) => (
-              <div key={`${ioc.type}-${ioc.value}-${index}`} style={{ padding: "6px 8px", background: C.surface, borderRadius: 4, fontSize: 10, fontFamily: MONO, color: C.textSoft, display: "flex", alignItems: "center", gap: 4 }}>
-                <span style={{ color: C.green }}>●</span> {ioc.type}: {String(ioc.value).slice(0, 48)}
+              <div
+                key={`${ioc.type}-${ioc.value}-${index}`}
+                style={{
+                  padding: "6px 8px",
+                  background: C.surface,
+                  borderRadius: 4,
+                  fontSize: 10,
+                  fontFamily: MONO,
+                  color: C.textSoft,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+              >
+                <span style={{ color: C.green }}>●</span> {ioc.type}:{" "}
+                {String(ioc.value).slice(0, 48)}
               </div>
             ))}
           </div>
@@ -949,7 +2386,9 @@ function IncidentsTab({ incidents, onRefresh }) {
   const [busyActionId, setBusyActionId] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  const selected = detailById[selectedId] || incidents.find(i => i.incident_id === selectedId);
+  const selected =
+    detailById[selectedId] ||
+    incidents.find((i) => i.incident_id === selectedId);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -957,10 +2396,15 @@ function IncidentsTab({ incidents, onRefresh }) {
     setDetailLoading(true);
     qcGet(`/api/incidents/${selectedId}`)
       .then((data) => {
-        if (!cancelled) setDetailById((prev) => ({ ...prev, [selectedId]: adaptIncidentDetail(data.data || {}) }));
+        if (!cancelled)
+          setDetailById((prev) => ({
+            ...prev,
+            [selectedId]: adaptIncidentDetail(data.data || {}),
+          }));
       })
       .catch((err) => {
-        if (!cancelled) addToast(`Failed to load incident detail: ${err.message}`, C.red);
+        if (!cancelled)
+          addToast(`Failed to load incident detail: ${err.message}`, C.red);
       })
       .finally(() => {
         if (!cancelled) setDetailLoading(false);
@@ -972,15 +2416,21 @@ function IncidentsTab({ incidents, onRefresh }) {
 
   const addToast = (msg, color = C.green) => {
     const id = Date.now();
-    setToasts(prev => [...prev, { id, msg, color }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
+    setToasts((prev) => [...prev, { id, msg, color }]);
+    setTimeout(
+      () => setToasts((prev) => prev.filter((t) => t.id !== id)),
+      3500,
+    );
   };
 
   const refreshIncidents = async () => {
     await onRefresh?.();
     if (selectedId) {
       const data = await qcGet(`/api/incidents/${selectedId}`);
-      setDetailById((prev) => ({ ...prev, [selectedId]: adaptIncidentDetail(data.data || {}) }));
+      setDetailById((prev) => ({
+        ...prev,
+        [selectedId]: adaptIncidentDetail(data.data || {}),
+      }));
     }
   };
 
@@ -1002,7 +2452,9 @@ function IncidentsTab({ incidents, onRefresh }) {
     if (!selectedId) return;
     setBusyActionId(actId);
     try {
-      await qcPost(`/api/incidents/${selectedId}/deny/${actId}`, { reason: "Denied from dashboard action panel" });
+      await qcPost(`/api/incidents/${selectedId}/deny/${actId}`, {
+        reason: "Denied from dashboard action panel",
+      });
       addToast(`✗ Action ${actId} denied`, C.amber);
       await refreshIncidents();
     } catch (err) {
@@ -1017,7 +2469,11 @@ function IncidentsTab({ incidents, onRefresh }) {
     if (!selectedId || pending.length === 0) return;
     setBusyActionId("approve-all");
     try {
-      await Promise.all(pending.map((action) => qcPost(`/api/incidents/${selectedId}/approve/${action.id}`, {})));
+      await Promise.all(
+        pending.map((action) =>
+          qcPost(`/api/incidents/${selectedId}/approve/${action.id}`, {}),
+        ),
+      );
       addToast(`✓ ${pending.length} actions approved`, C.green);
       await refreshIncidents();
     } catch (err) {
@@ -1028,27 +2484,63 @@ function IncidentsTab({ incidents, onRefresh }) {
   };
 
   const handleEscalate = (incId) => {
-    addToast(`Severity escalation for ${incId} is not exposed by the backend API yet.`, C.amber);
+    addToast(
+      `Severity escalation for ${incId} is not exposed by the backend API yet.`,
+      C.amber,
+    );
   };
   const handleStatusChange = (incId, newStatus) => {
-    addToast(`Status change to ${newStatus} for ${incId} is not exposed by the backend API yet.`, C.amber);
+    addToast(
+      `Status change to ${newStatus} for ${incId} is not exposed by the backend API yet.`,
+      C.amber,
+    );
   };
 
   const getEffectiveSeverity = (inc) => inc.severity;
   const getEffectiveStatus = (inc) => inc.status;
-  const getPendingCount = (inc) => (inc.pending_actions || []).filter(a => a.status === "pending").length;
+  const getPendingCount = (inc) =>
+    (inc.pending_actions || []).filter((a) => a.status === "pending").length;
 
   const riskColor = { low: C.green, medium: C.amber, high: C.red };
-  const typeColor = { detection: C.red, analysis: C.cyan, containment: C.amber, evidence: C.purple, escalation: C.magenta, enrichment: C.accentBright };
-  const typeIcon = { detection: "⚠", analysis: "🔍", containment: "🛡", evidence: "📦", escalation: "▲", enrichment: "🧠" };
+  const typeColor = {
+    detection: C.red,
+    analysis: C.cyan,
+    containment: C.amber,
+    evidence: C.purple,
+    escalation: C.magenta,
+    enrichment: C.accentBright,
+  };
+  const typeIcon = {
+    detection: "⚠",
+    analysis: "🔍",
+    containment: "🛡",
+    evidence: "📦",
+    escalation: "▲",
+    enrichment: "🧠",
+  };
 
   // ── BACK TO LIST ──
   const backBtn = (
-    <button onClick={() => { setSelectedId(null); setPanel(null); }} style={{
-      padding: "6px 14px", background: "transparent", color: C.textSoft,
-      border: `1px solid ${C.border}`, borderRadius: 5, fontSize: 11, fontWeight: 600,
-      cursor: "pointer", fontFamily: FONT, display: "flex", alignItems: "center", gap: 5,
-    }}>
+    <button
+      onClick={() => {
+        setSelectedId(null);
+        setPanel(null);
+      }}
+      style={{
+        padding: "6px 14px",
+        background: "transparent",
+        color: C.textSoft,
+        border: `1px solid ${C.border}`,
+        borderRadius: 5,
+        fontSize: 11,
+        fontWeight: 600,
+        cursor: "pointer",
+        fontFamily: FONT,
+        display: "flex",
+        alignItems: "center",
+        gap: 5,
+      }}
+    >
       ← Back to Incidents
     </button>
   );
@@ -1056,84 +2548,299 @@ function IncidentsTab({ incidents, onRefresh }) {
   return (
     <div style={{ display: "grid", gap: 16, position: "relative" }}>
       {/* Toast notifications */}
-      <div style={{ position: "fixed", top: 16, right: 16, zIndex: 9999, display: "flex", flexDirection: "column", gap: 6 }}>
-        {toasts.map(t => (
-          <div key={t.id} style={{
-            padding: "8px 14px", background: C.panel, border: `1px solid ${t.color}50`,
-            borderRadius: 6, fontSize: 11, fontWeight: 600, color: t.color,
-            fontFamily: MONO, boxShadow: `0 4px 20px ${t.color}15`,
-            animation: "qcPulse 0.4s ease",
-          }}>{t.msg}</div>
+      <div
+        style={{
+          position: "fixed",
+          top: 16,
+          right: 16,
+          zIndex: 9999,
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+        }}
+      >
+        {toasts.map((t) => (
+          <div
+            key={t.id}
+            style={{
+              padding: "8px 14px",
+              background: C.panel,
+              border: `1px solid ${t.color}50`,
+              borderRadius: 6,
+              fontSize: 11,
+              fontWeight: 600,
+              color: t.color,
+              fontFamily: MONO,
+              boxShadow: `0 4px 20px ${t.color}15`,
+              animation: "qcPulse 0.4s ease",
+            }}
+          >
+            {t.msg}
+          </div>
         ))}
       </div>
 
       {/* ═══════ KPI BANNER ═══════ */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
-        <Panel accent={C.red}><Stat label="Critical" value={incidents.filter(i => getEffectiveSeverity(i) === "CRITICAL").length} color={C.red} /></Panel>
-        <Panel accent={C.amber}><Stat label="High" value={incidents.filter(i => getEffectiveSeverity(i) === "HIGH").length} color={C.amber} /></Panel>
-        <Panel accent={C.accent}><Stat label="Total Active" value={incidents.length} color={C.accent} /></Panel>
-        <Panel accent={C.purple}><Stat label="Pending Actions" value={incidents.reduce((a, i) => a + getPendingCount(i), 0)} color={C.purple} /></Panel>
-        <Panel accent={C.green}><Stat label="Avg Containment" value={`${Math.round(incidents.reduce((a, i) => a + (i.containment_time_min || 0), 0) / Math.max(1, incidents.length))}m`} color={C.green} /></Panel>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(5, 1fr)",
+          gap: 12,
+        }}
+      >
+        <Panel accent={C.red}>
+          <Stat
+            label="Critical"
+            value={
+              incidents.filter((i) => getEffectiveSeverity(i) === "CRITICAL")
+                .length
+            }
+            color={C.red}
+          />
+        </Panel>
+        <Panel accent={C.amber}>
+          <Stat
+            label="High"
+            value={
+              incidents.filter((i) => getEffectiveSeverity(i) === "HIGH").length
+            }
+            color={C.amber}
+          />
+        </Panel>
+        <Panel accent={C.accent}>
+          <Stat
+            label="Total Active"
+            value={incidents.length}
+            color={C.accent}
+          />
+        </Panel>
+        <Panel accent={C.purple}>
+          <Stat
+            label="Pending Actions"
+            value={incidents.reduce((a, i) => a + getPendingCount(i), 0)}
+            color={C.purple}
+          />
+        </Panel>
+        <Panel accent={C.green}>
+          <Stat
+            label="Avg Containment"
+            value={`${Math.round(incidents.reduce((a, i) => a + (i.containment_time_min || 0), 0) / Math.max(1, incidents.length))}m`}
+            color={C.green}
+          />
+        </Panel>
       </div>
 
       {/* ═══════ INVESTIGATION DETAIL VIEW ═══════ */}
       {selected && panel === "investigate" && (
         <div style={{ display: "grid", gap: 12 }}>
           {backBtn}
-          <Panel title={`🔬 Investigation — ${selected.incident_id}`} accent={C.accent} glow>
-            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
+          <Panel
+            title={`🔬 Investigation — ${selected.incident_id}`}
+            accent={C.accent}
+            glow
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "2fr 1fr",
+                gap: 16,
+              }}
+            >
               {/* Left col — details */}
               <div style={{ display: "grid", gap: 12 }}>
                 <div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>{selected.title}</div>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+                  <div
+                    style={{
+                      fontSize: 16,
+                      fontWeight: 700,
+                      color: C.text,
+                      marginBottom: 8,
+                    }}
+                  >
+                    {selected.title}
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 6,
+                      flexWrap: "wrap",
+                      marginBottom: 8,
+                    }}
+                  >
                     <SeverityBadge severity={getEffectiveSeverity(selected)} />
                     <Badge color={C.cyan}>{getEffectiveStatus(selected)}</Badge>
                     <Badge color={C.textSoft}>{selected.category}</Badge>
                     <Badge color={C.textSoft}>{selected.playbook}</Badge>
                   </div>
-                  <div style={{ fontSize: 10, color: C.textDim, fontFamily: MONO }}>
-                    Lead: {selected.lead_analyst} · Created: {new Date(selected.created_at).toLocaleString()} · Assets: {selected.affected_assets}
+                  <div
+                    style={{ fontSize: 10, color: C.textDim, fontFamily: MONO }}
+                  >
+                    Lead: {selected.lead_analyst} · Created:{" "}
+                    {new Date(selected.created_at).toLocaleString()} · Assets:{" "}
+                    {selected.affected_assets}
                   </div>
                 </div>
                 {/* Status control */}
-                <div style={{ padding: "10px 12px", background: C.surface, borderRadius: 6 }}>
-                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Status Control</div>
+                <div
+                  style={{
+                    padding: "10px 12px",
+                    background: C.surface,
+                    borderRadius: 6,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: C.textDim,
+                      marginBottom: 6,
+                      textTransform: "uppercase",
+                      letterSpacing: 1,
+                    }}
+                  >
+                    Status Control
+                  </div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {["triaged","investigating","containing","eradicating","recovering","resolved"].map(s => (
-                      <button key={s} onClick={() => handleStatusChange(selected.incident_id, s)} style={{
-                        padding: "4px 10px", borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: "pointer",
-                        border: `1px solid ${getEffectiveStatus(selected) === s ? C.cyan : C.border}`,
-                        background: getEffectiveStatus(selected) === s ? C.cyanDim : "transparent",
-                        color: getEffectiveStatus(selected) === s ? C.cyan : C.textSoft,
-                      }}>{s}</button>
+                    {[
+                      "triaged",
+                      "investigating",
+                      "containing",
+                      "eradicating",
+                      "recovering",
+                      "resolved",
+                    ].map((s) => (
+                      <button
+                        key={s}
+                        onClick={() =>
+                          handleStatusChange(selected.incident_id, s)
+                        }
+                        style={{
+                          padding: "4px 10px",
+                          borderRadius: 4,
+                          fontSize: 10,
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          border: `1px solid ${getEffectiveStatus(selected) === s ? C.cyan : C.border}`,
+                          background:
+                            getEffectiveStatus(selected) === s
+                              ? C.cyanDim
+                              : "transparent",
+                          color:
+                            getEffectiveStatus(selected) === s
+                              ? C.cyan
+                              : C.textSoft,
+                        }}
+                      >
+                        {s}
+                      </button>
                     ))}
                     {getEffectiveSeverity(selected) !== "CRITICAL" && (
-                      <button onClick={() => handleEscalate(selected.incident_id)} style={{
-                        padding: "4px 10px", borderRadius: 4, fontSize: 10, fontWeight: 700, cursor: "pointer",
-                        border: `1px solid ${C.red}60`, background: C.redDim, color: C.red,
-                      }}>▲ Escalate to CRITICAL</button>
+                      <button
+                        onClick={() => handleEscalate(selected.incident_id)}
+                        style={{
+                          padding: "4px 10px",
+                          borderRadius: 4,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          border: `1px solid ${C.red}60`,
+                          background: C.redDim,
+                          color: C.red,
+                        }}
+                      >
+                        ▲ Escalate to CRITICAL
+                      </button>
                     )}
                   </div>
                 </div>
                 {/* MITRE ATT&CK */}
-                <div style={{ padding: "10px 12px", background: C.surface, borderRadius: 6 }}>
-                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>MITRE ATT&CK Techniques</div>
+                <div
+                  style={{
+                    padding: "10px 12px",
+                    background: C.surface,
+                    borderRadius: 6,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: C.textDim,
+                      marginBottom: 6,
+                      textTransform: "uppercase",
+                      letterSpacing: 1,
+                    }}
+                  >
+                    MITRE ATT&CK Techniques
+                  </div>
                   <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                     {selected.mitre_techniques.map((t, i) => (
-                      <span key={i} style={{ padding: "3px 8px", background: C.purpleDim, borderRadius: 4, fontSize: 10, fontFamily: MONO, color: C.purple, border: `1px solid ${C.purple}30` }}>{t}</span>
+                      <span
+                        key={i}
+                        style={{
+                          padding: "3px 8px",
+                          background: C.purpleDim,
+                          borderRadius: 4,
+                          fontSize: 10,
+                          fontFamily: MONO,
+                          color: C.purple,
+                          border: `1px solid ${C.purple}30`,
+                        }}
+                      >
+                        {t}
+                      </span>
                     ))}
                   </div>
                 </div>
                 {/* Evidence */}
-                <div style={{ padding: "10px 12px", background: C.surface, borderRadius: 6 }}>
-                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Collected Evidence ({selected.evidence.length})</div>
+                <div
+                  style={{
+                    padding: "10px 12px",
+                    background: C.surface,
+                    borderRadius: 6,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: C.textDim,
+                      marginBottom: 6,
+                      textTransform: "uppercase",
+                      letterSpacing: 1,
+                    }}
+                  >
+                    Collected Evidence ({selected.evidence.length})
+                  </div>
                   {selected.evidence.map((e, i) => (
-                    <div key={e.id} style={{ padding: "6px 8px", background: C.panel, borderRadius: 4, marginBottom: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div
+                      key={e.id}
+                      style={{
+                        padding: "6px 8px",
+                        background: C.panel,
+                        borderRadius: 4,
+                        marginBottom: 4,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
                       <div>
-                        <div style={{ fontSize: 11, color: C.text, fontWeight: 500 }}>{e.desc}</div>
-                        <div style={{ fontSize: 9, fontFamily: MONO, color: C.textDim }}>
-                          {e.id} · {e.type} · {e.size_mb}MB · CoC: {e.chain_of_custody}
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: C.text,
+                            fontWeight: 500,
+                          }}
+                        >
+                          {e.desc}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 9,
+                            fontFamily: MONO,
+                            color: C.textDim,
+                          }}
+                        >
+                          {e.id} · {e.type} · {e.size_mb}MB · CoC:{" "}
+                          {e.chain_of_custody}
                         </div>
                       </div>
                       <Badge color={C.green}>secured</Badge>
@@ -1141,53 +2848,224 @@ function IncidentsTab({ incidents, onRefresh }) {
                   ))}
                 </div>
                 {/* Analyst Notes */}
-                <div style={{ padding: "10px 12px", background: C.surface, borderRadius: 6 }}>
-                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Session Notes</div>
+                <div
+                  style={{
+                    padding: "10px 12px",
+                    background: C.surface,
+                    borderRadius: 6,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: C.textDim,
+                      marginBottom: 6,
+                      textTransform: "uppercase",
+                      letterSpacing: 1,
+                    }}
+                  >
+                    Session Notes
+                  </div>
                   <textarea
                     value={analystNotes[selected.incident_id] || ""}
-                    onChange={e => setAnalystNotes(prev => ({ ...prev, [selected.incident_id]: e.target.value }))}
+                    onChange={(e) =>
+                      setAnalystNotes((prev) => ({
+                        ...prev,
+                        [selected.incident_id]: e.target.value,
+                      }))
+                    }
                     placeholder="Session-local notes for your current review context…"
                     style={{
-                      width: "100%", minHeight: 70, padding: "8px 10px", background: C.panel,
-                      border: `1px solid ${C.border}`, borderRadius: 4, color: C.text,
-                      fontFamily: MONO, fontSize: 11, resize: "vertical", outline: "none",
+                      width: "100%",
+                      minHeight: 70,
+                      padding: "8px 10px",
+                      background: C.panel,
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 4,
+                      color: C.text,
+                      fontFamily: MONO,
+                      fontSize: 11,
+                      resize: "vertical",
+                      outline: "none",
                     }}
                   />
-                  <button onClick={() => addToast(`📝 Session note saved for ${selected.incident_id}`, C.green)} style={{
-                    marginTop: 6, padding: "5px 14px", background: C.accent, color: "#fff",
-                    border: "none", borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: "pointer",
-                  }}>Save Session Note</button>
+                  <button
+                    onClick={() =>
+                      addToast(
+                        `📝 Session note saved for ${selected.incident_id}`,
+                        C.green,
+                      )
+                    }
+                    style={{
+                      marginTop: 6,
+                      padding: "5px 14px",
+                      background: C.accent,
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 4,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Save Session Note
+                  </button>
                 </div>
               </div>
               {/* Right col — IOCs + quick actions */}
               <div style={{ display: "grid", gap: 12, alignContent: "start" }}>
-                <div style={{ padding: "10px 12px", background: C.surface, borderRadius: 6 }}>
-                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>IOC Indicators ({selected.iocs.length})</div>
+                <div
+                  style={{
+                    padding: "10px 12px",
+                    background: C.surface,
+                    borderRadius: 6,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: C.textDim,
+                      marginBottom: 6,
+                      textTransform: "uppercase",
+                      letterSpacing: 1,
+                    }}
+                  >
+                    IOC Indicators ({selected.iocs.length})
+                  </div>
                   {selected.iocs.map((ioc, i) => (
-                    <div key={i} style={{ padding: "5px 8px", background: C.panel, borderRadius: 4, marginBottom: 3 }}>
-                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                        <Badge color={C.red} style={{ fontSize: 8 }}>{ioc.type}</Badge>
-                        <span style={{ fontSize: 10, fontFamily: MONO, color: C.text, wordBreak: "break-all" }}>{ioc.value.length > 40 ? ioc.value.slice(0,40)+"…" : ioc.value}</span>
+                    <div
+                      key={i}
+                      style={{
+                        padding: "5px 8px",
+                        background: C.panel,
+                        borderRadius: 4,
+                        marginBottom: 3,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 6,
+                          alignItems: "center",
+                        }}
+                      >
+                        <Badge color={C.red} style={{ fontSize: 8 }}>
+                          {ioc.type}
+                        </Badge>
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontFamily: MONO,
+                            color: C.text,
+                            wordBreak: "break-all",
+                          }}
+                        >
+                          {ioc.value.length > 40
+                            ? ioc.value.slice(0, 40) + "…"
+                            : ioc.value}
+                        </span>
                       </div>
-                      <div style={{ fontSize: 8, color: C.textDim, fontFamily: MONO, marginTop: 2 }}>
-                        via {ioc.source} · {new Date(ioc.first_seen).toLocaleTimeString()}
+                      <div
+                        style={{
+                          fontSize: 8,
+                          color: C.textDim,
+                          fontFamily: MONO,
+                          marginTop: 2,
+                        }}
+                      >
+                        via {ioc.source} ·{" "}
+                        {new Date(ioc.first_seen).toLocaleTimeString()}
                       </div>
                     </div>
                   ))}
                 </div>
-                <div style={{ padding: "10px 12px", background: C.surface, borderRadius: 6 }}>
-                  <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Quick Actions</div>
+                <div
+                  style={{
+                    padding: "10px 12px",
+                    background: C.surface,
+                    borderRadius: 6,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: C.textDim,
+                      marginBottom: 6,
+                      textTransform: "uppercase",
+                      letterSpacing: 1,
+                    }}
+                  >
+                    Quick Actions
+                  </div>
                   <div style={{ display: "grid", gap: 4 }}>
-                    <button onClick={() => { setPanel("approve"); }} style={{ padding: "6px 10px", background: C.amberDim, border: `1px solid ${C.amber}40`, borderRadius: 4, fontSize: 10, fontWeight: 600, color: C.amber, cursor: "pointer", textAlign: "left" }}>
+                    <button
+                      onClick={() => {
+                        setPanel("approve");
+                      }}
+                      style={{
+                        padding: "6px 10px",
+                        background: C.amberDim,
+                        border: `1px solid ${C.amber}40`,
+                        borderRadius: 4,
+                        fontSize: 10,
+                        fontWeight: 600,
+                        color: C.amber,
+                        cursor: "pointer",
+                        textAlign: "left",
+                      }}
+                    >
                       🛡 Review Pending Actions ({getPendingCount(selected)})
                     </button>
-                    <button onClick={() => { setPanel("timeline"); }} style={{ padding: "6px 10px", background: C.cyanDim, border: `1px solid ${C.cyan}40`, borderRadius: 4, fontSize: 10, fontWeight: 600, color: C.cyan, cursor: "pointer", textAlign: "left" }}>
+                    <button
+                      onClick={() => {
+                        setPanel("timeline");
+                      }}
+                      style={{
+                        padding: "6px 10px",
+                        background: C.cyanDim,
+                        border: `1px solid ${C.cyan}40`,
+                        borderRadius: 4,
+                        fontSize: 10,
+                        fontWeight: 600,
+                        color: C.cyan,
+                        cursor: "pointer",
+                        textAlign: "left",
+                      }}
+                    >
                       📜 View Full Timeline ({selected.timeline.length} events)
                     </button>
-                    <button onClick={() => handleEscalate(selected.incident_id)} style={{ padding: "6px 10px", background: C.redDim, border: `1px solid ${C.red}40`, borderRadius: 4, fontSize: 10, fontWeight: 600, color: C.red, cursor: "pointer", textAlign: "left" }}>
+                    <button
+                      onClick={() => handleEscalate(selected.incident_id)}
+                      style={{
+                        padding: "6px 10px",
+                        background: C.redDim,
+                        border: `1px solid ${C.red}40`,
+                        borderRadius: 4,
+                        fontSize: 10,
+                        fontWeight: 600,
+                        color: C.red,
+                        cursor: "pointer",
+                        textAlign: "left",
+                      }}
+                    >
                       ▲ Escalate Severity
                     </button>
-                    <button onClick={() => handleStatusChange(selected.incident_id, "resolved")} style={{ padding: "6px 10px", background: C.greenDim, border: `1px solid ${C.green}40`, borderRadius: 4, fontSize: 10, fontWeight: 600, color: C.green, cursor: "pointer", textAlign: "left" }}>
+                    <button
+                      onClick={() =>
+                        handleStatusChange(selected.incident_id, "resolved")
+                      }
+                      style={{
+                        padding: "6px 10px",
+                        background: C.greenDim,
+                        border: `1px solid ${C.green}40`,
+                        borderRadius: 4,
+                        fontSize: 10,
+                        fontWeight: 600,
+                        color: C.green,
+                        cursor: "pointer",
+                        textAlign: "left",
+                      }}
+                    >
                       ✓ Request Resolve Status
                     </button>
                   </div>
@@ -1202,38 +3080,102 @@ function IncidentsTab({ incidents, onRefresh }) {
       {selected && panel === "approve" && (
         <div style={{ display: "grid", gap: 12 }}>
           {backBtn}
-          <Panel title={`🛡 Action Approval — ${selected.incident_id}`} accent={C.amber} glow>
-            <div style={{ marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <Panel
+            title={`🛡 Action Approval — ${selected.incident_id}`}
+            accent={C.amber}
+            glow
+          >
+            <div
+              style={{
+                marginBottom: 12,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{selected.title}</div>
-                <div style={{ fontSize: 10, color: C.textSoft }}>{getPendingCount(selected)} of {selected.pending_actions.length} actions awaiting approval</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
+                  {selected.title}
+                </div>
+                <div style={{ fontSize: 10, color: C.textSoft }}>
+                  {getPendingCount(selected)} of{" "}
+                  {selected.pending_actions.length} actions awaiting approval
+                </div>
               </div>
               {getPendingCount(selected) > 0 && (
-                <button onClick={() => handleApproveAll(selected.pending_actions)} disabled={busyActionId === "approve-all"} style={{
-                  padding: "6px 16px", background: C.green, color: "#fff", border: "none",
-                  borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer",
-                  opacity: busyActionId === "approve-all" ? 0.6 : 1,
-                }}>{busyActionId === "approve-all" ? "Approving..." : "✓ Approve All Remaining"}</button>
+                <button
+                  onClick={() => handleApproveAll(selected.pending_actions)}
+                  disabled={busyActionId === "approve-all"}
+                  style={{
+                    padding: "6px 16px",
+                    background: C.green,
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 5,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    opacity: busyActionId === "approve-all" ? 0.6 : 1,
+                  }}
+                >
+                  {busyActionId === "approve-all"
+                    ? "Approving..."
+                    : "✓ Approve All Remaining"}
+                </button>
               )}
             </div>
 
             <div style={{ display: "grid", gap: 6 }}>
-              {selected.pending_actions.map(act => {
+              {selected.pending_actions.map((act) => {
                 const st = act.status;
                 return (
-                  <div key={act.id} style={{
-                    padding: "12px 14px", background: C.surface, borderRadius: 6,
-                    border: `1px solid ${st === "completed" ? C.green + "40" : st === "denied" ? C.red + "40" : C.border}`,
-                    opacity: st !== "pending" ? 0.75 : 1, transition: "all 0.3s ease",
-                  }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div
+                    key={act.id}
+                    style={{
+                      padding: "12px 14px",
+                      background: C.surface,
+                      borderRadius: 6,
+                      border: `1px solid ${st === "completed" ? C.green + "40" : st === "denied" ? C.red + "40" : C.border}`,
+                      opacity: st !== "pending" ? 0.75 : 1,
+                      transition: "all 0.3s ease",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                      }}
+                    >
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 4 }}>{act.action}</div>
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: C.text,
+                            marginBottom: 4,
+                          }}
+                        >
+                          {act.action}
+                        </div>
+                        <div
+                          style={{ display: "flex", gap: 6, flexWrap: "wrap" }}
+                        >
                           <Badge color={C.cyan}>{act.type}</Badge>
-                          <Badge color={riskColor[act.risk]}>{act.risk} risk</Badge>
-                          <span style={{ fontSize: 9, color: C.textDim, fontFamily: MONO }}>
-                            {act.id} · by {act.requested_by} {act.requested_at ? `· ${new Date(act.requested_at).toLocaleTimeString()}` : ""}
+                          <Badge color={riskColor[act.risk]}>
+                            {act.risk} risk
+                          </Badge>
+                          <span
+                            style={{
+                              fontSize: 9,
+                              color: C.textDim,
+                              fontFamily: MONO,
+                            }}
+                          >
+                            {act.id} · by {act.requested_by}{" "}
+                            {act.requested_at
+                              ? `· ${new Date(act.requested_at).toLocaleTimeString()}`
+                              : ""}
                           </span>
                         </div>
                       </div>
@@ -1244,16 +3186,40 @@ function IncidentsTab({ incidents, onRefresh }) {
                           <Badge color={C.red}>✗ DENIED</Badge>
                         ) : (
                           <>
-                            <button onClick={() => handleApprove(act.id)} disabled={busyActionId === act.id} style={{
-                              padding: "5px 14px", background: C.green, color: "#fff", border: "none",
-                              borderRadius: 4, fontSize: 10, fontWeight: 700, cursor: "pointer",
-                              opacity: busyActionId === act.id ? 0.6 : 1,
-                            }}>{busyActionId === act.id ? "..." : "✓ Approve"}</button>
-                            <button onClick={() => handleReject(act.id)} disabled={busyActionId === act.id} style={{
-                              padding: "5px 14px", background: "transparent", color: C.red,
-                              border: `1px solid ${C.red}50`, borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: "pointer",
-                              opacity: busyActionId === act.id ? 0.6 : 1,
-                            }}>✗ Reject</button>
+                            <button
+                              onClick={() => handleApprove(act.id)}
+                              disabled={busyActionId === act.id}
+                              style={{
+                                padding: "5px 14px",
+                                background: C.green,
+                                color: "#fff",
+                                border: "none",
+                                borderRadius: 4,
+                                fontSize: 10,
+                                fontWeight: 700,
+                                cursor: "pointer",
+                                opacity: busyActionId === act.id ? 0.6 : 1,
+                              }}
+                            >
+                              {busyActionId === act.id ? "..." : "✓ Approve"}
+                            </button>
+                            <button
+                              onClick={() => handleReject(act.id)}
+                              disabled={busyActionId === act.id}
+                              style={{
+                                padding: "5px 14px",
+                                background: "transparent",
+                                color: C.red,
+                                border: `1px solid ${C.red}50`,
+                                borderRadius: 4,
+                                fontSize: 10,
+                                fontWeight: 600,
+                                cursor: "pointer",
+                                opacity: busyActionId === act.id ? 0.6 : 1,
+                              }}
+                            >
+                              ✗ Reject
+                            </button>
                           </>
                         )}
                       </div>
@@ -1264,8 +3230,36 @@ function IncidentsTab({ incidents, onRefresh }) {
             </div>
           </Panel>
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => setPanel("investigate")} style={{ padding: "6px 14px", background: C.accent, color: "#fff", border: "none", borderRadius: 5, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>🔬 Back to Investigation</button>
-            <button onClick={() => setPanel("timeline")} style={{ padding: "6px 14px", background: "transparent", color: C.cyan, border: `1px solid ${C.cyan}40`, borderRadius: 5, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>📜 View Timeline</button>
+            <button
+              onClick={() => setPanel("investigate")}
+              style={{
+                padding: "6px 14px",
+                background: C.accent,
+                color: "#fff",
+                border: "none",
+                borderRadius: 5,
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              🔬 Back to Investigation
+            </button>
+            <button
+              onClick={() => setPanel("timeline")}
+              style={{
+                padding: "6px 14px",
+                background: "transparent",
+                color: C.cyan,
+                border: `1px solid ${C.cyan}40`,
+                borderRadius: 5,
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              📜 View Timeline
+            </button>
           </div>
         </div>
       )}
@@ -1274,40 +3268,146 @@ function IncidentsTab({ incidents, onRefresh }) {
       {selected && panel === "timeline" && (
         <div style={{ display: "grid", gap: 12 }}>
           {backBtn}
-          <Panel title={`📜 Incident Timeline — ${selected.incident_id}`} accent={C.cyan} glow>
+          <Panel
+            title={`📜 Incident Timeline — ${selected.incident_id}`}
+            accent={C.cyan}
+            glow
+          >
             <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{selected.title}</div>
-              <div style={{ fontSize: 10, color: C.textSoft }}>{selected.timeline.length} events · {new Date(selected.created_at).toLocaleString()} → present</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
+                {selected.title}
+              </div>
+              <div style={{ fontSize: 10, color: C.textSoft }}>
+                {selected.timeline.length} events ·{" "}
+                {new Date(selected.created_at).toLocaleString()} → present
+              </div>
             </div>
             <div style={{ position: "relative", paddingLeft: 28 }}>
               {/* Timeline line */}
-              <div style={{ position: "absolute", left: 10, top: 4, bottom: 4, width: 2, background: `linear-gradient(180deg, ${C.cyan}, ${C.border})`, borderRadius: 1 }} />
+              <div
+                style={{
+                  position: "absolute",
+                  left: 10,
+                  top: 4,
+                  bottom: 4,
+                  width: 2,
+                  background: `linear-gradient(180deg, ${C.cyan}, ${C.border})`,
+                  borderRadius: 1,
+                }}
+              />
               {selected.timeline.map((evt, i) => (
-                <div key={i} style={{ position: "relative", marginBottom: 12, paddingBottom: 4 }}>
+                <div
+                  key={i}
+                  style={{
+                    position: "relative",
+                    marginBottom: 12,
+                    paddingBottom: 4,
+                  }}
+                >
                   {/* Timeline dot */}
-                  <div style={{
-                    position: "absolute", left: -22, top: 4, width: 10, height: 10,
-                    borderRadius: "50%", background: typeColor[evt.type] || C.cyan,
-                    border: `2px solid ${C.panel}`, boxShadow: `0 0 6px ${typeColor[evt.type] || C.cyan}50`,
-                  }} />
-                  <div style={{ padding: "8px 12px", background: C.surface, borderRadius: 6, border: `1px solid ${C.border}` }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
-                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                        <span style={{ fontSize: 12 }}>{typeIcon[evt.type] || "●"}</span>
-                        <Badge color={typeColor[evt.type] || C.textDim}>{evt.type}</Badge>
-                        <span style={{ fontSize: 9, color: C.textDim, fontFamily: MONO }}>{evt.actor}</span>
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: -22,
+                      top: 4,
+                      width: 10,
+                      height: 10,
+                      borderRadius: "50%",
+                      background: typeColor[evt.type] || C.cyan,
+                      border: `2px solid ${C.panel}`,
+                      boxShadow: `0 0 6px ${typeColor[evt.type] || C.cyan}50`,
+                    }}
+                  />
+                  <div
+                    style={{
+                      padding: "8px 12px",
+                      background: C.surface,
+                      borderRadius: 6,
+                      border: `1px solid ${C.border}`,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        marginBottom: 4,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 6,
+                          alignItems: "center",
+                        }}
+                      >
+                        <span style={{ fontSize: 12 }}>
+                          {typeIcon[evt.type] || "●"}
+                        </span>
+                        <Badge color={typeColor[evt.type] || C.textDim}>
+                          {evt.type}
+                        </Badge>
+                        <span
+                          style={{
+                            fontSize: 9,
+                            color: C.textDim,
+                            fontFamily: MONO,
+                          }}
+                        >
+                          {evt.actor}
+                        </span>
                       </div>
-                      <span style={{ fontSize: 9, color: C.textDim, fontFamily: MONO }}>{new Date(evt.time).toLocaleTimeString()}</span>
+                      <span
+                        style={{
+                          fontSize: 9,
+                          color: C.textDim,
+                          fontFamily: MONO,
+                        }}
+                      >
+                        {new Date(evt.time).toLocaleTimeString()}
+                      </span>
                     </div>
-                    <div style={{ fontSize: 11, color: C.text, lineHeight: 1.5 }}>{evt.event}</div>
+                    <div
+                      style={{ fontSize: 11, color: C.text, lineHeight: 1.5 }}
+                    >
+                      {evt.event}
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           </Panel>
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => setPanel("investigate")} style={{ padding: "6px 14px", background: C.accent, color: "#fff", border: "none", borderRadius: 5, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>🔬 Back to Investigation</button>
-            <button onClick={() => setPanel("approve")} style={{ padding: "6px 14px", background: "transparent", color: C.amber, border: `1px solid ${C.amber}40`, borderRadius: 5, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>🛡 Review Actions</button>
+            <button
+              onClick={() => setPanel("investigate")}
+              style={{
+                padding: "6px 14px",
+                background: C.accent,
+                color: "#fff",
+                border: "none",
+                borderRadius: 5,
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              🔬 Back to Investigation
+            </button>
+            <button
+              onClick={() => setPanel("approve")}
+              style={{
+                padding: "6px 14px",
+                background: "transparent",
+                color: C.amber,
+                border: `1px solid ${C.amber}40`,
+                borderRadius: 5,
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              🛡 Review Actions
+            </button>
           </div>
         </div>
       )}
@@ -1317,47 +3417,133 @@ function IncidentsTab({ incidents, onRefresh }) {
         <>
           <Panel title="Active Incidents" icon="🚨" accent={C.red}>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {incidents.map(inc => (
-                <div key={inc.incident_id} style={{
-                  padding: 14, background: C.surface, borderRadius: 8,
-                  border: `1px solid ${getEffectiveSeverity(inc) === "CRITICAL" ? C.red + "30" : C.border}`,
-                  boxShadow: getEffectiveSeverity(inc) === "CRITICAL" ? `0 0 20px ${C.red}06` : "none",
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              {incidents.map((inc) => (
+                <div
+                  key={inc.incident_id}
+                  style={{
+                    padding: 14,
+                    background: C.surface,
+                    borderRadius: 8,
+                    border: `1px solid ${getEffectiveSeverity(inc) === "CRITICAL" ? C.red + "30" : C.border}`,
+                    boxShadow:
+                      getEffectiveSeverity(inc) === "CRITICAL"
+                        ? `0 0 20px ${C.red}06`
+                        : "none",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                    }}
+                  >
                     <div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 6 }}>{inc.title}</div>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 600,
+                          color: C.text,
+                          marginBottom: 6,
+                        }}
+                      >
+                        {inc.title}
+                      </div>
+                      <div
+                        style={{ display: "flex", gap: 6, flexWrap: "wrap" }}
+                      >
                         <SeverityBadge severity={getEffectiveSeverity(inc)} />
                         <Badge color={C.cyan}>{getEffectiveStatus(inc)}</Badge>
                         <Badge color={C.textSoft}>{inc.category}</Badge>
                         <Badge color={C.textSoft}>{inc.incident_id}</Badge>
-                        {analystNotes[inc.incident_id] && <Badge color={C.green}>📝 notes</Badge>}
+                        {analystNotes[inc.incident_id] && (
+                          <Badge color={C.green}>📝 notes</Badge>
+                        )}
                       </div>
                     </div>
                     <div style={{ textAlign: "right" }}>
-                      <div style={{ fontSize: 10, color: C.textSoft }}>{inc.affected_assets} assets · {inc.evidence.length} evidence</div>
-                      <div style={{ fontSize: 10, color: C.textDim, fontFamily: MONO }}>{inc.lead_analyst}</div>
+                      <div style={{ fontSize: 10, color: C.textSoft }}>
+                        {inc.affected_assets} assets · {inc.evidence.length}{" "}
+                        evidence
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 10,
+                          color: C.textDim,
+                          fontFamily: MONO,
+                        }}
+                      >
+                        {inc.lead_analyst}
+                      </div>
                       {getPendingCount(inc) > 0 && (
-                        <Badge color={C.amber} style={{ marginTop: 4 }}>{getPendingCount(inc)} actions pending</Badge>
+                        <Badge color={C.amber} style={{ marginTop: 4 }}>
+                          {getPendingCount(inc)} actions pending
+                        </Badge>
                       )}
                     </div>
                   </div>
                   <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
-                    <button onClick={() => { setSelectedId(inc.incident_id); setPanel("investigate"); }} style={{
-                      padding: "5px 14px", background: C.accent, color: "#fff", border: "none",
-                      borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: "pointer",
-                      transition: "all 0.2s", boxShadow: `0 0 10px ${C.accent}30`,
-                    }}>🔬 Investigate</button>
-                    <button onClick={() => { setSelectedId(inc.incident_id); setPanel("approve"); }} style={{
-                      padding: "5px 14px", background: "transparent", color: C.amber,
-                      border: `1px solid ${C.amber}40`, borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: "pointer",
-                      transition: "all 0.2s",
-                    }}>🛡 Approve Actions{getPendingCount(inc) > 0 ? ` (${getPendingCount(inc)})` : ""}</button>
-                    <button onClick={() => { setSelectedId(inc.incident_id); setPanel("timeline"); }} style={{
-                      padding: "5px 14px", background: "transparent", color: C.cyan,
-                      border: `1px solid ${C.cyan}40`, borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: "pointer",
-                      transition: "all 0.2s",
-                    }}>📜 Timeline ({inc.timeline.length})</button>
+                    <button
+                      onClick={() => {
+                        setSelectedId(inc.incident_id);
+                        setPanel("investigate");
+                      }}
+                      style={{
+                        padding: "5px 14px",
+                        background: C.accent,
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: 4,
+                        fontSize: 10,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        transition: "all 0.2s",
+                        boxShadow: `0 0 10px ${C.accent}30`,
+                      }}
+                    >
+                      🔬 Investigate
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedId(inc.incident_id);
+                        setPanel("approve");
+                      }}
+                      style={{
+                        padding: "5px 14px",
+                        background: "transparent",
+                        color: C.amber,
+                        border: `1px solid ${C.amber}40`,
+                        borderRadius: 4,
+                        fontSize: 10,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        transition: "all 0.2s",
+                      }}
+                    >
+                      🛡 Approve Actions
+                      {getPendingCount(inc) > 0
+                        ? ` (${getPendingCount(inc)})`
+                        : ""}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedId(inc.incident_id);
+                        setPanel("timeline");
+                      }}
+                      style={{
+                        padding: "5px 14px",
+                        background: "transparent",
+                        color: C.cyan,
+                        border: `1px solid ${C.cyan}40`,
+                        borderRadius: 4,
+                        fontSize: 10,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        transition: "all 0.2s",
+                      }}
+                    >
+                      📜 Timeline ({inc.timeline.length})
+                    </button>
                   </div>
                 </div>
               ))}
@@ -1365,9 +3551,32 @@ function IncidentsTab({ incidents, onRefresh }) {
           </Panel>
 
           <Panel title="Response Playbooks" icon="📋" accent={C.green}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-              {["Ransomware Response", "APT Campaign Response", "Data Breach Response", "Unauthorized Access", "Phishing Response", "Insider Threat"].map(pb => (
-                <div key={pb} style={{ padding: "8px 10px", background: C.surface, borderRadius: 6, display: "flex", alignItems: "center", gap: 6 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, 1fr)",
+                gap: 8,
+              }}
+            >
+              {[
+                "Ransomware Response",
+                "APT Campaign Response",
+                "Data Breach Response",
+                "Unauthorized Access",
+                "Phishing Response",
+                "Insider Threat",
+              ].map((pb) => (
+                <div
+                  key={pb}
+                  style={{
+                    padding: "8px 10px",
+                    background: C.surface,
+                    borderRadius: 6,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
                   <span style={{ color: C.green, fontSize: 10 }}>▶</span>
                   <span style={{ fontSize: 11, color: C.text }}>{pb}</span>
                 </div>
@@ -1383,7 +3592,9 @@ function IncidentsTab({ incidents, onRefresh }) {
 // ─── VULN TAB ─────────────────────────────────────────────────────────────
 
 function VulnsTab({ onAvatarStateChange, onSound }) {
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem("qc_api_key") || "");
+  const [apiKey, setApiKey] = useState(
+    () => localStorage.getItem("qc_api_key") || "",
+  );
   const [ack, setAck] = useState(false);
 
   const [target, setTarget] = useState("192.168.1.0/24");
@@ -1402,7 +3613,11 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
   const [oneClickPhase, setOneClickPhase] = useState("");
   const [oneClickLog, setOneClickLog] = useState([]);
   const [oneClickResult, setOneClickResult] = useState(null);
-  const ocLog = (msg, color) => setOneClickLog(prev => [...prev, { msg, color: color || "#8a9dbd", ts: new Date().toLocaleTimeString() }]);
+  const ocLog = (msg, color) =>
+    setOneClickLog((prev) => [
+      ...prev,
+      { msg, color: color || "#8a9dbd", ts: new Date().toLocaleTimeString() },
+    ]);
 
   const headers = useMemo(() => {
     const h = { "Content-Type": "application/json" };
@@ -1410,35 +3625,54 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
     return h;
   }, [apiKey]);
 
-  const apiFetch = useCallback(async (path, init = {}) => {
-    try {
-      const res = await qcFetchWithRetry(`${QC_API}${path}`, { ...init, headers: { ...(init.headers || {}), ...headers } });
-      const text = await res.text();
-      let json = null;
-      try { json = text ? JSON.parse(text) : null; } catch { json = null; }
-      if (!res.ok) {
-        const msg =
-          (json?.message && String(json.message).trim())
-          || json?.error
-          || `${res.status} ${res.statusText}`;
-        throw new Error(msg);
+  const apiFetch = useCallback(
+    async (path, init = {}) => {
+      try {
+        const res = await qcFetchWithRetry(`${QC_API}${path}`, {
+          ...init,
+          headers: { ...(init.headers || {}), ...headers },
+        });
+        const text = await res.text();
+        let json = null;
+        try {
+          json = text ? JSON.parse(text) : null;
+        } catch {
+          json = null;
+        }
+        if (!res.ok) {
+          const msg =
+            (json?.message && String(json.message).trim()) ||
+            json?.error ||
+            `${res.status} ${res.statusText}`;
+          throw new Error(msg);
+        }
+        if (text && json === null) {
+          const snippet = String(text).slice(0, 220).replace(/\s+/g, " ");
+          throw new Error(
+            `Non-JSON response from backend (${res.status}). Snippet: ${snippet}`,
+          );
+        }
+        return json;
+      } catch (err) {
+        throw qcRequestError(err);
       }
-      if (text && json === null) {
-        const snippet = String(text).slice(0, 220).replace(/\s+/g, " ");
-        throw new Error(`Non-JSON response from backend (${res.status}). Snippet: ${snippet}`);
-      }
-      return json;
-    } catch (err) {
-      throw qcRequestError(err);
-    }
-  }, [headers]);
+    },
+    [headers],
+  );
 
   const normalizeStatus = useCallback((payload) => {
     // Celery path:
     //   { scan_id, state, ready, result?, error? }
     // Local job store:
     //   { scan_id, status, result?, error? }
-    if (!payload) return { state: "unknown", ready: false, result: null, failed: false, error: null };
+    if (!payload)
+      return {
+        state: "unknown",
+        ready: false,
+        result: null,
+        failed: false,
+        error: null,
+      };
 
     const state = (payload.state || payload.status || "unknown").toString();
     const stUp = state.toUpperCase();
@@ -1448,7 +3682,8 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
     const hasResult = result != null && typeof result === "object";
     const terminalOk =
       stUp === "SUCCESS" || stUp === "COMPLETED" || stUp === "COMPLETE";
-    const readyOk = hasResult && !failed && (payload.ready === true || terminalOk);
+    const readyOk =
+      hasResult && !failed && (payload.ready === true || terminalOk);
     const errorMsg = payload.error
       ? String(payload.error)
       : failed && !hasResult
@@ -1486,7 +3721,9 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
         "",
       ];
       for (const a of actions) {
-        lines.push(`# [P${a.priority}] ${a.title} (${a.cve_id || a.vuln_id}) — Severity: ${a.severity} CVSS: ${a.cvss_score}`);
+        lines.push(
+          `# [P${a.priority}] ${a.title} (${a.cve_id || a.vuln_id}) — Severity: ${a.severity} CVSS: ${a.cvss_score}`,
+        );
         lines.push(`# Asset: ${a.affected_asset || "n/a"}`);
         lines.push(`# Guidance: ${a.remediation || "n/a"}`);
         lines.push("");
@@ -1505,9 +3742,13 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
         "  tasks:",
       ];
       for (const a of actions) {
-        lines.push(`    - name: "[P${a.priority}] ${a.title} (${a.cve_id || a.vuln_id})"`);
+        lines.push(
+          `    - name: "[P${a.priority}] ${a.title} (${a.cve_id || a.vuln_id})"`,
+        );
         lines.push("      debug:");
-        lines.push(`        msg: "${String(a.remediation || "n/a").replaceAll('"', '\"')}"`);
+        lines.push(
+          `        msg: "${String(a.remediation || "n/a").replaceAll('"', '\"')}"`,
+        );
       }
       lines.push("");
       return lines.join("\n");
@@ -1522,7 +3763,9 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
       "",
     ];
     for (const a of actions) {
-      lines.push(`# [P${a.priority}] ${a.title} (${a.cve_id || a.vuln_id}) — Severity: ${a.severity} CVSS: ${a.cvss_score}`);
+      lines.push(
+        `# [P${a.priority}] ${a.title} (${a.cve_id || a.vuln_id}) — Severity: ${a.severity} CVSS: ${a.cvss_score}`,
+      );
       lines.push(`# Asset: ${a.affected_asset || "n/a"}`);
       lines.push(`# Guidance: ${a.remediation || "n/a"}`);
       lines.push("");
@@ -1534,7 +3777,12 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
     const msg = String(err?.message || err || "").toLowerCase();
     // Keep this narrowly scoped so we only skip simulation when the backend is reachable
     // but explicitly denying us (missing/invalid API key, etc).
-    return msg.includes("unauthorized") || msg.includes("forbidden") || msg.includes(" 401") || msg.includes(" 403");
+    return (
+      msg.includes("unauthorized") ||
+      msg.includes("forbidden") ||
+      msg.includes(" 401") ||
+      msg.includes(" 403")
+    );
   }, []);
 
   const fetchRemediation = useCallback(async () => {
@@ -1558,7 +3806,18 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
     const isRemediating = oneClickRunning || phase === "remediating";
     const isScanning =
       oneClickRunning ||
-      (scanStatus && !scanStatus.ready && ["pending", "queued", "running", "in_progress", "active", "scanning"].includes(String(scanStatus.state || scanStatus.status || "").toLowerCase()));
+      (scanStatus &&
+        !scanStatus.ready &&
+        [
+          "pending",
+          "queued",
+          "running",
+          "in_progress",
+          "active",
+          "scanning",
+        ].includes(
+          String(scanStatus.state || scanStatus.status || "").toLowerCase(),
+        ));
 
     const criticalCount =
       (scanResult?.critical_count ?? scanResult?.summary?.critical ?? 0) || 0;
@@ -1581,7 +3840,11 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
     }
     const effectiveTarget = (scanType === "web_app" ? webUrl : target).trim();
     if (!effectiveTarget) {
-      setError(scanType === "web_app" ? "Enter a web URL to scan." : "Enter a network target (IP, CIDR, or hostname).");
+      setError(
+        scanType === "web_app"
+          ? "Enter a web URL to scan."
+          : "Enter a network target (IP, CIDR, or hostname).",
+      );
       return;
     }
 
@@ -1595,7 +3858,7 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
       scanType === "web_app"
         ? `⚡ Starting one-click web assessment: ${effectiveTarget}...`
         : `⚡ Starting one-click remediation: ${effectiveTarget}...`,
-      "#60a5fa"
+      "#60a5fa",
     );
     onAvatarStateChange?.("hex_shield");
     try {
@@ -1603,11 +3866,16 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
         ocLog("🔍 Running OWASP-style header assessment on URL...", "#60a5fa");
         const r = await apiFetch("/api/vulns/webapp", {
           method: "POST",
-          body: JSON.stringify({ url: effectiveTarget, acknowledge_authorized: true }),
+          body: JSON.stringify({
+            url: effectiveTarget,
+            acknowledge_authorized: true,
+          }),
         });
         const data = r?.data || null;
         const findings = Array.isArray(data?.findings) ? data.findings : [];
-        const countSev = (s) => findings.filter((f) => String(f?.severity || "").toUpperCase() === s).length;
+        const countSev = (s) =>
+          findings.filter((f) => String(f?.severity || "").toUpperCase() === s)
+            .length;
         const normalizedScan = {
           scan_id: data?.scan_id || null,
           target: data?.target_url || effectiveTarget,
@@ -1627,40 +3895,73 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
         };
         if (normalizedScan.scan_id) {
           setScanId(normalizedScan.scan_id);
-          ocLog("✓ Web scan complete — ID: " + normalizedScan.scan_id, "#10b981");
+          ocLog(
+            "✓ Web scan complete — ID: " + normalizedScan.scan_id,
+            "#10b981",
+          );
         }
-        setScanStatus({ state: "completed", ready: true, result: normalizedScan });
+        setScanStatus({
+          state: "completed",
+          ready: true,
+          result: normalizedScan,
+        });
         setScanResult(data ? { ...data, ...normalizedScan } : normalizedScan);
         ocLog(`  ↳ Findings: ${findings.length}`, "#8a9dbd");
         setOneClickPhase("remediating");
         onAvatarStateChange?.("staff_raised");
         ocLog("🛠️ Loading remediation guidance...", "#f59e0b");
-        setOneClickResult({ operation_id: `webapp-${normalizedScan.scan_id || "local"}`, target: effectiveTarget, phases: { scan: normalizedScan } });
+        setOneClickResult({
+          operation_id: `webapp-${normalizedScan.scan_id || "local"}`,
+          target: effectiveTarget,
+          phases: { scan: normalizedScan },
+        });
         await fetchRemediation();
         setOneClickPhase("done");
-        ocLog("✅ All done — web assessment and remediation loaded.", "#10b981");
-        onSound?.(normalizedScan.critical_count > 0 ? "threat_alert" : "scan_complete");
-        onAvatarStateChange?.(normalizedScan.critical_count > 0 ? "ascended" : "active");
+        ocLog(
+          "✅ All done — web assessment and remediation loaded.",
+          "#10b981",
+        );
+        onSound?.(
+          normalizedScan.critical_count > 0 ? "threat_alert" : "scan_complete",
+        );
+        onAvatarStateChange?.(
+          normalizedScan.critical_count > 0 ? "ascended" : "active",
+        );
         return;
       }
 
       ocLog(`🔍 Launching live scan (${scanType})...`, "#60a5fa");
-      const workflowResp = await qcFetchWithRetry(`${QC_API}/api/v1/one-click/scan-and-fix`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(apiKey ? { "X-QC-API-Key": apiKey } : {}) },
-        body: JSON.stringify({
-          target: effectiveTarget,
-          scan_type: scanType,
-          auto_approve: true,
-          acknowledge_authorized: true,
-        }),
-      });
+      const workflowResp = await qcFetchWithRetry(
+        `${QC_API}/api/v1/one-click/scan-and-fix`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(apiKey ? { "X-QC-API-Key": apiKey } : {}),
+          },
+          body: JSON.stringify({
+            target: effectiveTarget,
+            scan_type: scanType,
+            auto_approve: true,
+            acknowledge_authorized: true,
+          }),
+        },
+      );
       const workflowText = await workflowResp.text();
       let workflowJson = null;
-      try { workflowJson = workflowText ? JSON.parse(workflowText) : null; } catch {
-        throw new Error(`Non-JSON one-click response (${workflowResp.status}). Snippet: ${String(workflowText).slice(0, 220)}`);
+      try {
+        workflowJson = workflowText ? JSON.parse(workflowText) : null;
+      } catch {
+        throw new Error(
+          `Non-JSON one-click response (${workflowResp.status}). Snippet: ${String(workflowText).slice(0, 220)}`,
+        );
       }
-      if (!workflowResp.ok) throw new Error(workflowJson?.error || workflowJson?.message || `HTTP ${workflowResp.status}`);
+      if (!workflowResp.ok)
+        throw new Error(
+          workflowJson?.error ||
+            workflowJson?.message ||
+            `HTTP ${workflowResp.status}`,
+        );
       const result = workflowJson?.data || workflowJson;
       const scan = result?.phases?.scan || {};
       const normalizedScan = {
@@ -1686,7 +3987,11 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
         setScanId(normalizedScan.scan_id);
         ocLog("✓ Scan queued — ID: " + normalizedScan.scan_id, "#10b981");
       }
-      setScanStatus({ state: "completed", ready: true, result: normalizedScan });
+      setScanStatus({
+        state: "completed",
+        ready: true,
+        result: normalizedScan,
+      });
       setScanResult(normalizedScan);
       ocLog("  ↳ Scan status: completed");
       ocLog("✓ Scan complete!", "#10b981");
@@ -1695,7 +4000,10 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
       onAvatarStateChange?.("staff_raised");
       ocLog("🛠️ Executing auto-remediation...", "#f59e0b");
       setOneClickResult(result);
-      const workflowPlan = normalizeRemediationPlan(result?.phases?.remediation || null, result?.target || effectiveTarget);
+      const workflowPlan = normalizeRemediationPlan(
+        result?.phases?.remediation || null,
+        result?.target || effectiveTarget,
+      );
       if (workflowPlan?.priority_actions?.length) {
         setRemediation(workflowPlan);
       } else {
@@ -1768,7 +4076,15 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
     } finally {
       setSubmitting(false);
     }
-  }, [ack, apiFetch, fetchRemediation, onAvatarStateChange, scanType, target, webUrl]);
+  }, [
+    ack,
+    apiFetch,
+    fetchRemediation,
+    onAvatarStateChange,
+    scanType,
+    target,
+    webUrl,
+  ]);
 
   useEffect(() => {
     localStorage.setItem("qc_api_key", apiKey || "");
@@ -1782,7 +4098,10 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
     const pendingSince = Date.now();
     const tick = async () => {
       try {
-        const r = await apiFetch(`/api/vulns/scan/${encodeURIComponent(scanId)}`, { method: "GET" });
+        const r = await apiFetch(
+          `/api/vulns/scan/${encodeURIComponent(scanId)}`,
+          { method: "GET" },
+        );
         const s = normalizeStatus(r?.data || null);
         if (cancelled) return;
         notFoundStreak = 0;
@@ -1796,18 +4115,26 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
           return;
         }
         if (stUp !== "PENDING") {
-          setError((prev) => (typeof prev === "string" && /still PENDING/i.test(prev) ? "" : prev));
+          setError((prev) =>
+            typeof prev === "string" && /still PENDING/i.test(prev) ? "" : prev,
+          );
         }
-        if (!s.ready && stUp === "PENDING" && pollCount >= 12 && Date.now() - pendingSince > 25000) {
+        if (
+          !s.ready &&
+          stUp === "PENDING" &&
+          pollCount >= 12 &&
+          Date.now() - pendingSince > 25000
+        ) {
           setError(
-            "Scan is still PENDING — no Celery worker may be running this job. On the API set QC_USE_CELERY=0 to use in-process scans, or deploy a worker: celery -A celery_app.celery_app worker -Q scans (same QC_REDIS_URL)."
+            "Scan is still PENDING — no Celery worker may be running this job. On the API set QC_USE_CELERY=0 to use in-process scans, or deploy a worker: celery -A celery_app.celery_app worker -Q scans (same QC_REDIS_URL).",
           );
         }
         if (s.ready && !s.failed) {
           setError("");
           const enriched = enrichScanResultForUi(s.result || null);
           setScanResult(enriched);
-          const critical = (enriched?.critical_count ?? enriched?.summary?.critical ?? 0) || 0;
+          const critical =
+            (enriched?.critical_count ?? enriched?.summary?.critical ?? 0) || 0;
           onSound?.(critical > 0 ? "threat_alert" : "scan_complete");
           onAvatarStateChange?.(critical > 0 ? "ascended" : "active");
           await fetchRemediation();
@@ -1815,15 +4142,18 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
         }
       } catch (e) {
         const msg = String(e?.message || e || "");
-        const transientMissing = /scan not found|no scan job with this id/i.test(msg);
+        const transientMissing =
+          /scan not found|no scan job with this id/i.test(msg);
         if (!cancelled && transientMissing) {
           notFoundStreak += 1;
-          setScanStatus((prev) => prev || { state: "queued", ready: false, result: null });
+          setScanStatus(
+            (prev) => prev || { state: "queued", ready: false, result: null },
+          );
           // SQLite busy / load-balancer instance drift can cause short 404 bursts; keep polling quietly longer.
           if (notFoundStreak >= 12) {
             setError(
               "Still can’t load scan status (scan not found). Common causes: (1) database briefly locked — wait and it often clears; " +
-              "(2) multiple API replicas without shared scan storage — use one instance or enable Celery + shared Redis. Retrying…",
+                "(2) multiple API replicas without shared scan storage — use one instance or enable Celery + shared Redis. Retrying…",
             );
           }
         } else if (!cancelled) {
@@ -1834,87 +4164,237 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
       if (!cancelled) setTimeout(tick, notFoundStreak > 0 ? 1500 : 2000);
     };
     tick();
-    return () => { cancelled = true; };
-  }, [apiFetch, fetchRemediation, normalizeStatus, onAvatarStateChange, onSound, scanId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    apiFetch,
+    fetchRemediation,
+    normalizeStatus,
+    onAvatarStateChange,
+    onSound,
+    scanId,
+  ]);
 
   const [scriptFmt, setScriptFmt] = useState("bash"); // bash|powershell|ansible
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
       {/* ── ONE-CLICK REMEDIATE BANNER */}
-      <div style={{ padding: "16px 20px", background: "linear-gradient(135deg, rgba(37,99,235,0.15) 0%, rgba(16,185,129,0.10) 100%)", border: "1px solid rgba(37,99,235,0.35)", borderRadius: 10, marginBottom: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+      <div
+        style={{
+          padding: "16px 20px",
+          background:
+            "linear-gradient(135deg, rgba(37,99,235,0.15) 0%, rgba(16,185,129,0.10) 100%)",
+          border: "1px solid rgba(37,99,235,0.35)",
+          borderRadius: 10,
+          marginBottom: 16,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 12,
+          }}
+        >
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#d4dff0", letterSpacing: 0.3 }}>⚡ One-Click Remediate</div>
-            <div style={{ fontSize: 11, color: "#8a9dbd", marginTop: 3 }}>Uses the target below (network or Web App URL). Hosted API scans run on the server — use a reachable IP/URL. Auto-approve applies fixes where the engine supports it.</div>
+            <div
+              style={{
+                fontSize: 15,
+                fontWeight: 700,
+                color: "#d4dff0",
+                letterSpacing: 0.3,
+              }}
+            >
+              ⚡ One-Click Remediate
+            </div>
+            <div style={{ fontSize: 11, color: "#8a9dbd", marginTop: 3 }}>
+              Uses the target below (network or Web App URL). Hosted API scans
+              run on the server — use a reachable IP/URL. Auto-approve applies
+              fixes where the engine supports it.
+            </div>
           </div>
           <button
             onClick={oneClickRemediate}
             disabled={oneClickRunning}
-            style={{ padding: "12px 28px", background: oneClickRunning ? "#1a2d50" : "linear-gradient(135deg, #2563eb, #10b981)", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: oneClickRunning ? "wait" : "pointer", boxShadow: oneClickRunning ? "none" : "0 0 20px rgba(37,99,235,0.4)", whiteSpace: "nowrap" }}
+            style={{
+              padding: "12px 28px",
+              background: oneClickRunning
+                ? "#1a2d50"
+                : "linear-gradient(135deg, #2563eb, #10b981)",
+              color: "#fff",
+              border: "none",
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: oneClickRunning ? "wait" : "pointer",
+              boxShadow: oneClickRunning
+                ? "none"
+                : "0 0 20px rgba(37,99,235,0.4)",
+              whiteSpace: "nowrap",
+            }}
           >
-            {oneClickRunning ? (oneClickPhase === "scanning" ? "🔍 Scanning..." : oneClickPhase === "remediating" ? "🛠️ Remediating..." : "⏳ Working...") : "⚡ REMEDIATE ALL"}
+            {oneClickRunning
+              ? oneClickPhase === "scanning"
+                ? "🔍 Scanning..."
+                : oneClickPhase === "remediating"
+                  ? "🛠️ Remediating..."
+                  : "⏳ Working..."
+              : "⚡ REMEDIATE ALL"}
           </button>
         </div>
         {oneClickLog.length > 0 && (
-          <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(6,10,20,0.7)", borderRadius: 6, fontFamily: "'JetBrains Mono', monospace", fontSize: 10, maxHeight: 160, overflowY: "auto", display: "flex", flexDirection: "column", gap: 3 }}>
+          <div
+            style={{
+              marginTop: 12,
+              padding: "10px 14px",
+              background: "rgba(6,10,20,0.7)",
+              borderRadius: 6,
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 10,
+              maxHeight: 160,
+              overflowY: "auto",
+              display: "flex",
+              flexDirection: "column",
+              gap: 3,
+            }}
+          >
             {oneClickLog.map((l, i) => (
               <div key={i} style={{ color: l.color }}>
-                <span style={{ color: "#4a6080", marginRight: 8 }}>{l.ts}</span>{l.msg}
+                <span style={{ color: "#4a6080", marginRight: 8 }}>{l.ts}</span>
+                {l.msg}
               </div>
             ))}
             {oneClickPhase === "done" && oneClickResult && (
               <div style={{ marginTop: 8, color: "#10b981", fontWeight: 600 }}>
-                ✅ Actions applied: {JSON.stringify(
-                  oneClickResult?.actions_executed
-                  || oneClickResult?.phases?.execution?.actions?.map((a) => a.title || a.action_id)
-                  || oneClickResult?.phases?.execution?.total_actions
-                  || oneClickResult?.total
-                  || "see plan below"
+                ✅ Actions applied:{" "}
+                {JSON.stringify(
+                  oneClickResult?.actions_executed ||
+                    oneClickResult?.phases?.execution?.actions?.map(
+                      (a) => a.title || a.action_id,
+                    ) ||
+                    oneClickResult?.phases?.execution?.total_actions ||
+                    oneClickResult?.total ||
+                    "see plan below",
                 )}
               </div>
             )}
           </div>
         )}
       </div>
-      <Panel title="Vulnerability Scanner (Authorized Use Only)" icon="🔍" accent={C.accent}>
+      <Panel
+        title="Vulnerability Scanner (Authorized Use Only)"
+        icon="🔍"
+        accent={C.accent}
+      >
         <div style={{ display: "grid", gap: 10 }}>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
             <input
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               placeholder="API key (X-QC-API-Key) — leave blank if QC_NO_AUTH=1"
-              style={{ flex: 1, minWidth: 320, padding: "8px 12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: MONO, fontSize: 12, outline: "none" }}
+              style={{
+                flex: 1,
+                minWidth: 320,
+                padding: "8px 12px",
+                background: C.surface,
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                color: C.text,
+                fontFamily: MONO,
+                fontSize: 12,
+                outline: "none",
+              }}
               type="password"
               autoComplete="off"
             />
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: C.textDim, userSelect: "none" }}>
-              <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 11,
+                color: C.textDim,
+                userSelect: "none",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={ack}
+                onChange={(e) => setAck(e.target.checked)}
+              />
               I am authorized to scan this target
             </label>
           </div>
 
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
             {scanType !== "web_app" ? (
               <input
                 value={target}
                 onChange={(e) => setTarget(e.target.value)}
                 placeholder="Target IP/CIDR..."
-                style={{ flex: 1, minWidth: 260, padding: "8px 12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: MONO, fontSize: 12, outline: "none" }}
+                style={{
+                  flex: 1,
+                  minWidth: 260,
+                  padding: "8px 12px",
+                  background: C.surface,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 6,
+                  color: C.text,
+                  fontFamily: MONO,
+                  fontSize: 12,
+                  outline: "none",
+                }}
               />
             ) : (
               <input
                 value={webUrl}
                 onChange={(e) => setWebUrl(e.target.value)}
                 placeholder="https://target.example"
-                style={{ flex: 1, minWidth: 260, padding: "8px 12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: MONO, fontSize: 12, outline: "none" }}
+                style={{
+                  flex: 1,
+                  minWidth: 260,
+                  padding: "8px 12px",
+                  background: C.surface,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 6,
+                  color: C.text,
+                  fontFamily: MONO,
+                  fontSize: 12,
+                  outline: "none",
+                }}
               />
             )}
 
             <select
               value={scanType}
               onChange={(e) => setScanType(e.target.value)}
-              style={{ padding: "8px 12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: MONO, fontSize: 12 }}
+              style={{
+                padding: "8px 12px",
+                background: C.surface,
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                color: C.text,
+                fontFamily: MONO,
+                fontSize: 12,
+              }}
             >
               <option value="full">Full Scan</option>
               <option value="quick">Quick Scan</option>
@@ -1925,33 +4405,90 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
             <button
               onClick={launchScan}
               disabled={submitting}
-              style={{ padding: "8px 20px", background: submitting ? C.textDim : C.accent, color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: submitting ? "wait" : "pointer", whiteSpace: "nowrap" }}
+              style={{
+                padding: "8px 20px",
+                background: submitting ? C.textDim : C.accent,
+                color: "#fff",
+                border: "none",
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: submitting ? "wait" : "pointer",
+                whiteSpace: "nowrap",
+              }}
             >
               {submitting ? "Submitting..." : "Launch Scan"}
             </button>
 
             <button
-              onClick={() => { setScanId(null); setScanStatus(null); setScanResult(null); setRemediation(null); setError(""); }}
-              style={{ padding: "8px 16px", background: C.surface, color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}
+              onClick={() => {
+                setScanId(null);
+                setScanStatus(null);
+                setScanResult(null);
+                setRemediation(null);
+                setError("");
+              }}
+              style={{
+                padding: "8px 16px",
+                background: C.surface,
+                color: C.text,
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
             >
               Reset
             </button>
           </div>
 
           <div style={{ fontSize: 10, color: C.textDim }}>
-            Guardrails: backend denies public targets by default; allowlist is set server-side via <span style={{ fontFamily: MONO }}>QC_SCAN_ALLOWLIST</span>. Async scans need either <span style={{ fontFamily: MONO }}>QC_USE_CELERY=0</span> (in-process queue) or a Celery worker on the <span style={{ fontFamily: MONO }}>scans</span> queue — Redis alone does not run scans. Scanning networks you don&apos;t own or aren&apos;t explicitly authorized to test is not supported.
+            Guardrails: backend denies public targets by default; allowlist is
+            set server-side via{" "}
+            <span style={{ fontFamily: MONO }}>QC_SCAN_ALLOWLIST</span>. Async
+            scans need either{" "}
+            <span style={{ fontFamily: MONO }}>QC_USE_CELERY=0</span>{" "}
+            (in-process queue) or a Celery worker on the{" "}
+            <span style={{ fontFamily: MONO }}>scans</span> queue — Redis alone
+            does not run scans. Scanning networks you don&apos;t own or
+            aren&apos;t explicitly authorized to test is not supported.
           </div>
 
           {!!error && (
-            <div style={{ padding: "8px 10px", background: C.surface, border: `1px solid ${C.red}`, borderRadius: 6, color: C.red, fontSize: 11 }}>
+            <div
+              style={{
+                padding: "8px 10px",
+                background: C.surface,
+                border: `1px solid ${C.red}`,
+                borderRadius: 6,
+                color: C.red,
+                fontSize: 11,
+              }}
+            >
               {error}
             </div>
           )}
 
           {scanId && (
-            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <Badge color={C.accent}>scan_id: <span style={{ fontFamily: MONO }}>{scanId}</span></Badge>
-              <Badge color={C.textDim}>state: <span style={{ fontFamily: MONO }}>{scanStatus?.state || scanStatus?.status || "unknown"}</span></Badge>
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
+            >
+              <Badge color={C.accent}>
+                scan_id: <span style={{ fontFamily: MONO }}>{scanId}</span>
+              </Badge>
+              <Badge color={C.textDim}>
+                state:{" "}
+                <span style={{ fontFamily: MONO }}>
+                  {scanStatus?.state || scanStatus?.status || "unknown"}
+                </span>
+              </Badge>
               {!!scanStatus?.ready && <Badge color={C.green}>READY</Badge>}
             </div>
           )}
@@ -1969,63 +4506,191 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
               {"scan_id" in scanResult ? (
                 <>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <Badge color={C.accent}>Target: <span style={{ fontFamily: MONO }}>{scanResult.target}</span></Badge>
-                    <Badge color={C.textDim}>Type: <span style={{ fontFamily: MONO }}>{scanResult.scan_type}</span></Badge>
-                    <Badge color={C.red}>Critical: {scanResult.critical_count}</Badge>
+                    <Badge color={C.accent}>
+                      Target:{" "}
+                      <span style={{ fontFamily: MONO }}>
+                        {scanResult.target}
+                      </span>
+                    </Badge>
+                    <Badge color={C.textDim}>
+                      Type:{" "}
+                      <span style={{ fontFamily: MONO }}>
+                        {scanResult.scan_type}
+                      </span>
+                    </Badge>
+                    <Badge color={C.red}>
+                      Critical: {scanResult.critical_count}
+                    </Badge>
                     <Badge color={C.amber}>High: {scanResult.high_count}</Badge>
-                    <Badge color={C.textDim}>Medium: {scanResult.medium_count}</Badge>
+                    <Badge color={C.textDim}>
+                      Medium: {scanResult.medium_count}
+                    </Badge>
                     <Badge color={C.textDim}>Low: {scanResult.low_count}</Badge>
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <Badge color={C.textDim}>Assets: {scanResult.assets_discovered}</Badge>
-                    <Badge color={C.textDim}>Findings: {scanResult.vulnerabilities_found}</Badge>
-                    <Badge color={C.green}>Risk score: {scanResult.risk_score}</Badge>
+                    <Badge color={C.textDim}>
+                      Assets: {scanResult.assets_discovered}
+                    </Badge>
+                    <Badge color={C.textDim}>
+                      Findings: {scanResult.vulnerabilities_found}
+                    </Badge>
+                    <Badge color={C.green}>
+                      Risk score: {scanResult.risk_score}
+                    </Badge>
                   </div>
                   {(scanResult.notes || []).length > 0 && (
-                    <div style={{ fontSize: 10, color: C.amber, padding: "6px 8px", background: C.surface, borderRadius: 6 }}>
-                      {(scanResult.notes || []).map((n, i) => (<div key={i}>{n}</div>))}
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: C.amber,
+                        padding: "6px 8px",
+                        background: C.surface,
+                        borderRadius: 6,
+                      }}
+                    >
+                      {(scanResult.notes || []).map((n, i) => (
+                        <div key={i}>{n}</div>
+                      ))}
                     </div>
                   )}
                   {(scanResult.findings || []).length > 0 && (
                     <div style={{ display: "grid", gap: 6 }}>
-                      <div style={{ fontSize: 11, color: C.textSoft }}>Finding details</div>
+                      <div style={{ fontSize: 11, color: C.textSoft }}>
+                        Finding details
+                      </div>
                       {(scanResult.findings || []).slice(0, 8).map((f, idx) => (
-                        <div key={idx} style={{ padding: "8px 10px", background: C.surface, borderRadius: 6 }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                            <div style={{ fontSize: 11, color: C.text }}>{f.title || "Finding"}</div>
-                            <Badge color={(String(f.severity || "").toUpperCase() === "HIGH" || String(f.severity || "").toUpperCase() === "CRITICAL") ? C.red : C.textDim}>{f.severity || "INFO"}</Badge>
+                        <div
+                          key={idx}
+                          style={{
+                            padding: "8px 10px",
+                            background: C.surface,
+                            borderRadius: 6,
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              gap: 8,
+                            }}
+                          >
+                            <div style={{ fontSize: 11, color: C.text }}>
+                              {f.title || "Finding"}
+                            </div>
+                            <Badge
+                              color={
+                                String(f.severity || "").toUpperCase() ===
+                                  "HIGH" ||
+                                String(f.severity || "").toUpperCase() ===
+                                  "CRITICAL"
+                                  ? C.red
+                                  : C.textDim
+                              }
+                            >
+                              {f.severity || "INFO"}
+                            </Badge>
                           </div>
-                          {!!f.description && <div style={{ fontSize: 10, color: C.textDim, marginTop: 4 }}>{f.description}</div>}
-                          {!!f.remediation && <div style={{ fontSize: 10, color: C.textDim, marginTop: 4 }}>Fix: {f.remediation}</div>}
+                          {!!f.description && (
+                            <div
+                              style={{
+                                fontSize: 10,
+                                color: C.textDim,
+                                marginTop: 4,
+                              }}
+                            >
+                              {f.description}
+                            </div>
+                          )}
+                          {!!f.remediation && (
+                            <div
+                              style={{
+                                fontSize: 10,
+                                color: C.textDim,
+                                marginTop: 4,
+                              }}
+                            >
+                              Fix: {f.remediation}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
                   )}
                   <div style={{ fontSize: 11, color: C.textDim }}>
-                    Hosted APIs scan from the server: <span style={{ fontFamily: MONO }}>127.0.0.1</span> is the container loopback, not your PC. Use <b>Web App</b> mode for HTTPS URLs, or a reachable private IP from the API&apos;s network.
+                    Hosted APIs scan from the server:{" "}
+                    <span style={{ fontFamily: MONO }}>127.0.0.1</span> is the
+                    container loopback, not your PC. Use <b>Web App</b> mode for
+                    HTTPS URLs, or a reachable private IP from the API&apos;s
+                    network.
                   </div>
                   <div style={{ fontSize: 11, color: C.textDim }}>
-                    Use the Remediation Plan panel for prioritized actions and guidance.
+                    Use the Remediation Plan panel for prioritized actions and
+                    guidance.
                   </div>
                 </>
               ) : (
                 <>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <Badge color={C.accent}>Web App Scan</Badge>
-                    <Badge color={C.textDim}><span style={{ fontFamily: MONO }}>{scanResult.target_url || "n/a"}</span></Badge>
+                    <Badge color={C.textDim}>
+                      <span style={{ fontFamily: MONO }}>
+                        {scanResult.target_url || "n/a"}
+                      </span>
+                    </Badge>
                   </div>
                   <div style={{ fontSize: 11, color: C.textDim }}>
                     Findings: {(scanResult.findings || []).length}
                   </div>
                   <div style={{ display: "grid", gap: 6 }}>
                     {(scanResult.findings || []).slice(0, 6).map((f, idx) => (
-                      <div key={idx} style={{ padding: "8px 10px", background: C.surface, borderRadius: 6 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                          <div style={{ fontSize: 11, color: C.text }}>{f.title || f.category || "Finding"}</div>
-                          <Badge color={String(f.severity || "").toUpperCase() === "HIGH" ? C.red : C.amber}>{f.severity || "INFO"}</Badge>
+                      <div
+                        key={idx}
+                        style={{
+                          padding: "8px 10px",
+                          background: C.surface,
+                          borderRadius: 6,
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 8,
+                          }}
+                        >
+                          <div style={{ fontSize: 11, color: C.text }}>
+                            {f.title || f.category || "Finding"}
+                          </div>
+                          <Badge
+                            color={
+                              String(f.severity || "").toUpperCase() === "HIGH"
+                                ? C.red
+                                : C.amber
+                            }
+                          >
+                            {f.severity || "INFO"}
+                          </Badge>
                         </div>
-                        <div style={{ fontSize: 10, color: C.textDim, marginTop: 4 }}>{f.description || f.details || ""}</div>
-                        {!!f.remediation && <div style={{ fontSize: 10, color: C.textDim, marginTop: 4 }}>Fix: {f.remediation}</div>}
+                        <div
+                          style={{
+                            fontSize: 10,
+                            color: C.textDim,
+                            marginTop: 4,
+                          }}
+                        >
+                          {f.description || f.details || ""}
+                        </div>
+                        {!!f.remediation && (
+                          <div
+                            style={{
+                              fontSize: 10,
+                              color: C.textDim,
+                              marginTop: 4,
+                            }}
+                          >
+                            Fix: {f.remediation}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -2035,7 +4700,11 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
           )}
         </Panel>
 
-        <Panel title="Remediation Plan (One-Click Export)" icon="🛠️" accent={C.green}>
+        <Panel
+          title="Remediation Plan (One-Click Export)"
+          icon="🛠️"
+          accent={C.green}
+        >
           {!remediation ? (
             <div style={{ display: "grid", gap: 10 }}>
               <div style={{ fontSize: 12, color: C.textDim }}>
@@ -2043,7 +4712,17 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
               </div>
               <button
                 onClick={fetchRemediation}
-                style={{ padding: "8px 16px", background: C.surface, color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer", width: "fit-content" }}
+                style={{
+                  padding: "8px 16px",
+                  background: C.surface,
+                  color: C.text,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 6,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  width: "fit-content",
+                }}
               >
                 Load current plan
               </button>
@@ -2051,19 +4730,49 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
           ) : (
             <div style={{ display: "grid", gap: 10 }}>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <Badge color={C.green}>Plan: <span style={{ fontFamily: MONO }}>{remediation.plan_id}</span></Badge>
-                <Badge color={C.textDim}>Total: {remediation.total_vulnerabilities}</Badge>
-                <Badge color={C.red}>Critical: {remediation.summary?.critical || 0}</Badge>
-                <Badge color={C.amber}>High: {remediation.summary?.high || 0}</Badge>
-                <Badge color={C.accent}>Medium: {remediation.summary?.medium || 0}</Badge>
-                <Badge color={C.textDim}>Low: {remediation.summary?.low || 0}</Badge>
+                <Badge color={C.green}>
+                  Plan:{" "}
+                  <span style={{ fontFamily: MONO }}>
+                    {remediation.plan_id}
+                  </span>
+                </Badge>
+                <Badge color={C.textDim}>
+                  Total: {remediation.total_vulnerabilities}
+                </Badge>
+                <Badge color={C.red}>
+                  Critical: {remediation.summary?.critical || 0}
+                </Badge>
+                <Badge color={C.amber}>
+                  High: {remediation.summary?.high || 0}
+                </Badge>
+                <Badge color={C.accent}>
+                  Medium: {remediation.summary?.medium || 0}
+                </Badge>
+                <Badge color={C.textDim}>
+                  Low: {remediation.summary?.low || 0}
+                </Badge>
               </div>
 
-              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
                 <select
                   value={scriptFmt}
                   onChange={(e) => setScriptFmt(e.target.value)}
-                  style={{ padding: "8px 12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: MONO, fontSize: 12 }}
+                  style={{
+                    padding: "8px 12px",
+                    background: C.surface,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 6,
+                    color: C.text,
+                    fontFamily: MONO,
+                    fontSize: 12,
+                  }}
                 >
                   <option value="bash">Bash</option>
                   <option value="powershell">PowerShell</option>
@@ -2071,8 +4780,22 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
                 </select>
 
                 <button
-                  onClick={() => downloadText(`qc_remediation_${remediation.plan_id}.${scriptFmt === "powershell" ? "ps1" : scriptFmt === "ansible" ? "yml" : "sh"}`, remediationToScript(remediation, scriptFmt))}
-                  style={{ padding: "8px 16px", background: C.green, color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+                  onClick={() =>
+                    downloadText(
+                      `qc_remediation_${remediation.plan_id}.${scriptFmt === "powershell" ? "ps1" : scriptFmt === "ansible" ? "yml" : "sh"}`,
+                      remediationToScript(remediation, scriptFmt),
+                    )
+                  }
+                  style={{
+                    padding: "8px 16px",
+                    background: C.green,
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 6,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
                 >
                   Export Script
                 </button>
@@ -2080,13 +4803,27 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
                 <button
                   onClick={async () => {
                     try {
-                      const content = remediationToScript(remediation, scriptFmt);
+                      const content = remediationToScript(
+                        remediation,
+                        scriptFmt,
+                      );
                       await navigator.clipboard.writeText(content);
                     } catch (e) {
-                      setError("Clipboard unavailable. Use Export Script instead.");
+                      setError(
+                        "Clipboard unavailable. Use Export Script instead.",
+                      );
                     }
                   }}
-                  style={{ padding: "8px 16px", background: C.surface, color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                  style={{
+                    padding: "8px 16px",
+                    background: C.surface,
+                    color: C.text,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 6,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
                 >
                   Copy
                 </button>
@@ -2094,24 +4831,61 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
 
               <div style={{ display: "grid", gap: 6 }}>
                 {(remediation.priority_actions || []).slice(0, 10).map((a) => (
-                  <div key={a.vuln_id} style={{ padding: "8px 10px", background: C.surface, borderRadius: 6 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+                  <div
+                    key={a.vuln_id}
+                    style={{
+                      padding: "8px 10px",
+                      background: C.surface,
+                      borderRadius: 6,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 8,
+                        alignItems: "center",
+                      }}
+                    >
                       <div style={{ fontSize: 11, color: C.text }}>
-                        <span style={{ color: C.textDim, fontFamily: MONO }}>P{a.priority}</span>{" "}
+                        <span style={{ color: C.textDim, fontFamily: MONO }}>
+                          P{a.priority}
+                        </span>{" "}
                         {a.title}
                       </div>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        <Badge color={a.severity === "CRITICAL" ? C.red : a.severity === "HIGH" ? C.amber : a.severity === "MEDIUM" ? C.accent : C.textDim}>{a.severity}</Badge>
+                      <div
+                        style={{ display: "flex", gap: 6, flexWrap: "wrap" }}
+                      >
+                        <Badge
+                          color={
+                            a.severity === "CRITICAL"
+                              ? C.red
+                              : a.severity === "HIGH"
+                                ? C.amber
+                                : a.severity === "MEDIUM"
+                                  ? C.accent
+                                  : C.textDim
+                          }
+                        >
+                          {a.severity}
+                        </Badge>
                         <Badge color={C.textDim}>{a.cve_id || a.vuln_id}</Badge>
                       </div>
                     </div>
                     {!!a.affected_asset && (
-                      <div style={{ marginTop: 4, fontSize: 10, color: C.textDim }}>
-                        Asset: <span style={{ fontFamily: MONO }}>{a.affected_asset}</span>
+                      <div
+                        style={{ marginTop: 4, fontSize: 10, color: C.textDim }}
+                      >
+                        Asset:{" "}
+                        <span style={{ fontFamily: MONO }}>
+                          {a.affected_asset}
+                        </span>
                       </div>
                     )}
                     {!!a.remediation && (
-                      <div style={{ marginTop: 4, fontSize: 10, color: C.textDim }}>
+                      <div
+                        style={{ marginTop: 4, fontSize: 10, color: C.textDim }}
+                      >
                         Fix: {a.remediation}
                       </div>
                     )}
@@ -2131,20 +4905,68 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
         <Panel title="CVE Knowledge Base" icon="📚" accent={C.amber}>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {[
-              { cve: "CVE-2024-3400", title: "PAN-OS Command Injection", cvss: 10.0, status: "weaponized" },
-              { cve: "CVE-2024-1709", title: "ScreenConnect Auth Bypass", cvss: 10.0, status: "weaponized" },
-              { cve: "CVE-2024-21887", title: "Ivanti Connect Secure", cvss: 9.1, status: "weaponized" },
-              { cve: "CVE-2024-23897", title: "Jenkins Arbitrary File Read", cvss: 9.8, status: "functional" },
-              { cve: "CVE-2023-44228", title: "Log4Shell", cvss: 10.0, status: "weaponized" },
+              {
+                cve: "CVE-2024-3400",
+                title: "PAN-OS Command Injection",
+                cvss: 10.0,
+                status: "weaponized",
+              },
+              {
+                cve: "CVE-2024-1709",
+                title: "ScreenConnect Auth Bypass",
+                cvss: 10.0,
+                status: "weaponized",
+              },
+              {
+                cve: "CVE-2024-21887",
+                title: "Ivanti Connect Secure",
+                cvss: 9.1,
+                status: "weaponized",
+              },
+              {
+                cve: "CVE-2024-23897",
+                title: "Jenkins Arbitrary File Read",
+                cvss: 9.8,
+                status: "functional",
+              },
+              {
+                cve: "CVE-2023-44228",
+                title: "Log4Shell",
+                cvss: 10.0,
+                status: "weaponized",
+              },
             ].map((v) => (
-              <div key={v.cve} style={{ padding: "8px 10px", background: C.surface, borderRadius: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div
+                key={v.cve}
+                style={{
+                  padding: "8px 10px",
+                  background: C.surface,
+                  borderRadius: 6,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
                 <div>
-                  <span style={{ fontSize: 11, fontFamily: MONO, color: C.red, marginRight: 8 }}>{v.cve}</span>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontFamily: MONO,
+                      color: C.red,
+                      marginRight: 8,
+                    }}
+                  >
+                    {v.cve}
+                  </span>
                   <span style={{ fontSize: 11, color: C.text }}>{v.title}</span>
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <Badge color={v.cvss >= 9 ? C.red : C.amber}>CVSS {v.cvss}</Badge>
-                  <Badge color={v.status === "weaponized" ? C.red : C.amber}>{v.status}</Badge>
+                  <Badge color={v.cvss >= 9 ? C.red : C.amber}>
+                    CVSS {v.cvss}
+                  </Badge>
+                  <Badge color={v.status === "weaponized" ? C.red : C.amber}>
+                    {v.status}
+                  </Badge>
                 </div>
               </div>
             ))}
@@ -2153,8 +4975,23 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
 
         <Panel title="Compliance Frameworks" icon="✓" accent={C.green}>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {["CIS Benchmarks", "NIST SP 800-53", "NIST CSF", "DISA STIG", "PCI DSS", "HIPAA", "SOC 2"].map((fw) => (
-              <div key={fw} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            {[
+              "CIS Benchmarks",
+              "NIST SP 800-53",
+              "NIST CSF",
+              "DISA STIG",
+              "PCI DSS",
+              "HIPAA",
+              "SOC 2",
+            ].map((fw) => (
+              <div
+                key={fw}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
                 <span style={{ fontSize: 12, color: C.text }}>{fw}</span>
                 <Badge color={C.green}>LOADED</Badge>
               </div>
@@ -2166,8 +5003,6 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
   );
 }
 
-
-
 // ─── DEVOPS TAB ────────────────────────────────────────────────────────────
 
 // workflowFile must name a real file in .github/workflows/ -- these link out
@@ -2176,11 +5011,46 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
 // workflow, so no "DNS Sanity Check" entry here -- don't list an operation
 // that doesn't correspond to a real, runnable workflow.
 const DEVOPS_WORKFLOWS = [
-  { id: "bootstrap", label: "Bootstrap K8s", icon: "⎈", color: C.accent, desc: "Provision cluster, ingress, cert-manager, ArgoCD", workflowFile: "bootstrap-k8s.yml" },
-  { id: "protect", label: "Protect Branches", icon: "🛡", color: C.green, desc: "Apply branch protection rules with auto-discover", workflowFile: "protect-branches.yml" },
-  { id: "deploy", label: "Deploy to VM", icon: "🚀", color: C.purple, desc: "Docker compose deploy with TLS and monitoring", workflowFile: "deploy-vm.yml" },
-  { id: "promote", label: "Promote to Prod", icon: "📦", color: C.amber, desc: "Promote staging to production via PR", workflowFile: "promote-production.yml" },
-  { id: "helm", label: "Release Helm Chart", icon: "⚓", color: C.magenta, desc: "Package and publish Helm chart", workflowFile: "release-helm.yml" },
+  {
+    id: "bootstrap",
+    label: "Bootstrap K8s",
+    icon: "⎈",
+    color: C.accent,
+    desc: "Provision cluster, ingress, cert-manager, ArgoCD",
+    workflowFile: "bootstrap-k8s.yml",
+  },
+  {
+    id: "protect",
+    label: "Protect Branches",
+    icon: "🛡",
+    color: C.green,
+    desc: "Apply branch protection rules with auto-discover",
+    workflowFile: "protect-branches.yml",
+  },
+  {
+    id: "deploy",
+    label: "Deploy to VM",
+    icon: "🚀",
+    color: C.purple,
+    desc: "Docker compose deploy with TLS and monitoring",
+    workflowFile: "deploy-vm.yml",
+  },
+  {
+    id: "promote",
+    label: "Promote to Prod",
+    icon: "📦",
+    color: C.amber,
+    desc: "Promote staging to production via PR",
+    workflowFile: "promote-production.yml",
+  },
+  {
+    id: "helm",
+    label: "Release Helm Chart",
+    icon: "⚓",
+    color: C.magenta,
+    desc: "Package and publish Helm chart",
+    workflowFile: "release-helm.yml",
+  },
 ];
 
 // ─── QC OS v4.2.1 — API Layer (shared by all QC tabs) ────────────────────
@@ -2191,13 +5061,13 @@ const loadStoredDashboardAuth = () => ({ ...dashboardAuthMemory });
 const saveStoredDashboardAuth = ({ apiKey = "", adminKey = "" }) => {
   dashboardAuthMemory = { apiKey, adminKey };
 };
-const qcH = (ak,apiKey) => {
+const qcH = (ak, apiKey) => {
   const stored = loadStoredDashboardAuth();
   const resolvedApiKey = apiKey || stored.apiKey;
   const resolvedAdminKey = ak || stored.adminKey;
-  const h = {"Content-Type":"application/json"};
-  if (resolvedApiKey) h["X-QC-API-Key"]=resolvedApiKey;
-  if (resolvedAdminKey) h["X-QC-Admin-Key"]=resolvedAdminKey;
+  const h = { "Content-Type": "application/json" };
+  if (resolvedApiKey) h["X-QC-API-Key"] = resolvedApiKey;
+  if (resolvedAdminKey) h["X-QC-Admin-Key"] = resolvedAdminKey;
   return h;
 };
 const qcRequestError = (err) => {
@@ -2216,19 +5086,30 @@ const qcRequestError = (err) => {
         `This build calls ${QC_API || "(same origin)"} (set VITE_API_URL / VITE_QC_API_URL for Firebase/GCS → API, or VITE_SAME_ORIGIN_API=1 when nginx proxies /api).${originHint} Custom domains must be listed in QC_CORS_ORIGINS on the API. Re-save API keys after reload.`,
     );
   }
-  return err instanceof Error ? err : new Error(msg || "Backend request failed.");
+  return err instanceof Error
+    ? err
+    : new Error(msg || "Backend request failed.");
 };
 
 /** Render cold start / transient proxy errors — retry a few times with backoff */
-const QC_FETCH_RETRIES = Math.max(1, Math.min(8, Number(import.meta.env?.VITE_QC_FETCH_RETRIES || 4)));
-const QC_FETCH_RETRY_BASE_MS = Math.max(200, Math.min(8000, Number(import.meta.env?.VITE_QC_FETCH_RETRY_MS || 1100)));
+const QC_FETCH_RETRIES = Math.max(
+  1,
+  Math.min(8, Number(import.meta.env?.VITE_QC_FETCH_RETRIES || 4)),
+);
+const QC_FETCH_RETRY_BASE_MS = Math.max(
+  200,
+  Math.min(8000, Number(import.meta.env?.VITE_QC_FETCH_RETRY_MS || 1100)),
+);
 
 const _qcSleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const _qcNetworkish = (err) => {
   const m = String(err?.message || err || "").toLowerCase();
-  return /failed to fetch|networkerror|load failed|aborted|timed out|timeout/i.test(m);
+  return /failed to fetch|networkerror|load failed|aborted|timed out|timeout/i.test(
+    m,
+  );
 };
-const _qcStatusRetry = (status) => status === 502 || status === 503 || status === 504;
+const _qcStatusRetry = (status) =>
+  status === 502 || status === 503 || status === 504;
 
 async function qcFetchWithRetry(url, init) {
   let lastErr;
@@ -2252,9 +5133,11 @@ async function qcFetchWithRetry(url, init) {
   throw lastErr ?? new Error("fetch failed");
 }
 
-const qcGet = async (p,ak,apiKey) => {
+const qcGet = async (p, ak, apiKey) => {
   try {
-    const r = await qcFetchWithRetry(`${QC_API}${p}`, { headers: qcH(ak, apiKey) });
+    const r = await qcFetchWithRetry(`${QC_API}${p}`, {
+      headers: qcH(ak, apiKey),
+    });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
     return d;
@@ -2262,7 +5145,7 @@ const qcGet = async (p,ak,apiKey) => {
     throw qcRequestError(err);
   }
 };
-const qcPost = async (p,b,ak,apiKey) => {
+const qcPost = async (p, b, ak, apiKey) => {
   try {
     const r = await qcFetchWithRetry(`${QC_API}${p}`, {
       method: "POST",
@@ -2279,17 +5162,45 @@ const qcPost = async (p,b,ak,apiKey) => {
 
 const EMPTY_MESH = {
   mesh_id: "unavailable",
-  topology: { total_nodes: 0, active_nodes: 0, degraded_nodes: 0, healthy_circuits: 0, total_circuits: 0 },
-  threat_posture: { active_attack_chains: 0, iocs_active: 0, ips_blocked: 0, blocked_domains: 0 },
-  statistics: { events_ingested: 0, threats_detected: 0, attacks_correlated: 0, mesh_heals: 0, false_positives_suppressed: 0 },
+  topology: {
+    total_nodes: 0,
+    active_nodes: 0,
+    degraded_nodes: 0,
+    healthy_circuits: 0,
+    total_circuits: 0,
+  },
+  threat_posture: {
+    active_attack_chains: 0,
+    iocs_active: 0,
+    ips_blocked: 0,
+    blocked_domains: 0,
+  },
+  statistics: {
+    events_ingested: 0,
+    threats_detected: 0,
+    attacks_correlated: 0,
+    mesh_heals: 0,
+    false_positives_suppressed: 0,
+  },
   uptime_hours: 0,
   timestamp: null,
 };
 
 const EMPTY_PREDICTOR_STATUS = {
-  statistics: { events_analyzed: 0, predictions_generated: 0, zero_days_predicted: 0, preemptive_actions_taken: 0, accuracy_rate: 0 },
+  statistics: {
+    events_analyzed: 0,
+    predictions_generated: 0,
+    zero_days_predicted: 0,
+    preemptive_actions_taken: 0,
+    accuracy_rate: 0,
+  },
   active_predictions: { total: 0, by_confidence_tier: {}, by_category: {} },
-  prediction_accuracy: { confirmed: 0, false_positive: 0, inconclusive: 0, pending: 0 },
+  prediction_accuracy: {
+    confirmed: 0,
+    false_positive: 0,
+    inconclusive: 0,
+    pending: 0,
+  },
   threat_landscape_vectors: 0,
   behavioral_genomes_tracked: 0,
   entropy_streams_monitored: 0,
@@ -2301,11 +5212,36 @@ const EMPTY_TELEMETRY = {
   events_processed: 0,
   signals_generated: 0,
   fingerprints: { total: 0, known_bad: 0, recent_matches: null },
-  dns: { sources_profiled: 0, queries_per_min: null, dga_detected: null, tunneling_alerts: null, exfil_indicators: null },
+  dns: {
+    sources_profiled: 0,
+    queries_per_min: null,
+    dga_detected: null,
+    tunneling_alerts: null,
+    exfil_indicators: null,
+  },
   beacons: [],
-  kernel: { syscall_profiles: 0, injection_alerts: 0, credential_alerts: 0, ransomware_patterns: 0, file_io_assets: 0, memory_anomalies: 0, privilege_transitions: 0 },
-  graph: { total_nodes: 0, total_edges: 0, high_risk_assets: [], lateral_movements: 0 },
-  feedback: { total_entries: 0, active_adjustments: 0, suppression_rules: 0, tuned_weights: 0, layer_accuracy: {} },
+  kernel: {
+    syscall_profiles: 0,
+    injection_alerts: 0,
+    credential_alerts: 0,
+    ransomware_patterns: 0,
+    file_io_assets: 0,
+    memory_anomalies: 0,
+    privilege_transitions: 0,
+  },
+  graph: {
+    total_nodes: 0,
+    total_edges: 0,
+    high_risk_assets: [],
+    lateral_movements: 0,
+  },
+  feedback: {
+    total_entries: 0,
+    active_adjustments: 0,
+    suppression_rules: 0,
+    tuned_weights: 0,
+    layer_accuracy: {},
+  },
   sensors: [],
   blind_spots: 0,
   overall_health: "unknown",
@@ -2327,14 +5263,20 @@ const adaptPredictions = (payload) =>
 const adaptPredictorStatus = (payload) => ({
   ...EMPTY_PREDICTOR_STATUS,
   ...(payload || {}),
-  statistics: { ...EMPTY_PREDICTOR_STATUS.statistics, ...(payload?.statistics || {}) },
+  statistics: {
+    ...EMPTY_PREDICTOR_STATUS.statistics,
+    ...(payload?.statistics || {}),
+  },
   active_predictions: {
     ...EMPTY_PREDICTOR_STATUS.active_predictions,
     ...(payload?.active_predictions || {}),
     by_confidence_tier: payload?.active_predictions?.by_confidence_tier || {},
     by_category: payload?.active_predictions?.by_category || {},
   },
-  prediction_accuracy: { ...EMPTY_PREDICTOR_STATUS.prediction_accuracy, ...(payload?.prediction_accuracy || {}) },
+  prediction_accuracy: {
+    ...EMPTY_PREDICTOR_STATUS.prediction_accuracy,
+    ...(payload?.prediction_accuracy || {}),
+  },
 });
 
 const adaptLandscape = (payload) =>
@@ -2344,17 +5286,41 @@ const adaptLandscape = (payload) =>
     trend: value?.trend || "stable",
   }));
 
-const createOverviewSnapshot = ({ mesh, predictions, incidents, predictorStatus, telemetry }) => [
-  { metric: "Events", value: mesh.statistics.events_ingested || 0, color: C.accent },
-  { metric: "Threats", value: mesh.statistics.threats_detected || 0, color: C.red },
-  { metric: "Predictions", value: predictorStatus.active_predictions.total || predictions.length, color: C.purple },
+const createOverviewSnapshot = ({
+  mesh,
+  predictions,
+  incidents,
+  predictorStatus,
+  telemetry,
+}) => [
+  {
+    metric: "Events",
+    value: mesh.statistics.events_ingested || 0,
+    color: C.accent,
+  },
+  {
+    metric: "Threats",
+    value: mesh.statistics.threats_detected || 0,
+    color: C.red,
+  },
+  {
+    metric: "Predictions",
+    value: predictorStatus.active_predictions.total || predictions.length,
+    color: C.purple,
+  },
   { metric: "Incidents", value: incidents.length, color: C.amber },
   { metric: "Signals", value: telemetry.signals_generated || 0, color: C.cyan },
 ];
 
 const actionRisk = (actionType) => {
-  if (["restore_from_backup", "patch_system", "kill_process"].includes(actionType)) return "high";
-  if (["disable_account", "isolate_host", "quarantine_file"].includes(actionType)) return "medium";
+  if (
+    ["restore_from_backup", "patch_system", "kill_process"].includes(actionType)
+  )
+    return "high";
+  if (
+    ["disable_account", "isolate_host", "quarantine_file"].includes(actionType)
+  )
+    return "medium";
   return "low";
 };
 
@@ -2376,14 +5342,32 @@ const adaptIncidentSummary = (incident) => ({
   severity: incident.severity,
   category: incident.category,
   status: incident.status,
-  affected_assets: Array.isArray(incident.affected_assets) ? incident.affected_assets.length : Number(incident.affected_assets || 0),
-  affected_asset_list: Array.isArray(incident.affected_assets) ? incident.affected_assets : [],
-  evidence: Array.from({ length: Number(incident.evidence_collected || 0) }, (_, index) => ({ id: `${incident.incident_id}-e-${index}` })),
+  affected_assets: Array.isArray(incident.affected_assets)
+    ? incident.affected_assets.length
+    : Number(incident.affected_assets || 0),
+  affected_asset_list: Array.isArray(incident.affected_assets)
+    ? incident.affected_assets
+    : [],
+  evidence: Array.from(
+    { length: Number(incident.evidence_collected || 0) },
+    (_, index) => ({ id: `${incident.incident_id}-e-${index}` }),
+  ),
   evidence_collected: Number(incident.evidence_collected || 0),
   mitre_techniques: incident.mitre_techniques || [],
-  pending_actions: (incident.response_actions || []).filter((action) => action.status === "pending").map(mapIncidentAction),
+  pending_actions: (incident.response_actions || [])
+    .filter((action) => action.status === "pending")
+    .map(mapIncidentAction),
   response_actions: (incident.response_actions || []).map(mapIncidentAction),
-  timeline: Array.from({ length: Number(incident.timeline_entries || 0) }, (_, index) => ({ time: incident.updated_at || incident.created_at, event: "Timeline event recorded", type: "analysis", actor: "system", id: `${incident.incident_id}-t-${index}` })),
+  timeline: Array.from(
+    { length: Number(incident.timeline_entries || 0) },
+    (_, index) => ({
+      time: incident.updated_at || incident.created_at,
+      event: "Timeline event recorded",
+      type: "analysis",
+      actor: "system",
+      id: `${incident.incident_id}-t-${index}`,
+    }),
+  ),
   lead_analyst: incident.assigned_to || "unassigned",
   playbook: humanizeMetricKey(incident.category),
   created_at: incident.created_at,
@@ -2395,14 +5379,25 @@ const adaptIncidentDetail = (incident) => {
   const base = adaptIncidentSummary(incident);
   return {
     ...base,
-    affected_assets: Array.isArray(incident.affected_assets) ? incident.affected_assets.length : base.affected_assets,
-    affected_asset_list: Array.isArray(incident.affected_assets) ? incident.affected_assets : base.affected_asset_list,
+    affected_assets: Array.isArray(incident.affected_assets)
+      ? incident.affected_assets.length
+      : base.affected_assets,
+    affected_asset_list: Array.isArray(incident.affected_assets)
+      ? incident.affected_assets
+      : base.affected_asset_list,
     evidence: (incident.evidence || []).map((item) => ({
       id: item.id || item.evidence_id,
       type: item.type || item.evidence_type,
-      desc: item.notes || item.source || item.type || item.evidence_type || "Evidence artifact",
+      desc:
+        item.notes ||
+        item.source ||
+        item.type ||
+        item.evidence_type ||
+        "Evidence artifact",
       size_mb: item.size_bytes ? Number(item.size_bytes) / (1024 * 1024) : 0,
-      chain_of_custody: Array.isArray(item.chain_of_custody) ? item.chain_of_custody.length : 0,
+      chain_of_custody: Array.isArray(item.chain_of_custody)
+        ? item.chain_of_custody.length
+        : 0,
     })),
     timeline: (incident.timeline || []).map((entry, index) => ({
       id: `${incident.incident_id}-timeline-${index}`,
@@ -2419,12 +5414,21 @@ const adaptIncidentDetail = (incident) => {
       first_seen: incident.created_at,
       id: `${incident.incident_id}-ioc-${index}`,
     })),
-    pending_actions: (incident.response_actions || []).filter((action) => action.status === "pending").map(mapIncidentAction),
+    pending_actions: (incident.response_actions || [])
+      .filter((action) => action.status === "pending")
+      .map(mapIncidentAction),
     response_actions: (incident.response_actions || []).map(mapIncidentAction),
   };
 };
 
-const adaptTelemetry = ({ status, beacons, riskMap, graph, feedback, health }) => {
+const adaptTelemetry = ({
+  status,
+  beacons,
+  riskMap,
+  graph,
+  feedback,
+  health,
+}) => {
   const streams = status?.streams || {};
   const network = streams.network_flow || {};
   const temporal = streams.temporal_patterns || {};
@@ -2448,7 +5452,10 @@ const adaptTelemetry = ({ status, beacons, riskMap, graph, feedback, health }) =
       tunneling_alerts: null,
       exfil_indicators: null,
     },
-    beacons: (beacons?.beacons || []).map((item) => ({ ...item, samples: item.sample_count })),
+    beacons: (beacons?.beacons || []).map((item) => ({
+      ...item,
+      samples: item.sample_count,
+    })),
     kernel: {
       syscall_profiles: kernel.syscall_profiles || 0,
       injection_alerts: 0,
@@ -2471,7 +5478,8 @@ const adaptTelemetry = ({ status, beacons, riskMap, graph, feedback, health }) =
     },
     feedback: {
       total_entries: feedback?.total_feedback_entries || 0,
-      active_adjustments: Object.keys(feedback?.threshold_adjustments || {}).length,
+      active_adjustments: Object.keys(feedback?.threshold_adjustments || {})
+        .length,
       suppression_rules: (feedback?.active_suppression_rules || []).length,
       tuned_weights: Object.keys(feedback?.signal_weights || {}).length,
       layer_accuracy: Object.fromEntries(
@@ -2482,79 +5490,143 @@ const adaptTelemetry = ({ status, beacons, riskMap, graph, feedback, health }) =
             fp_rate: value.fp_rate || 0,
             total: value.total || 0,
           },
-        ])
+        ]),
       ),
     },
     sensors: healthSensors.map((sensor) => ({
       type: sensor.sensor_type || "sensor",
       count: 1,
       health: sensor.health || "unknown",
-      coverage_pct: Number(sensor.coverage_pct || collection.coverage_types || 0),
+      coverage_pct: Number(
+        sensor.coverage_pct || collection.coverage_types || 0,
+      ),
       avg_latency_ms: Number(sensor.avg_latency_ms || 0),
       events_per_min: Number(sensor.events_per_min || 0),
     })),
-    blind_spots: Array.isArray(health?.blind_spots) ? health.blind_spots.length : status?.statistics?.blind_spots_identified || 0,
+    blind_spots: Array.isArray(health?.blind_spots)
+      ? health.blind_spots.length
+      : status?.statistics?.blind_spots_identified || 0,
     overall_health: health?.overall_health || "unknown",
-    timestamp: status?.timestamp || feedback?.timestamp || graph?.timestamp || riskMap?.timestamp || null,
+    timestamp:
+      status?.timestamp ||
+      feedback?.timestamp ||
+      graph?.timestamp ||
+      riskMap?.timestamp ||
+      null,
   };
 };
 
-const QC_MODES = {cyber:{label:"Cyber Guardian",color:C.green},research:{label:"Research Companion",color:C.amber},lab:{label:"Quant Lab",color:C.purple}};
+const QC_MODES = {
+  cyber: { label: "Cyber Guardian", color: C.green },
+  research: { label: "Research Companion", color: C.amber },
+  lab: { label: "Quant Lab", color: C.purple },
+};
 const SAMPLE_HOLDINGS = [
-  {symbol:"BTC-USD",asset_type:"crypto",units:0.25,latest_price:65000},
-  {symbol:"ETH-USD",asset_type:"crypto",units:2,latest_price:3500},
-  {symbol:"AAPL",asset_type:"stock",units:10,latest_price:220},
+  { symbol: "BTC-USD", asset_type: "crypto", units: 0.25, latest_price: 65000 },
+  { symbol: "ETH-USD", asset_type: "crypto", units: 2, latest_price: 3500 },
+  { symbol: "AAPL", asset_type: "stock", units: 10, latest_price: 220 },
 ];
-const SAMPLE_QUANT = {risk_aversion:0.5,candidates:[
-  {symbol:"BTC-USD",expected_return:0.18,risk:0.32},
-  {symbol:"ETH-USD",expected_return:0.15,risk:0.28},
-  {symbol:"AAPL",expected_return:0.08,risk:0.14},
-]};
-const FORECAST_TYPES = ["regime_detection","telemetry_forecast","scenario","signal_ensemble","risk_budget"];
+const SAMPLE_QUANT = {
+  risk_aversion: 0.5,
+  candidates: [
+    { symbol: "BTC-USD", expected_return: 0.18, risk: 0.32 },
+    { symbol: "ETH-USD", expected_return: 0.15, risk: 0.28 },
+    { symbol: "AAPL", expected_return: 0.08, risk: 0.14 },
+  ],
+};
+const FORECAST_TYPES = [
+  "regime_detection",
+  "telemetry_forecast",
+  "scenario",
+  "signal_ensemble",
+  "risk_budget",
+];
 
 // ─── QC CONSOLE TAB (Queen Califia conversational brain) ─────────────────
 
 function QCConsoleTab() {
-  const [mode,setMode] = useState("cyber");
-  const [messages,setMsgs] = useState([]);
-  const [input,setInput] = useState("");
-  const [busy,setBusy] = useState(false);
-  const [err,setErr] = useState("");
-  const [memories,setMems] = useState([]);
-  const [config,setConfig] = useState(null);
+  const [mode, setMode] = useState("cyber");
+  const [messages, setMsgs] = useState([]);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [memories, setMems] = useState([]);
+  const [config, setConfig] = useState(null);
   const [sessionId] = useState(() => `ses-${globalThis.crypto.randomUUID()}`);
   const [userId] = useState(() => `usr-${globalThis.crypto.randomUUID()}`);
   const streamRef = useRef(null);
 
-  useEffect(()=>{
-    (async()=>{
-      try{
-        const c=await qcGet("/api/config");
+  useEffect(() => {
+    (async () => {
+      try {
+        const c = await qcGet("/api/config");
         setConfig(c);
-        setMsgs([{id:"w",role:"assistant",text:c.welcome_message}]);
-      }catch(e){setErr(e.message);setMsgs([{id:"e",role:"assistant",text:"Backend unreachable. Render may be cold-starting — retry in 30s."}]);}
+        setMsgs([{ id: "w", role: "assistant", text: c.welcome_message }]);
+      } catch (e) {
+        setErr(e.message);
+        setMsgs([
+          {
+            id: "e",
+            role: "assistant",
+            text: "Backend unreachable. Render may be cold-starting — retry in 30s.",
+          },
+        ]);
+      }
     })();
-  },[]);
+  }, []);
 
-  useEffect(()=>{streamRef.current?.scrollTo({top:streamRef.current.scrollHeight,behavior:"smooth"});},[messages]);
+  useEffect(() => {
+    streamRef.current?.scrollTo({
+      top: streamRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [messages]);
 
-  const send = async()=>{
-    const t=input.trim();if(!t||busy)return;
-    setErr("");setBusy(true);
-    setMsgs(m=>[...m,{id:"u-"+Date.now(),role:"user",text:t}]);setInput("");
-    try{
-      const d=await qcPost("/api/chat/",{message:t,session_id:sessionId,user_id:userId,mode});
-      if(d.memories_added?.length) setMems(p=>[...d.memories_added,...p].slice(0,12));
-      setMsgs(m=>[...m,{id:"a-"+Date.now(),role:"assistant",text:d.reply}]);
-    }catch(e){setErr(e.message);setMsgs(m=>[...m,{id:"e-"+Date.now(),role:"assistant",text:`Error: ${e.message}`}]);}
-    finally{setBusy(false);}
+  const send = async () => {
+    const t = input.trim();
+    if (!t || busy) return;
+    setErr("");
+    setBusy(true);
+    setMsgs((m) => [...m, { id: "u-" + Date.now(), role: "user", text: t }]);
+    setInput("");
+    try {
+      const d = await qcPost("/api/chat/", {
+        message: t,
+        session_id: sessionId,
+        user_id: userId,
+        mode,
+      });
+      if (d.memories_added?.length)
+        setMems((p) => [...d.memories_added, ...p].slice(0, 12));
+      setMsgs((m) => [
+        ...m,
+        { id: "a-" + Date.now(), role: "assistant", text: d.reply },
+      ]);
+    } catch (e) {
+      setErr(e.message);
+      setMsgs((m) => [
+        ...m,
+        {
+          id: "e-" + Date.now(),
+          role: "assistant",
+          text: `Error: ${e.message}`,
+        },
+      ]);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const modeInfo = QC_MODES[mode];
-  const qcAvatarState = mode === "cyber" ? "active" : mode === "research" ? "ascended" : "energy_spiral";
+  const qcAvatarState =
+    mode === "cyber"
+      ? "active"
+      : mode === "research"
+        ? "ascended"
+        : "energy_spiral";
 
   return (
-    <div style={{display:"grid",gap:16}}>
+    <div style={{ display: "grid", gap: 16 }}>
       {/* Mode Switcher */}
       <Panel
         title="Queen Califia — Conversational Intelligence"
@@ -2567,82 +5639,316 @@ function QCConsoleTab() {
             size={120}
             showLabel={false}
             showStatus={false}
-            style={{ transform: "scale(0.62)", transformOrigin: "right center" }}
+            style={{
+              transform: "scale(0.62)",
+              transformOrigin: "right center",
+            }}
           />
         }
       >
-        <div style={{display:"flex",gap:6,marginBottom:12}}>
-          {Object.entries(QC_MODES).map(([k,v])=>(
-            <button key={k} onClick={()=>setMode(k)} style={{
-              padding:"8px 16px",borderRadius:6,border:`1px solid ${mode===k?v.color+"50":C.border}`,
-              background:mode===k?`${v.color}12`:"transparent",color:mode===k?v.color:C.textSoft,
-              fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:FONT,
-            }}>{v.label}</button>
+        <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+          {Object.entries(QC_MODES).map(([k, v]) => (
+            <button
+              key={k}
+              onClick={() => setMode(k)}
+              style={{
+                padding: "8px 16px",
+                borderRadius: 6,
+                border: `1px solid ${mode === k ? v.color + "50" : C.border}`,
+                background: mode === k ? `${v.color}12` : "transparent",
+                color: mode === k ? v.color : C.textSoft,
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+                fontFamily: FONT,
+              }}
+            >
+              {v.label}
+            </button>
           ))}
-          <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}>
-            <PulseDot color={busy?C.amber:C.green} size={6}/>
-            <span style={{fontSize:10,fontFamily:MONO,color:busy?C.amber:C.green}}>{busy?"Thinking…":"Ready"}</span>
+          <div
+            style={{
+              marginLeft: "auto",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <PulseDot color={busy ? C.amber : C.green} size={6} />
+            <span
+              style={{
+                fontSize: 10,
+                fontFamily: MONO,
+                color: busy ? C.amber : C.green,
+              }}
+            >
+              {busy ? "Thinking…" : "Ready"}
+            </span>
           </div>
         </div>
 
         {/* Chat stream */}
-        <div ref={streamRef} style={{maxHeight:360,overflowY:"auto",display:"flex",flexDirection:"column",gap:8,marginBottom:12,padding:"8px 0"}}>
-          {messages.map(msg=>(
-            <div key={msg.id} style={{
-              maxWidth:"85%",padding:"10px 14px",borderRadius:8,
-              alignSelf:msg.role==="user"?"flex-end":"flex-start",
-              background:msg.role==="user"?`${C.accent}15`:C.surface,
-              border:`1px solid ${msg.role==="user"?C.accent+"20":C.border}`,
-            }}>
-              <div style={{fontSize:9,color:C.textDim,textTransform:"uppercase",letterSpacing:0.8,marginBottom:4,fontFamily:MONO}}>
-                {msg.role==="assistant"?(config?.name||"Queen Califia"):"You"}
+        <div
+          ref={streamRef}
+          style={{
+            maxHeight: 360,
+            overflowY: "auto",
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+            marginBottom: 12,
+            padding: "8px 0",
+          }}
+        >
+          {messages.map((msg) => (
+            <div
+              key={msg.id}
+              style={{
+                maxWidth: "85%",
+                padding: "10px 14px",
+                borderRadius: 8,
+                alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
+                background: msg.role === "user" ? `${C.accent}15` : C.surface,
+                border: `1px solid ${msg.role === "user" ? C.accent + "20" : C.border}`,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 9,
+                  color: C.textDim,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.8,
+                  marginBottom: 4,
+                  fontFamily: MONO,
+                }}
+              >
+                {msg.role === "assistant"
+                  ? config?.name || "Queen Califia"
+                  : "You"}
               </div>
-              <div style={{fontSize:12,color:C.text,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{msg.text}</div>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: C.text,
+                  lineHeight: 1.6,
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {msg.text}
+              </div>
             </div>
           ))}
-          {busy&&<div style={{alignSelf:"flex-start",padding:"10px 14px",background:C.surface,borderRadius:8,border:`1px solid ${C.border}`}}>
-            <span style={{fontSize:12,color:C.textDim,animation:"qcPulse 1.2s ease-in-out infinite"}}>● ● ●</span>
-          </div>}
+          {busy && (
+            <div
+              style={{
+                alignSelf: "flex-start",
+                padding: "10px 14px",
+                background: C.surface,
+                borderRadius: 8,
+                border: `1px solid ${C.border}`,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 12,
+                  color: C.textDim,
+                  animation: "qcPulse 1.2s ease-in-out infinite",
+                }}
+              >
+                ● ● ●
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Input */}
-        <div style={{display:"flex",gap:8}}>
-          <textarea value={input} onChange={e=>setInput(e.target.value)}
-            onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}
-            placeholder={mode==="cyber"?"Ask about threats, vulnerabilities, architecture…":mode==="research"?"Query market data, economic indicators…":"Design experiments, run scenarios…"}
-            rows={2} disabled={busy}
-            style={{flex:1,padding:"10px 12px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,color:C.text,fontFamily:FONT,fontSize:12,resize:"none",outline:"none",lineHeight:1.5}}
+        <div style={{ display: "flex", gap: 8 }}>
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
+            placeholder={
+              mode === "cyber"
+                ? "Ask about threats, vulnerabilities, architecture…"
+                : mode === "research"
+                  ? "Query market data, economic indicators…"
+                  : "Design experiments, run scenarios…"
+            }
+            rows={2}
+            disabled={busy}
+            style={{
+              flex: 1,
+              padding: "10px 12px",
+              background: C.surface,
+              border: `1px solid ${C.border}`,
+              borderRadius: 6,
+              color: C.text,
+              fontFamily: FONT,
+              fontSize: 12,
+              resize: "none",
+              outline: "none",
+              lineHeight: 1.5,
+            }}
           />
-          <button onClick={send} disabled={busy||!input.trim()} style={{
-            width:42,height:42,borderRadius:8,border:"none",
-            background:busy||!input.trim()?C.textDim:`linear-gradient(135deg,${modeInfo.color},${C.accent})`,
-            color:"#fff",fontSize:16,fontWeight:700,cursor:busy?"wait":"pointer",
-            display:"flex",alignItems:"center",justifyContent:"center",
-          }}>→</button>
+          <button
+            onClick={send}
+            disabled={busy || !input.trim()}
+            style={{
+              width: 42,
+              height: 42,
+              borderRadius: 8,
+              border: "none",
+              background:
+                busy || !input.trim()
+                  ? C.textDim
+                  : `linear-gradient(135deg,${modeInfo.color},${C.accent})`,
+              color: "#fff",
+              fontSize: 16,
+              fontWeight: 700,
+              cursor: busy ? "wait" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            →
+          </button>
         </div>
-        {err&&<div style={{marginTop:6,fontSize:10,color:C.red,fontFamily:MONO}}>{err}</div>}
+        {err && (
+          <div
+            style={{
+              marginTop: 6,
+              fontSize: 10,
+              color: C.red,
+              fontFamily: MONO,
+            }}
+          >
+            {err}
+          </div>
+        )}
       </Panel>
 
       {/* Memory sidebar */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <Panel title="Active Memories" icon="🧠" accent={C.purple}>
-          {memories.length===0?<span style={{fontSize:11,color:C.textDim}}>No memories yet. Tell QC your name, goals, or portfolio.</span>
-          :memories.map((m,i)=>(
-            <div key={i} style={{display:"flex",gap:8,padding:"4px 0",borderBottom:`1px solid ${C.border}`,fontSize:11}}>
-              <span style={{fontFamily:MONO,fontSize:10,color:C.purple,minWidth:60}}>{m.key}</span>
-              <span style={{color:C.text}}>{m.value}</span>
-            </div>
-          ))}
+          {memories.length === 0 ? (
+            <span style={{ fontSize: 11, color: C.textDim }}>
+              No memories yet. Tell QC your name, goals, or portfolio.
+            </span>
+          ) : (
+            memories.map((m, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  padding: "4px 0",
+                  borderBottom: `1px solid ${C.border}`,
+                  fontSize: 11,
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 10,
+                    color: C.purple,
+                    minWidth: 60,
+                  }}
+                >
+                  {m.key}
+                </span>
+                <span style={{ color: C.text }}>{m.value}</span>
+              </div>
+            ))
+          )}
         </Panel>
         <Panel title="Engine Status" icon="⚡" accent={C.green}>
-          <div style={{display:"flex",flexDirection:"column",gap:4}}>
-            <div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:C.textSoft}}>Backend</span><code style={{fontFamily:MONO,fontSize:10,color:config?C.green:C.red}}>{config?"CONNECTED":"OFFLINE"}</code></div>
-            <div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:C.textSoft}}>Mode</span><code style={{fontFamily:MONO,fontSize:10,color:modeInfo.color}}>{modeInfo.label}</code></div>
-            <div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:C.textSoft}}>Session</span><code style={{fontFamily:MONO,fontSize:10,color:C.textDim}}>{sessionId.slice(0,12)}</code></div>
-            <div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:C.textSoft}}>Persona</span><code style={{fontFamily:MONO,fontSize:10,color:C.textSoft}}>{config?.persona?.slice(0,50)||"—"}</code></div>
-            {config?.capabilities&&<div style={{marginTop:4,display:"flex",gap:4,flexWrap:"wrap"}}>
-              {config.capabilities.map(c=><Badge key={c} color={C.cyan}>{c}</Badge>)}
-            </div>}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: 11,
+              }}
+            >
+              <span style={{ color: C.textSoft }}>Backend</span>
+              <code
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10,
+                  color: config ? C.green : C.red,
+                }}
+              >
+                {config ? "CONNECTED" : "OFFLINE"}
+              </code>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: 11,
+              }}
+            >
+              <span style={{ color: C.textSoft }}>Mode</span>
+              <code
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 10,
+                  color: modeInfo.color,
+                }}
+              >
+                {modeInfo.label}
+              </code>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: 11,
+              }}
+            >
+              <span style={{ color: C.textSoft }}>Session</span>
+              <code
+                style={{ fontFamily: MONO, fontSize: 10, color: C.textDim }}
+              >
+                {sessionId.slice(0, 12)}
+              </code>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: 11,
+              }}
+            >
+              <span style={{ color: C.textSoft }}>Persona</span>
+              <code
+                style={{ fontFamily: MONO, fontSize: 10, color: C.textSoft }}
+              >
+                {config?.persona?.slice(0, 50) || "—"}
+              </code>
+            </div>
+            {config?.capabilities && (
+              <div
+                style={{
+                  marginTop: 4,
+                  display: "flex",
+                  gap: 4,
+                  flexWrap: "wrap",
+                }}
+              >
+                {config.capabilities.map((c) => (
+                  <Badge key={c} color={C.cyan}>
+                    {c}
+                  </Badge>
+                ))}
+              </div>
+            )}
           </div>
         </Panel>
       </div>
@@ -2653,167 +5959,504 @@ function QCConsoleTab() {
 // ─── RESEARCH & QUANT TAB (Market Intel + Forecast + Portfolio + Quant) ──
 
 function ResearchLabTab() {
-  const [sub,setSub] = useState("market");
-  const [err,setErr] = useState("");
-  const [busy,setBusy] = useState(false);
-  const [adminKey,setAdminKey] = useState("");
-  const DEFAULT_MARKET_SYMBOLS = { crypto: "BTC-USD", forex: "USD/EUR", stock: "AAPL", macro: "FEDFUNDS" };
+  const [sub, setSub] = useState("market");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [adminKey, setAdminKey] = useState("");
+  const DEFAULT_MARKET_SYMBOLS = {
+    crypto: "BTC-USD",
+    forex: "USD/EUR",
+    stock: "AAPL",
+    macro: "FEDFUNDS",
+  };
 
   // Market
-  const [assetType,setAssetType] = useState("crypto");
-  const [symbol,setSymbol] = useState("BTC-USD");
-  const [snapshot,setSnapshot] = useState(null);
-  const [sources,setSources] = useState([]);
+  const [assetType, setAssetType] = useState("crypto");
+  const [symbol, setSymbol] = useState("BTC-USD");
+  const [snapshot, setSnapshot] = useState(null);
+  const [sources, setSources] = useState([]);
 
   // Forecast
-  const [fcType,setFcType] = useState("telemetry_forecast");
-  const [fcResult,setFcResult] = useState(null);
+  const [fcType, setFcType] = useState("telemetry_forecast");
+  const [fcResult, setFcResult] = useState(null);
 
   // Portfolio
-  const [holdingsText,setHoldingsText] = useState(JSON.stringify(SAMPLE_HOLDINGS,null,2));
-  const [portfolioResult,setPortfolioResult] = useState(null);
+  const [holdingsText, setHoldingsText] = useState(
+    JSON.stringify(SAMPLE_HOLDINGS, null, 2),
+  );
+  const [portfolioResult, setPortfolioResult] = useState(null);
 
   // Quant
-  const [quantText,setQuantText] = useState(JSON.stringify(SAMPLE_QUANT,null,2));
-  const [quantResult,setQuantResult] = useState(null);
+  const [quantText, setQuantText] = useState(
+    JSON.stringify(SAMPLE_QUANT, null, 2),
+  );
+  const [quantResult, setQuantResult] = useState(null);
 
-  useEffect(()=>{(async()=>{try{const d=await qcGet("/api/market/sources");setSources(d.sources||[]);}catch{}})();},[]);
-  useEffect(()=>{setSymbol(DEFAULT_MARKET_SYMBOLS[assetType] || "BTC-USD");},[assetType]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const d = await qcGet("/api/market/sources");
+        setSources(d.sources || []);
+      } catch {}
+    })();
+  }, []);
+  useEffect(() => {
+    setSymbol(DEFAULT_MARKET_SYMBOLS[assetType] || "BTC-USD");
+  }, [assetType]);
 
-  const loadSnap = async()=>{
-    setErr("");setSnapshot(null);setBusy(true);
-    try{setSnapshot(await qcGet(`/api/market/snapshot?asset_type=${assetType}&symbol=${symbol}`));}
-    catch(e){setErr(e.message);}finally{setBusy(false);}
+  const loadSnap = async () => {
+    setErr("");
+    setSnapshot(null);
+    setBusy(true);
+    try {
+      setSnapshot(
+        await qcGet(
+          `/api/market/snapshot?asset_type=${assetType}&symbol=${symbol}`,
+        ),
+      );
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const runForecast = async()=>{
-    setErr("");setFcResult(null);setBusy(true);
-    try{
-      const input = fcType==="telemetry_forecast"&&snapshot
-        ?{asset_type:snapshot.asset_type,symbol:snapshot.symbol,horizon:"short"}
-        :fcType==="risk_budget"?{holdings:{"BTC-USD":16250,"ETH-USD":7000,"AAPL":2200},max_drawdown:0.15}
-        :{};
-      setFcResult(await qcPost("/api/forecast/run",{user_id:"analyst",run_type:fcType,input}));
-    }catch(e){setErr(e.message);}finally{setBusy(false);}
+  const runForecast = async () => {
+    setErr("");
+    setFcResult(null);
+    setBusy(true);
+    try {
+      const input =
+        fcType === "telemetry_forecast" && snapshot
+          ? {
+              asset_type: snapshot.asset_type,
+              symbol: snapshot.symbol,
+              horizon: "short",
+            }
+          : fcType === "risk_budget"
+            ? {
+                holdings: { "BTC-USD": 16250, "ETH-USD": 7000, AAPL: 2200 },
+                max_drawdown: 0.15,
+              }
+            : {};
+      setFcResult(
+        await qcPost("/api/forecast/run", {
+          user_id: "analyst",
+          run_type: fcType,
+          input,
+        }),
+      );
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const analyzePortfolio = async()=>{
-    setErr("");setPortfolioResult(null);setBusy(true);
-    try{const h=JSON.parse(holdingsText);setPortfolioResult(await qcPost("/api/forecast/portfolio/analyze",{holdings:h}));}
-    catch(e){setErr(e.message);}finally{setBusy(false);}
+  const analyzePortfolio = async () => {
+    setErr("");
+    setPortfolioResult(null);
+    setBusy(true);
+    try {
+      const h = JSON.parse(holdingsText);
+      setPortfolioResult(
+        await qcPost("/api/forecast/portfolio/analyze", { holdings: h }),
+      );
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const runQuant = async()=>{
-    setErr("");setQuantResult(null);setBusy(true);
-    try{setQuantResult(await qcPost("/api/forecast/quant/run",JSON.parse(quantText),adminKey));}
-    catch(e){setErr(e.message);}finally{setBusy(false);}
+  const runQuant = async () => {
+    setErr("");
+    setQuantResult(null);
+    setBusy(true);
+    try {
+      setQuantResult(
+        await qcPost(
+          "/api/forecast/quant/run",
+          JSON.parse(quantText),
+          adminKey,
+        ),
+      );
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const inp = {width:"100%",padding:"8px 10px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,color:C.text,fontFamily:MONO,fontSize:11,outline:"none",boxSizing:"border-box"};
-  const sbtn = (on,clr=C.accent)=>({padding:"5px 12px",borderRadius:5,border:`1px solid ${on?clr+"50":C.border}`,background:on?`${clr}12`:"transparent",color:on?clr:C.textSoft,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:FONT});
-  const abtn = (clr=C.accent,dis)=>({padding:"6px 14px",borderRadius:6,border:"none",background:dis?C.textDim:clr,color:"#fff",fontSize:11,fontWeight:600,cursor:dis?"not-allowed":"pointer",fontFamily:FONT,opacity:dis?0.4:1});
-  const jsonPre = (data)=>(<pre style={{margin:0,padding:"10px 12px",background:C.void,borderRadius:6,border:`1px solid ${C.border}`,fontFamily:MONO,fontSize:10,color:C.textSoft,maxHeight:250,overflow:"auto",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{JSON.stringify(data,null,2)}</pre>);
+  const inp = {
+    width: "100%",
+    padding: "8px 10px",
+    background: C.surface,
+    border: `1px solid ${C.border}`,
+    borderRadius: 6,
+    color: C.text,
+    fontFamily: MONO,
+    fontSize: 11,
+    outline: "none",
+    boxSizing: "border-box",
+  };
+  const sbtn = (on, clr = C.accent) => ({
+    padding: "5px 12px",
+    borderRadius: 5,
+    border: `1px solid ${on ? clr + "50" : C.border}`,
+    background: on ? `${clr}12` : "transparent",
+    color: on ? clr : C.textSoft,
+    fontSize: 10,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: FONT,
+  });
+  const abtn = (clr = C.accent, dis) => ({
+    padding: "6px 14px",
+    borderRadius: 6,
+    border: "none",
+    background: dis ? C.textDim : clr,
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: 600,
+    cursor: dis ? "not-allowed" : "pointer",
+    fontFamily: FONT,
+    opacity: dis ? 0.4 : 1,
+  });
+  const jsonPre = (data) => (
+    <pre
+      style={{
+        margin: 0,
+        padding: "10px 12px",
+        background: C.void,
+        borderRadius: 6,
+        border: `1px solid ${C.border}`,
+        fontFamily: MONO,
+        fontSize: 10,
+        color: C.textSoft,
+        maxHeight: 250,
+        overflow: "auto",
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-word",
+      }}
+    >
+      {JSON.stringify(data, null, 2)}
+    </pre>
+  );
 
-  const SUBS = [{id:"market",label:"Market Intel",icon:"🌐"},{id:"forecast",label:"Forecast Lab",icon:"🔬"},{id:"portfolio",label:"Portfolio Lab",icon:"💼"},{id:"quant",label:"Quant Lab",icon:"⚛"}];
+  const SUBS = [
+    { id: "market", label: "Market Intel", icon: "🌐" },
+    { id: "forecast", label: "Forecast Lab", icon: "🔬" },
+    { id: "portfolio", label: "Portfolio Lab", icon: "💼" },
+    { id: "quant", label: "Quant Lab", icon: "⚛" },
+  ];
 
   return (
-    <div style={{display:"grid",gap:16}}>
-      <Panel title="Research & Quant — Live Data Engines" icon="📊" accent={C.amber} glow>
-        <div style={{display:"flex",gap:2,flexWrap:"wrap",marginBottom:8}}>
-          {SUBS.map(s=>(
-            <button key={s.id} onClick={()=>setSub(s.id)} style={{
-              padding:"7px 14px",background:sub===s.id?`${C.amber}12`:"transparent",
-              border:`1px solid ${sub===s.id?C.amber+"40":"transparent"}`,borderRadius:6,
-              color:sub===s.id?C.amber:C.textSoft,fontSize:11,fontWeight:600,cursor:"pointer",
-              fontFamily:FONT,display:"flex",alignItems:"center",gap:5,
-            }}><span style={{fontSize:12}}>{s.icon}</span>{s.label}</button>
+    <div style={{ display: "grid", gap: 16 }}>
+      <Panel
+        title="Research & Quant — Live Data Engines"
+        icon="📊"
+        accent={C.amber}
+        glow
+      >
+        <div
+          style={{ display: "flex", gap: 2, flexWrap: "wrap", marginBottom: 8 }}
+        >
+          {SUBS.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => setSub(s.id)}
+              style={{
+                padding: "7px 14px",
+                background: sub === s.id ? `${C.amber}12` : "transparent",
+                border: `1px solid ${sub === s.id ? C.amber + "40" : "transparent"}`,
+                borderRadius: 6,
+                color: sub === s.id ? C.amber : C.textSoft,
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+                fontFamily: FONT,
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+              }}
+            >
+              <span style={{ fontSize: 12 }}>{s.icon}</span>
+              {s.label}
+            </button>
           ))}
-          {sub==="quant"&&<div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
-            <span style={{fontSize:10,color:C.textSoft}}>Admin</span>
-            <input type="password" value={adminKey} onChange={e=>setAdminKey(e.target.value)} placeholder="X-QC-Admin-Key (optional if QC_NO_AUTH=1)" style={{...inp,width:240}}/>
-          </div>}
+          {sub === "quant" && (
+            <div
+              style={{
+                marginLeft: "auto",
+                display: "flex",
+                gap: 6,
+                alignItems: "center",
+              }}
+            >
+              <span style={{ fontSize: 10, color: C.textSoft }}>Admin</span>
+              <input
+                type="password"
+                value={adminKey}
+                onChange={(e) => setAdminKey(e.target.value)}
+                placeholder="X-QC-Admin-Key (optional if QC_NO_AUTH=1)"
+                style={{ ...inp, width: 240 }}
+              />
+            </div>
+          )}
         </div>
-        {err&&<div style={{padding:"6px 10px",borderRadius:6,background:C.redDim,border:`1px solid ${C.red}30`,color:C.red,fontSize:11,fontFamily:MONO}}>{err}</div>}
+        {err && (
+          <div
+            style={{
+              padding: "6px 10px",
+              borderRadius: 6,
+              background: C.redDim,
+              border: `1px solid ${C.red}30`,
+              color: C.red,
+              fontSize: 11,
+              fontFamily: MONO,
+            }}
+          >
+            {err}
+          </div>
+        )}
       </Panel>
 
       {/* ── Market Intel ── */}
-      {sub==="market"&&(
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+      {sub === "market" && (
+        <div
+          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}
+        >
           <Panel title="Market Snapshot" icon="🌐" accent={C.cyan}>
-            <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
-              <select value={assetType} onChange={e=>setAssetType(e.target.value)} style={{...inp,width:100,flex:"none"}}>
-                <option value="crypto">Crypto</option><option value="forex">Forex</option>
-                <option value="stock">Stock</option><option value="macro">Macro</option>
+            <div
+              style={{
+                display: "flex",
+                gap: 6,
+                marginBottom: 10,
+                flexWrap: "wrap",
+                alignItems: "center",
+              }}
+            >
+              <select
+                value={assetType}
+                onChange={(e) => setAssetType(e.target.value)}
+                style={{ ...inp, width: 100, flex: "none" }}
+              >
+                <option value="crypto">Crypto</option>
+                <option value="forex">Forex</option>
+                <option value="stock">Stock</option>
+                <option value="macro">Macro</option>
               </select>
-              <input value={symbol} onChange={e=>setSymbol(e.target.value.toUpperCase())} placeholder="BTC-USD" style={{...inp,flex:1,minWidth:100}}/>
-              <button onClick={loadSnap} disabled={busy} style={abtn(C.cyan,busy)}>Load</button>
+              <input
+                value={symbol}
+                onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+                placeholder="BTC-USD"
+                style={{ ...inp, flex: 1, minWidth: 100 }}
+              />
+              <button
+                onClick={loadSnap}
+                disabled={busy}
+                style={abtn(C.cyan, busy)}
+              >
+                Load
+              </button>
             </div>
-            {snapshot&&jsonPre(snapshot)}
+            {snapshot && jsonPre(snapshot)}
           </Panel>
           <Panel title="Trusted Sources" icon="🔒" accent={C.green}>
-            {sources.length===0?<span style={{fontSize:11,color:C.textDim}}>Loading…</span>
-            :sources.map(s=>(
-              <div key={s.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:`1px solid ${C.border}`,fontSize:11}}>
-                <PulseDot color={s.enabled?C.green:C.textDim} size={5}/>
-                <span style={{flex:1,color:C.text}}>{s.name}</span>
-                <span style={{fontFamily:MONO,fontSize:10,color:C.textSoft}}>{(s.confidence_score*100).toFixed(0)}%</span>
-              </div>
-            ))}
+            {sources.length === 0 ? (
+              <span style={{ fontSize: 11, color: C.textDim }}>Loading…</span>
+            ) : (
+              sources.map((s) => (
+                <div
+                  key={s.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "5px 0",
+                    borderBottom: `1px solid ${C.border}`,
+                    fontSize: 11,
+                  }}
+                >
+                  <PulseDot color={s.enabled ? C.green : C.textDim} size={5} />
+                  <span style={{ flex: 1, color: C.text }}>{s.name}</span>
+                  <span
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 10,
+                      color: C.textSoft,
+                    }}
+                  >
+                    {(s.confidence_score * 100).toFixed(0)}%
+                  </span>
+                </div>
+              ))
+            )}
           </Panel>
         </div>
       )}
 
       {/* ── Forecast Lab ── */}
-      {sub==="forecast"&&(
+      {sub === "forecast" && (
         <Panel title="Forecast Lab" icon="🔬" accent={C.accentBright}>
-          <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
-            <select value={fcType} onChange={e=>setFcType(e.target.value)} style={{...inp,width:200,flex:"none"}}>
-              {FORECAST_TYPES.map(t=><option key={t} value={t}>{t.replace(/_/g," ")}</option>)}
+          <div
+            style={{
+              display: "flex",
+              gap: 6,
+              marginBottom: 10,
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
+            <select
+              value={fcType}
+              onChange={(e) => setFcType(e.target.value)}
+              style={{ ...inp, width: 200, flex: "none" }}
+            >
+              {FORECAST_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t.replace(/_/g, " ")}
+                </option>
+              ))}
             </select>
-            <button onClick={runForecast} disabled={busy} style={abtn(C.accentBright,busy)}>Run Forecast</button>
-            {!snapshot&&fcType==="telemetry_forecast"&&<span style={{fontSize:10,color:C.amber}}>Load a market snapshot first for telemetry forecast</span>}
+            <button
+              onClick={runForecast}
+              disabled={busy}
+              style={abtn(C.accentBright, busy)}
+            >
+              Run Forecast
+            </button>
+            {!snapshot && fcType === "telemetry_forecast" && (
+              <span style={{ fontSize: 10, color: C.amber }}>
+                Load a market snapshot first for telemetry forecast
+              </span>
+            )}
           </div>
-          <div style={{fontSize:10,color:C.textSoft,marginBottom:8}}>
-            Dispatches to regime detection, telemetry forecast, scenario analysis, signal ensemble, or risk budget engine.
+          <div style={{ fontSize: 10, color: C.textSoft, marginBottom: 8 }}>
+            Dispatches to regime detection, telemetry forecast, scenario
+            analysis, signal ensemble, or risk budget engine.
           </div>
-          {fcResult&&jsonPre(fcResult)}
+          {fcResult && jsonPre(fcResult)}
         </Panel>
       )}
 
       {/* ── Portfolio Lab ── */}
-      {sub==="portfolio"&&(
+      {sub === "portfolio" && (
         <Panel title="Portfolio Lab" icon="💼" accent={C.green}>
-          <div style={{fontSize:10,color:C.textSoft,marginBottom:8}}>
-            Paste holdings JSON → get PnL, allocation, concentration risk, cost-basis analysis. Uses live cached market prices.
+          <div style={{ fontSize: 10, color: C.textSoft, marginBottom: 8 }}>
+            Paste holdings JSON → get PnL, allocation, concentration risk,
+            cost-basis analysis. Uses live cached market prices.
           </div>
-          <textarea value={holdingsText} onChange={e=>setHoldingsText(e.target.value)} rows={8}
-            style={{...inp,fontFamily:MONO,fontSize:10,resize:"vertical",lineHeight:1.5,marginBottom:8}}/>
-          <button onClick={analyzePortfolio} disabled={busy} style={abtn(C.green,busy)}>Analyze Portfolio</button>
-          {portfolioResult&&(
-            <div style={{marginTop:12}}>
-              <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:12}}>
-                <Stat label="Portfolio Value" value={`$${portfolioResult.portfolio_value?.toLocaleString()}`} color={C.green} small/>
-                <Stat label="Top Holding" value={portfolioResult.top_holding?.symbol||"—"} color={C.amber} small/>
-                <Stat label="Conc. Risk" value={portfolioResult.flags?.concentration_risk?"YES":"NO"} color={portfolioResult.flags?.concentration_risk?C.red:C.green} small/>
+          <textarea
+            value={holdingsText}
+            onChange={(e) => setHoldingsText(e.target.value)}
+            rows={8}
+            style={{
+              ...inp,
+              fontFamily: MONO,
+              fontSize: 10,
+              resize: "vertical",
+              lineHeight: 1.5,
+              marginBottom: 8,
+            }}
+          />
+          <button
+            onClick={analyzePortfolio}
+            disabled={busy}
+            style={abtn(C.green, busy)}
+          >
+            Analyze Portfolio
+          </button>
+          {portfolioResult && (
+            <div style={{ marginTop: 12 }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  flexWrap: "wrap",
+                  marginBottom: 12,
+                }}
+              >
+                <Stat
+                  label="Portfolio Value"
+                  value={`$${portfolioResult.portfolio_value?.toLocaleString()}`}
+                  color={C.green}
+                  small
+                />
+                <Stat
+                  label="Top Holding"
+                  value={portfolioResult.top_holding?.symbol || "—"}
+                  color={C.amber}
+                  small
+                />
+                <Stat
+                  label="Conc. Risk"
+                  value={
+                    portfolioResult.flags?.concentration_risk ? "YES" : "NO"
+                  }
+                  color={
+                    portfolioResult.flags?.concentration_risk ? C.red : C.green
+                  }
+                  small
+                />
               </div>
-              {portfolioResult.holdings&&(
-                <div style={{display:"flex",flexDirection:"column",gap:2}}>
-                  {portfolioResult.holdings.map(h=>(
-                    <div key={h.symbol} style={{display:"flex",justifyContent:"space-between",padding:"5px 8px",background:C.surface,borderRadius:4,fontSize:11}}>
-                      <span style={{color:C.text,fontFamily:MONO}}>{h.symbol}</span>
-                      <span style={{color:C.textSoft}}>{h.units} @ ${h.latest_price}</span>
-                      <span style={{color:C.textSoft}}>${h.market_value?.toLocaleString()}</span>
-                      <span style={{fontFamily:MONO,color:h.weight>=0.35?C.red:C.green}}>{(h.weight*100).toFixed(1)}%</span>
-                      {h.pnl!=null&&<span style={{fontFamily:MONO,color:h.pnl>=0?C.green:C.red}}>{h.pnl>=0?"+":""}${h.pnl.toLocaleString()}</span>}
+              {portfolioResult.holdings && (
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 2 }}
+                >
+                  {portfolioResult.holdings.map((h) => (
+                    <div
+                      key={h.symbol}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        padding: "5px 8px",
+                        background: C.surface,
+                        borderRadius: 4,
+                        fontSize: 11,
+                      }}
+                    >
+                      <span style={{ color: C.text, fontFamily: MONO }}>
+                        {h.symbol}
+                      </span>
+                      <span style={{ color: C.textSoft }}>
+                        {h.units} @ ${h.latest_price}
+                      </span>
+                      <span style={{ color: C.textSoft }}>
+                        ${h.market_value?.toLocaleString()}
+                      </span>
+                      <span
+                        style={{
+                          fontFamily: MONO,
+                          color: h.weight >= 0.35 ? C.red : C.green,
+                        }}
+                      >
+                        {(h.weight * 100).toFixed(1)}%
+                      </span>
+                      {h.pnl != null && (
+                        <span
+                          style={{
+                            fontFamily: MONO,
+                            color: h.pnl >= 0 ? C.green : C.red,
+                          }}
+                        >
+                          {h.pnl >= 0 ? "+" : ""}${h.pnl.toLocaleString()}
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
               )}
-              {portfolioResult.allocation_by_asset_type&&(
-                <div style={{marginTop:8,display:"flex",gap:8}}>
-                  {Object.entries(portfolioResult.allocation_by_asset_type).map(([k,v])=>(
-                    <Badge key={k} color={C.cyan}>{k}: {(v*100).toFixed(1)}%</Badge>
-                  ))}
+              {portfolioResult.allocation_by_asset_type && (
+                <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+                  {Object.entries(portfolioResult.allocation_by_asset_type).map(
+                    ([k, v]) => (
+                      <Badge key={k} color={C.cyan}>
+                        {k}: {(v * 100).toFixed(1)}%
+                      </Badge>
+                    ),
+                  )}
                 </div>
               )}
             </div>
@@ -2822,36 +6465,130 @@ function ResearchLabTab() {
       )}
 
       {/* ── Quant Lab ── */}
-      {sub==="quant"&&(
-        <Panel title="Quant Lab — Admin Research Optimizer" icon="⚛" accent={C.magenta} glow>
-          <div style={{fontSize:10,color:C.textSoft,marginBottom:8}}>
-            Classical mean-variance fallback or Qiskit QAOA-inspired quantum optimization. Admin key required. Paper trading only.
+      {sub === "quant" && (
+        <Panel
+          title="Quant Lab — Admin Research Optimizer"
+          icon="⚛"
+          accent={C.magenta}
+          glow
+        >
+          <div style={{ fontSize: 10, color: C.textSoft, marginBottom: 8 }}>
+            Classical mean-variance fallback or Qiskit QAOA-inspired quantum
+            optimization. Admin key required. Paper trading only.
           </div>
-          <textarea value={quantText} onChange={e=>setQuantText(e.target.value)} rows={8}
-            style={{...inp,fontFamily:MONO,fontSize:10,resize:"vertical",lineHeight:1.5,marginBottom:8}}/>
-          <button onClick={runQuant} disabled={busy} style={abtn(C.magenta,busy)}>Run Optimizer</button>
-          {quantResult&&(
-            <div style={{marginTop:12}}>
-              <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:12}}>
-                <Stat label="Engine" value={quantResult.engine_mode||"—"} color={C.cyan} small/>
-                <Stat label="Quantum" value={quantResult.quantum_ready?"YES":"NO"} color={quantResult.quantum_ready?C.purple:C.textDim} small/>
-                <Stat label="Expected Return" value={`${((quantResult.portfolio_expected_return||0)*100).toFixed(2)}%`} color={C.green} small/>
-                <Stat label="Risk Score" value={((quantResult.portfolio_risk_score||0)*100).toFixed(2)+"%"} color={C.amber} small/>
+          <textarea
+            value={quantText}
+            onChange={(e) => setQuantText(e.target.value)}
+            rows={8}
+            style={{
+              ...inp,
+              fontFamily: MONO,
+              fontSize: 10,
+              resize: "vertical",
+              lineHeight: 1.5,
+              marginBottom: 8,
+            }}
+          />
+          <button
+            onClick={runQuant}
+            disabled={busy}
+            style={abtn(C.magenta, busy)}
+          >
+            Run Optimizer
+          </button>
+          {quantResult && (
+            <div style={{ marginTop: 12 }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  flexWrap: "wrap",
+                  marginBottom: 12,
+                }}
+              >
+                <Stat
+                  label="Engine"
+                  value={quantResult.engine_mode || "—"}
+                  color={C.cyan}
+                  small
+                />
+                <Stat
+                  label="Quantum"
+                  value={quantResult.quantum_ready ? "YES" : "NO"}
+                  color={quantResult.quantum_ready ? C.purple : C.textDim}
+                  small
+                />
+                <Stat
+                  label="Expected Return"
+                  value={`${((quantResult.portfolio_expected_return || 0) * 100).toFixed(2)}%`}
+                  color={C.green}
+                  small
+                />
+                <Stat
+                  label="Risk Score"
+                  value={
+                    ((quantResult.portfolio_risk_score || 0) * 100).toFixed(2) +
+                    "%"
+                  }
+                  color={C.amber}
+                  small
+                />
               </div>
-              {quantResult.allocation&&(
-                <div style={{display:"flex",flexDirection:"column",gap:2}}>
-                  {quantResult.allocation.map(a=>(
-                    <div key={a.symbol} style={{display:"flex",justifyContent:"space-between",padding:"5px 8px",background:C.surface,borderRadius:4,fontSize:11}}>
-                      <span style={{fontFamily:MONO,color:C.text}}>{a.symbol}</span>
-                      <span style={{color:C.textSoft}}>ER: {(a.expected_return*100).toFixed(1)}%</span>
-                      <span style={{color:C.amber}}>Risk: {(a.risk*100).toFixed(1)}%</span>
-                      <ProgressBar value={a.weight*100} max={100} color={C.accentBright} height={4}/>
-                      <span style={{fontFamily:MONO,color:C.accentBright,minWidth:50,textAlign:"right"}}>{(a.weight*100).toFixed(1)}%</span>
+              {quantResult.allocation && (
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 2 }}
+                >
+                  {quantResult.allocation.map((a) => (
+                    <div
+                      key={a.symbol}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        padding: "5px 8px",
+                        background: C.surface,
+                        borderRadius: 4,
+                        fontSize: 11,
+                      }}
+                    >
+                      <span style={{ fontFamily: MONO, color: C.text }}>
+                        {a.symbol}
+                      </span>
+                      <span style={{ color: C.textSoft }}>
+                        ER: {(a.expected_return * 100).toFixed(1)}%
+                      </span>
+                      <span style={{ color: C.amber }}>
+                        Risk: {(a.risk * 100).toFixed(1)}%
+                      </span>
+                      <ProgressBar
+                        value={a.weight * 100}
+                        max={100}
+                        color={C.accentBright}
+                        height={4}
+                      />
+                      <span
+                        style={{
+                          fontFamily: MONO,
+                          color: C.accentBright,
+                          minWidth: 50,
+                          textAlign: "right",
+                        }}
+                      >
+                        {(a.weight * 100).toFixed(1)}%
+                      </span>
                     </div>
                   ))}
                 </div>
               )}
-              <div style={{marginTop:8,fontSize:10,color:C.textDim,fontFamily:MONO}}>{quantResult.note}</div>
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 10,
+                  color: C.textDim,
+                  fontFamily: MONO,
+                }}
+              >
+                {quantResult.note}
+              </div>
             </div>
           )}
         </Panel>
@@ -2862,135 +6599,562 @@ function ResearchLabTab() {
 
 // ─── IDENTITY CORE TAB (QC OS v4.2.1 — wired to live backend) ───────────
 
-const ID_LANES = ["personal","cyber","market","persona"];
-const ID_QUEUE_TABS = ["proposals","reflections","rules","notes"];
-const ID_SEVS = ["info","low","medium","high","critical"];
-const ID_SEV_CLR = {info:C.textSoft,low:C.green,medium:C.amber,high:"#ff9100",critical:C.red};
-const ID_PROVIDERS = ["local_symbolic_core","ollama","vllm_local","auto"];
+const ID_LANES = ["personal", "cyber", "market", "persona"];
+const ID_QUEUE_TABS = ["proposals", "reflections", "rules", "notes"];
+const ID_SEVS = ["info", "low", "medium", "high", "critical"];
+const ID_SEV_CLR = {
+  info: C.textSoft,
+  low: C.green,
+  medium: C.amber,
+  high: "#ff9100",
+  critical: C.red,
+};
+const ID_PROVIDERS = ["local_symbolic_core", "ollama", "vllm_local", "auto"];
 
-const IdBadge = ({children,color=C.accent}) => <Badge color={color}>{children}</Badge>;
+const IdBadge = ({ children, color = C.accent }) => (
+  <Badge color={color}>{children}</Badge>
+);
 
 function IdentityTab() {
-  const [adminKey,setAdminKey] = useState("");
-  const [sub,setSub] = useState("state");
-  const [err,setErr] = useState("");
-  const [busy,setBusy] = useState(false);
-  const [ps,setPs] = useState(null); // persona state
-  const [qt,setQt] = useState("proposals"); // queue tab
-  const [ql,setQl] = useState(""); // queue lane
-  const [qi,setQi] = useState([]); // queue items
-  const [prov,setProv] = useState(null);
-  const [oHealth,setOHealth] = useState(null);
-  const [oModels,setOModels] = useState([]);
-  const [pullN,setPullN] = useState("");
-  const [pullM,setPullM] = useState("");
-  const [lr,setLr] = useState(null); // learning result
-  const [missions,setMissions] = useState([]);
-  const [selM,setSelM] = useState(null);
-  const [mName,setMName] = useState("");
-  const [mObj,setMObj] = useState("");
-  const [fSev,setFSev] = useState("medium");
-  const [fSum,setFSum] = useState("");
+  const [adminKey, setAdminKey] = useState("");
+  const [sub, setSub] = useState("state");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [ps, setPs] = useState(null); // persona state
+  const [qt, setQt] = useState("proposals"); // queue tab
+  const [ql, setQl] = useState(""); // queue lane
+  const [qi, setQi] = useState([]); // queue items
+  const [prov, setProv] = useState(null);
+  const [oHealth, setOHealth] = useState(null);
+  const [oModels, setOModels] = useState([]);
+  const [pullN, setPullN] = useState("");
+  const [pullM, setPullM] = useState("");
+  const [lr, setLr] = useState(null); // learning result
+  const [missions, setMissions] = useState([]);
+  const [selM, setSelM] = useState(null);
+  const [mName, setMName] = useState("");
+  const [mObj, setMObj] = useState("");
+  const [fSev, setFSev] = useState("medium");
+  const [fSum, setFSum] = useState("");
 
-  const loadPs = useCallback(async()=>{try{setPs(await qcGet("/api/identity/state"));}catch(e){setErr(e.message);}}, []);
-  const loadQ = useCallback(async()=>{
-    setErr("");setQi([]);
+  const loadPs = useCallback(async () => {
     try {
-      const path = qt==="proposals"?`/api/identity/memory/pending${ql?`?lane=${ql}`:""}`
-        :qt==="reflections"?"/api/identity/reflections/pending"
-        :qt==="rules"?"/api/identity/rules/pending":"/api/identity/self-notes/pending";
-      setQi((await qcGet(path)).items||[]);
-    } catch(e){setErr(e.message);}
-  },[qt,ql]);
-  const loadProv = useCallback(async()=>{try{setProv(await qcGet("/api/identity/provider-status"));}catch{}}, []);
-  const loadMissions = useCallback(async()=>{try{setMissions((await qcGet("/api/identity/missions")).items||[]);}catch(e){setErr(e.message);}}, []);
+      setPs(await qcGet("/api/identity/state"));
+    } catch (e) {
+      setErr(e.message);
+    }
+  }, []);
+  const loadQ = useCallback(async () => {
+    setErr("");
+    setQi([]);
+    try {
+      const path =
+        qt === "proposals"
+          ? `/api/identity/memory/pending${ql ? `?lane=${ql}` : ""}`
+          : qt === "reflections"
+            ? "/api/identity/reflections/pending"
+            : qt === "rules"
+              ? "/api/identity/rules/pending"
+              : "/api/identity/self-notes/pending";
+      setQi((await qcGet(path)).items || []);
+    } catch (e) {
+      setErr(e.message);
+    }
+  }, [qt, ql]);
+  const loadProv = useCallback(async () => {
+    try {
+      setProv(await qcGet("/api/identity/provider-status"));
+    } catch {}
+  }, []);
+  const loadMissions = useCallback(async () => {
+    try {
+      setMissions((await qcGet("/api/identity/missions")).items || []);
+    } catch (e) {
+      setErr(e.message);
+    }
+  }, []);
 
-  useEffect(()=>{loadPs();loadProv();loadMissions();},[loadPs,loadProv,loadMissions]);
-  useEffect(()=>{loadQ();},[loadQ]);
+  useEffect(() => {
+    loadPs();
+    loadProv();
+    loadMissions();
+  }, [loadPs, loadProv, loadMissions]);
+  useEffect(() => {
+    loadQ();
+  }, [loadQ]);
 
-  const actQ = async(action,id)=>{
-    setBusy(true);setErr("");
-    try{
-      const pfx=qt==="proposals"?"/api/identity/memory":qt==="reflections"?"/api/identity/reflections":qt==="rules"?"/api/identity/rules":"/api/identity/self-notes";
-      await qcPost(`${pfx}/${id}/${action}`,{},adminKey);await loadQ();await loadPs();
-    }catch(e){setErr(e.message);}finally{setBusy(false);}
+  const actQ = async (action, id) => {
+    setBusy(true);
+    setErr("");
+    try {
+      const pfx =
+        qt === "proposals"
+          ? "/api/identity/memory"
+          : qt === "reflections"
+            ? "/api/identity/reflections"
+            : qt === "rules"
+              ? "/api/identity/rules"
+              : "/api/identity/self-notes";
+      await qcPost(`${pfx}/${id}/${action}`, {}, adminKey);
+      await loadQ();
+      await loadPs();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
   };
-  const switchProv = async(p)=>{setBusy(true);try{await qcPost("/api/identity/provider-status",{provider:p},adminKey);await loadProv();}catch(e){setErr(e.message);}finally{setBusy(false);}};
-  const checkOllama = async()=>{try{const[h,m]=await Promise.all([qcGet("/api/identity/ollama/health"),qcGet("/api/identity/ollama/models")]);setOHealth(h);setOModels(m.models||[]);}catch(e){setErr(e.message);}};
-  const doPull = async()=>{if(!pullN.trim())return;setBusy(true);setPullM("Pulling…");try{const d=await qcPost("/api/identity/ollama/pull",{model:pullN.trim()},adminKey);setPullM(d.ok?`✓ ${d.model}`:`✗ ${d.error}`);if(d.ok){setPullN("");checkOllama();}}catch(e){setPullM("");setErr(e.message);}finally{setBusy(false);}};
-  const doLearn = async()=>{setBusy(true);setLr(null);try{setLr(await qcPost("/api/identity/learning/cycle/run",{},adminKey)); await loadPs(); await loadQ();}catch(e){setErr(e.message);}finally{setBusy(false);}};
-  const createM = async()=>{if(!mName.trim()||!mObj.trim()){setErr("Name & objective required");return;}setBusy(true);try{const d=await qcPost("/api/identity/missions",{name:mName.trim(),objective:mObj.trim()},adminKey);setMName("");setMObj("");await loadMissions();try{setSelM(await qcGet(`/api/identity/missions/${d.id}`));}catch{}}catch(e){setErr(e.message);}finally{setBusy(false);}};
-  const loadMD = async(id)=>{try{setSelM(await qcGet(`/api/identity/missions/${id}`));}catch(e){setErr(e.message);}};
-  const addFind = async()=>{if(!selM||!fSum.trim())return;setBusy(true);try{await qcPost(`/api/identity/missions/${selM.id}/findings`,{severity:fSev,summary:fSum.trim()},adminKey);setFSum("");await loadMD(selM.id);await loadMissions();}catch(e){setErr(e.message);}finally{setBusy(false);}};
-  const genRem = async()=>{if(!selM)return;setBusy(true);try{await qcPost(`/api/identity/missions/${selM.id}/remediation/generate`,{},adminKey);await loadMD(selM.id);}catch(e){setErr(e.message);}finally{setBusy(false);}};
-  const appRem = async()=>{if(!selM)return;setBusy(true);try{await qcPost(`/api/identity/missions/${selM.id}/remediation/apply`,{},adminKey);await loadMD(selM.id);await loadMissions();}catch(e){setErr(e.message);}finally{setBusy(false);}};
+  const switchProv = async (p) => {
+    setBusy(true);
+    try {
+      await qcPost("/api/identity/provider-status", { provider: p }, adminKey);
+      await loadProv();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const checkOllama = async () => {
+    try {
+      const [h, m] = await Promise.all([
+        qcGet("/api/identity/ollama/health"),
+        qcGet("/api/identity/ollama/models"),
+      ]);
+      setOHealth(h);
+      setOModels(m.models || []);
+    } catch (e) {
+      setErr(e.message);
+    }
+  };
+  const doPull = async () => {
+    if (!pullN.trim()) return;
+    setBusy(true);
+    setPullM("Pulling…");
+    try {
+      const d = await qcPost(
+        "/api/identity/ollama/pull",
+        { model: pullN.trim() },
+        adminKey,
+      );
+      setPullM(d.ok ? `✓ ${d.model}` : `✗ ${d.error}`);
+      if (d.ok) {
+        setPullN("");
+        checkOllama();
+      }
+    } catch (e) {
+      setPullM("");
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const doLearn = async () => {
+    setBusy(true);
+    setLr(null);
+    try {
+      setLr(await qcPost("/api/identity/learning/cycle/run", {}, adminKey));
+      await loadPs();
+      await loadQ();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const createM = async () => {
+    if (!mName.trim() || !mObj.trim()) {
+      setErr("Name & objective required");
+      return;
+    }
+    setBusy(true);
+    try {
+      const d = await qcPost(
+        "/api/identity/missions",
+        { name: mName.trim(), objective: mObj.trim() },
+        adminKey,
+      );
+      setMName("");
+      setMObj("");
+      await loadMissions();
+      try {
+        setSelM(await qcGet(`/api/identity/missions/${d.id}`));
+      } catch {}
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const loadMD = async (id) => {
+    try {
+      setSelM(await qcGet(`/api/identity/missions/${id}`));
+    } catch (e) {
+      setErr(e.message);
+    }
+  };
+  const addFind = async () => {
+    if (!selM || !fSum.trim()) return;
+    setBusy(true);
+    try {
+      await qcPost(
+        `/api/identity/missions/${selM.id}/findings`,
+        { severity: fSev, summary: fSum.trim() },
+        adminKey,
+      );
+      setFSum("");
+      await loadMD(selM.id);
+      await loadMissions();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const genRem = async () => {
+    if (!selM) return;
+    setBusy(true);
+    try {
+      await qcPost(
+        `/api/identity/missions/${selM.id}/remediation/generate`,
+        {},
+        adminKey,
+      );
+      await loadMD(selM.id);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const appRem = async () => {
+    if (!selM) return;
+    setBusy(true);
+    try {
+      await qcPost(
+        `/api/identity/missions/${selM.id}/remediation/apply`,
+        {},
+        adminKey,
+      );
+      await loadMD(selM.id);
+      await loadMissions();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
 
-  const inp = {width:"100%",padding:"8px 10px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,color:C.text,fontFamily:MONO,fontSize:11,outline:"none",boxSizing:"border-box"};
-  const sbtn = (on,clr=C.accent)=>({padding:"5px 12px",borderRadius:5,border:`1px solid ${on?clr+"50":C.border}`,background:on?`${clr}12`:"transparent",color:on?clr:C.textSoft,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:FONT});
-  const abtn = (clr=C.accent,dis)=>({padding:"6px 14px",borderRadius:6,border:"none",background:dis?C.textDim:clr,color:"#fff",fontSize:11,fontWeight:600,cursor:dis?"not-allowed":"pointer",fontFamily:FONT,opacity:dis?0.4:1});
+  const inp = {
+    width: "100%",
+    padding: "8px 10px",
+    background: C.surface,
+    border: `1px solid ${C.border}`,
+    borderRadius: 6,
+    color: C.text,
+    fontFamily: MONO,
+    fontSize: 11,
+    outline: "none",
+    boxSizing: "border-box",
+  };
+  const sbtn = (on, clr = C.accent) => ({
+    padding: "5px 12px",
+    borderRadius: 5,
+    border: `1px solid ${on ? clr + "50" : C.border}`,
+    background: on ? `${clr}12` : "transparent",
+    color: on ? clr : C.textSoft,
+    fontSize: 10,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: FONT,
+  });
+  const abtn = (clr = C.accent, dis) => ({
+    padding: "6px 14px",
+    borderRadius: 6,
+    border: "none",
+    background: dis ? C.textDim : clr,
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: 600,
+    cursor: dis ? "not-allowed" : "pointer",
+    fontFamily: FONT,
+    opacity: dis ? 0.4 : 1,
+  });
 
-  const SUBS = [{id:"state",label:"Persona",icon:"♛"},{id:"queue",label:"Approvals",icon:"📋"},{id:"missions",label:"Missions",icon:"🎯"},{id:"model",label:"Models",icon:"⚙"},{id:"learning",label:"Learning",icon:"🧬"}];
+  const SUBS = [
+    { id: "state", label: "Persona", icon: "♛" },
+    { id: "queue", label: "Approvals", icon: "📋" },
+    { id: "missions", label: "Missions", icon: "🎯" },
+    { id: "model", label: "Models", icon: "⚙" },
+    { id: "learning", label: "Learning", icon: "🧬" },
+  ];
 
   return (
-    <div style={{display:"grid",gap:16}}>
+    <div style={{ display: "grid", gap: 16 }}>
       {/* Admin key + sub-nav */}
-      <Panel title="Identity Core — QC OS v4.2.1" icon="♛" accent={C.purple} glow>
-        <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12}}>
-          <span style={{fontSize:10,color:C.textSoft,whiteSpace:"nowrap"}}>Admin Key</span>
-          <input type="password" value={adminKey} onChange={e=>setAdminKey(e.target.value)} placeholder="X-QC-Admin-Key (optional if QC_NO_AUTH=1)" style={{...inp,flex:1,maxWidth:320}} />
-          <PulseDot color={adminKey?C.green:C.cyan} size={6}/>
+      <Panel
+        title="Identity Core — QC OS v4.2.1"
+        icon="♛"
+        accent={C.purple}
+        glow
+      >
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            marginBottom: 12,
+          }}
+        >
+          <span
+            style={{ fontSize: 10, color: C.textSoft, whiteSpace: "nowrap" }}
+          >
+            Admin Key
+          </span>
+          <input
+            type="password"
+            value={adminKey}
+            onChange={(e) => setAdminKey(e.target.value)}
+            placeholder="X-QC-Admin-Key (optional if QC_NO_AUTH=1)"
+            style={{ ...inp, flex: 1, maxWidth: 320 }}
+          />
+          <PulseDot color={adminKey ? C.green : C.cyan} size={6} />
         </div>
-        <div style={{display:"flex",gap:2,flexWrap:"wrap"}}>
-          {SUBS.map(s=>(
-            <button key={s.id} onClick={()=>setSub(s.id)} style={{
-              padding:"7px 14px",background:sub===s.id?`${C.purple}12`:"transparent",
-              border:`1px solid ${sub===s.id?C.purple+"40":"transparent"}`,borderRadius:6,
-              color:sub===s.id?C.purple:C.textSoft,fontSize:11,fontWeight:600,cursor:"pointer",
-              fontFamily:FONT,display:"flex",alignItems:"center",gap:5,
-            }}><span style={{fontSize:12}}>{s.icon}</span>{s.label}</button>
+        <div style={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+          {SUBS.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => setSub(s.id)}
+              style={{
+                padding: "7px 14px",
+                background: sub === s.id ? `${C.purple}12` : "transparent",
+                border: `1px solid ${sub === s.id ? C.purple + "40" : "transparent"}`,
+                borderRadius: 6,
+                color: sub === s.id ? C.purple : C.textSoft,
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+                fontFamily: FONT,
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+              }}
+            >
+              <span style={{ fontSize: 12 }}>{s.icon}</span>
+              {s.label}
+            </button>
           ))}
         </div>
-        {err&&<div style={{marginTop:8,padding:"6px 10px",borderRadius:6,background:C.redDim,border:`1px solid ${C.red}30`,color:C.red,fontSize:11,fontFamily:MONO}}>{err}</div>}
+        {err && (
+          <div
+            style={{
+              marginTop: 8,
+              padding: "6px 10px",
+              borderRadius: 6,
+              background: C.redDim,
+              border: `1px solid ${C.red}30`,
+              color: C.red,
+              fontSize: 11,
+              fontFamily: MONO,
+            }}
+          >
+            {err}
+          </div>
+        )}
       </Panel>
 
       {/* ── Persona State ── */}
-      {sub==="state"&&ps&&(
+      {sub === "state" && ps && (
         <Panel title="Persona State" icon="👁" accent={C.purple}>
-          <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:12}}>
-            <Stat label="Pending" value={ps.pending_items} color={ps.pending_items>0?C.amber:C.green} small/>
-            <Stat label="Rules" value={ps.approved_rules_count} color={C.accentBright} small/>
-            <Stat label="Notes" value={ps.approved_notes_count} color={C.cyan} small/>
-            {ID_LANES.map(l=><Stat key={l} label={l} value={ps.memory_lanes?.[l]??0} color={C.textSoft} small/>)}
+          <div
+            style={{
+              display: "flex",
+              gap: 12,
+              flexWrap: "wrap",
+              marginBottom: 12,
+            }}
+          >
+            <Stat
+              label="Pending"
+              value={ps.pending_items}
+              color={ps.pending_items > 0 ? C.amber : C.green}
+              small
+            />
+            <Stat
+              label="Rules"
+              value={ps.approved_rules_count}
+              color={C.accentBright}
+              small
+            />
+            <Stat
+              label="Notes"
+              value={ps.approved_notes_count}
+              color={C.cyan}
+              small
+            />
+            {ID_LANES.map((l) => (
+              <Stat
+                key={l}
+                label={l}
+                value={ps.memory_lanes?.[l] ?? 0}
+                color={C.textSoft}
+                small
+              />
+            ))}
           </div>
-          <div style={{fontSize:11,color:C.textSoft,lineHeight:1.6,padding:"8px 0",borderTop:`1px solid ${C.border}`}}>{ps.identity_summary}</div>
-          {ps.latest_approved_note&&<div style={{marginTop:8,padding:"8px 10px",background:C.surface,borderRadius:6,fontSize:10,color:C.textSoft,fontFamily:MONO,lineHeight:1.5}}><span style={{color:C.purple,fontWeight:600}}>Latest Note: </span>{ps.latest_approved_note.note_text}</div>}
+          <div
+            style={{
+              fontSize: 11,
+              color: C.textSoft,
+              lineHeight: 1.6,
+              padding: "8px 0",
+              borderTop: `1px solid ${C.border}`,
+            }}
+          >
+            {ps.identity_summary}
+          </div>
+          {ps.latest_approved_note && (
+            <div
+              style={{
+                marginTop: 8,
+                padding: "8px 10px",
+                background: C.surface,
+                borderRadius: 6,
+                fontSize: 10,
+                color: C.textSoft,
+                fontFamily: MONO,
+                lineHeight: 1.5,
+              }}
+            >
+              <span style={{ color: C.purple, fontWeight: 600 }}>
+                Latest Note:{" "}
+              </span>
+              {ps.latest_approved_note.note_text}
+            </div>
+          )}
         </Panel>
       )}
 
       {/* ── Approval Queue ── */}
-      {sub==="queue"&&(
+      {sub === "queue" && (
         <Panel title="Approval Queue" icon="📋" accent={C.accentBright}>
-          <div style={{display:"flex",gap:4,marginBottom:8}}>
-            {ID_QUEUE_TABS.map(t=><button key={t} onClick={()=>setQt(t)} style={sbtn(qt===t,C.accentBright)}>{t}</button>)}
+          <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
+            {ID_QUEUE_TABS.map((t) => (
+              <button
+                key={t}
+                onClick={() => setQt(t)}
+                style={sbtn(qt === t, C.accentBright)}
+              >
+                {t}
+              </button>
+            ))}
           </div>
-          {qt==="proposals"&&<div style={{display:"flex",gap:4,marginBottom:8}}>
-            <button onClick={()=>setQl("")} style={sbtn(ql==="",C.cyan)}>All</button>
-            {ID_LANES.map(l=><button key={l} onClick={()=>setQl(l)} style={sbtn(ql===l,C.cyan)}>{l}</button>)}
-          </div>}
-          <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:320,overflowY:"auto"}}>
-            {qi.length===0&&<span style={{fontSize:11,color:C.textDim}}>No pending items.</span>}
-            {qi.map(it=>(
-              <div key={it.id} style={{padding:"10px 12px",background:C.surface,borderRadius:6,border:`1px solid ${C.border}`}}>
-                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
-                  <span style={{fontFamily:MONO,fontSize:10,color:C.textDim}}>#{it.id}</span>
-                  {it.lane&&<IdBadge color={{personal:C.accentBright,cyber:C.green,market:C.amber,persona:C.purple}[it.lane]}>{it.lane}</IdBadge>}
-                  {it.kind&&<IdBadge color={C.textSoft}>{it.kind}</IdBadge>}
-                  {it.score!=null&&<span style={{marginLeft:"auto",fontFamily:MONO,fontSize:10,color:C.purple}}>{(it.score*100).toFixed(0)}%</span>}
+          {qt === "proposals" && (
+            <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
+              <button onClick={() => setQl("")} style={sbtn(ql === "", C.cyan)}>
+                All
+              </button>
+              {ID_LANES.map((l) => (
+                <button
+                  key={l}
+                  onClick={() => setQl(l)}
+                  style={sbtn(ql === l, C.cyan)}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+          )}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              maxHeight: 320,
+              overflowY: "auto",
+            }}
+          >
+            {qi.length === 0 && (
+              <span style={{ fontSize: 11, color: C.textDim }}>
+                No pending items.
+              </span>
+            )}
+            {qi.map((it) => (
+              <div
+                key={it.id}
+                style={{
+                  padding: "10px 12px",
+                  background: C.surface,
+                  borderRadius: 6,
+                  border: `1px solid ${C.border}`,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    marginBottom: 4,
+                  }}
+                >
+                  <span
+                    style={{ fontFamily: MONO, fontSize: 10, color: C.textDim }}
+                  >
+                    #{it.id}
+                  </span>
+                  {it.lane && (
+                    <IdBadge
+                      color={
+                        {
+                          personal: C.accentBright,
+                          cyber: C.green,
+                          market: C.amber,
+                          persona: C.purple,
+                        }[it.lane]
+                      }
+                    >
+                      {it.lane}
+                    </IdBadge>
+                  )}
+                  {it.kind && <IdBadge color={C.textSoft}>{it.kind}</IdBadge>}
+                  {it.score != null && (
+                    <span
+                      style={{
+                        marginLeft: "auto",
+                        fontFamily: MONO,
+                        fontSize: 10,
+                        color: C.purple,
+                      }}
+                    >
+                      {(it.score * 100).toFixed(0)}%
+                    </span>
+                  )}
                 </div>
-                <div style={{fontSize:11,color:C.text,lineHeight:1.5,marginBottom:6}}>{it.content||it.rule_text||it.note_text||""}</div>
-                <div style={{display:"flex",gap:6}}>
-                  <button disabled={busy} onClick={()=>actQ("approve",it.id)} style={abtn(C.green,busy)}>Approve</button>
-                  <button disabled={busy} onClick={()=>actQ("reject",it.id)} style={abtn(C.red,busy)}>Reject</button>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: C.text,
+                    lineHeight: 1.5,
+                    marginBottom: 6,
+                  }}
+                >
+                  {it.content || it.rule_text || it.note_text || ""}
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button
+                    disabled={busy}
+                    onClick={() => actQ("approve", it.id)}
+                    style={abtn(C.green, busy)}
+                  >
+                    Approve
+                  </button>
+                  <button
+                    disabled={busy}
+                    onClick={() => actQ("reject", it.id)}
+                    style={abtn(C.red, busy)}
+                  >
+                    Reject
+                  </button>
                 </div>
               </div>
             ))}
@@ -2999,69 +7163,293 @@ function IdentityTab() {
       )}
 
       {/* ── Cyber Missions ── */}
-      {sub==="missions"&&(
-        <div style={{display:"grid",gridTemplateColumns:"260px 1fr",gap:16}}>
+      {sub === "missions" && (
+        <div
+          style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 16 }}
+        >
           <Panel title="Missions" icon="🎯" accent={C.accent}>
-            <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:8}}>
-              <input value={mName} onChange={e=>setMName(e.target.value)} placeholder="Mission name" style={inp}/>
-              <input value={mObj} onChange={e=>setMObj(e.target.value)} placeholder="Objective" style={inp}/>
-              <button disabled={busy} onClick={createM} style={abtn(C.accent,busy)}>+ Create</button>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                marginBottom: 8,
+              }}
+            >
+              <input
+                value={mName}
+                onChange={(e) => setMName(e.target.value)}
+                placeholder="Mission name"
+                style={inp}
+              />
+              <input
+                value={mObj}
+                onChange={(e) => setMObj(e.target.value)}
+                placeholder="Objective"
+                style={inp}
+              />
+              <button
+                disabled={busy}
+                onClick={createM}
+                style={abtn(C.accent, busy)}
+              >
+                + Create
+              </button>
             </div>
-            <div style={{display:"flex",flexDirection:"column",gap:2,maxHeight:260,overflowY:"auto"}}>
-              {missions.length===0&&<span style={{fontSize:11,color:C.textDim}}>No missions.</span>}
-              {missions.map(m=>(
-                <button key={m.id} onClick={()=>loadMD(m.id)} style={{
-                  padding:"7px 8px",background:selM?.id===m.id?`${C.accent}12`:"transparent",
-                  border:`1px solid ${selM?.id===m.id?C.accent+"40":"transparent"}`,borderRadius:6,
-                  color:C.text,fontSize:11,cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:6,width:"100%",fontFamily:FONT,
-                }}><PulseDot color={m.status==="open"?C.accent:m.status==="in_progress"?C.amber:C.green} size={6}/>
-                  <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.name}</span>
-                  <span style={{fontFamily:MONO,fontSize:9,color:C.textDim}}>{m.findings_count}F</span>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 2,
+                maxHeight: 260,
+                overflowY: "auto",
+              }}
+            >
+              {missions.length === 0 && (
+                <span style={{ fontSize: 11, color: C.textDim }}>
+                  No missions.
+                </span>
+              )}
+              {missions.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => loadMD(m.id)}
+                  style={{
+                    padding: "7px 8px",
+                    background:
+                      selM?.id === m.id ? `${C.accent}12` : "transparent",
+                    border: `1px solid ${selM?.id === m.id ? C.accent + "40" : "transparent"}`,
+                    borderRadius: 6,
+                    color: C.text,
+                    fontSize: 11,
+                    cursor: "pointer",
+                    textAlign: "left",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    width: "100%",
+                    fontFamily: FONT,
+                  }}
+                >
+                  <PulseDot
+                    color={
+                      m.status === "open"
+                        ? C.accent
+                        : m.status === "in_progress"
+                          ? C.amber
+                          : C.green
+                    }
+                    size={6}
+                  />
+                  <span
+                    style={{
+                      flex: 1,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {m.name}
+                  </span>
+                  <span
+                    style={{ fontFamily: MONO, fontSize: 9, color: C.textDim }}
+                  >
+                    {m.findings_count}F
+                  </span>
                 </button>
               ))}
             </div>
           </Panel>
-          <Panel title={selM?selM.name:"Select a mission"} icon="📄" accent={C.accent}>
-            {!selM?<span style={{fontSize:11,color:C.textDim}}>Select or create a mission.</span>:(
-              <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <Badge color={selM.status==="open"?C.accent:selM.status==="in_progress"?C.amber:C.green}>{selM.status}</Badge>
-                  <span style={{fontSize:11,color:C.textSoft}}>{selM.objective}</span>
+          <Panel
+            title={selM ? selM.name : "Select a mission"}
+            icon="📄"
+            accent={C.accent}
+          >
+            {!selM ? (
+              <span style={{ fontSize: 11, color: C.textDim }}>
+                Select or create a mission.
+              </span>
+            ) : (
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 10 }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Badge
+                    color={
+                      selM.status === "open"
+                        ? C.accent
+                        : selM.status === "in_progress"
+                          ? C.amber
+                          : C.green
+                    }
+                  >
+                    {selM.status}
+                  </Badge>
+                  <span style={{ fontSize: 11, color: C.textSoft }}>
+                    {selM.objective}
+                  </span>
                 </div>
-                <div style={{borderTop:`1px solid ${C.border}`,paddingTop:8}}>
-                  <div style={{fontSize:10,color:C.textSoft,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6}}>Findings ({selM.findings?.length||0})</div>
-                  {(selM.findings||[]).map(f=>(
-                    <div key={f.id} style={{display:"flex",gap:8,padding:"4px 0",fontSize:11}}>
-                      <span style={{fontFamily:MONO,fontSize:10,fontWeight:700,color:ID_SEV_CLR[f.severity],minWidth:52,textTransform:"uppercase"}}>{f.severity}</span>
-                      <span style={{color:C.text}}>{f.summary}</span>
+                <div
+                  style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8 }}
+                >
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: C.textSoft,
+                      letterSpacing: 0.8,
+                      textTransform: "uppercase",
+                      marginBottom: 6,
+                    }}
+                  >
+                    Findings ({selM.findings?.length || 0})
+                  </div>
+                  {(selM.findings || []).map((f) => (
+                    <div
+                      key={f.id}
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        padding: "4px 0",
+                        fontSize: 11,
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontFamily: MONO,
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: ID_SEV_CLR[f.severity],
+                          minWidth: 52,
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        {f.severity}
+                      </span>
+                      <span style={{ color: C.text }}>{f.summary}</span>
                     </div>
                   ))}
-                  <div style={{display:"flex",gap:6,marginTop:6}}>
-                    <select value={fSev} onChange={e=>setFSev(e.target.value)} style={{...inp,width:90,flex:"none"}}>
-                      {ID_SEVS.map(s=><option key={s} value={s}>{s}</option>)}
+                  <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                    <select
+                      value={fSev}
+                      onChange={(e) => setFSev(e.target.value)}
+                      style={{ ...inp, width: 90, flex: "none" }}
+                    >
+                      {ID_SEVS.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
                     </select>
-                    <input value={fSum} onChange={e=>setFSum(e.target.value)} placeholder="Finding summary" style={{...inp,flex:1}}/>
-                    <button disabled={busy} onClick={addFind} style={abtn(C.accent,busy)}>+ Add</button>
+                    <input
+                      value={fSum}
+                      onChange={(e) => setFSum(e.target.value)}
+                      placeholder="Finding summary"
+                      style={{ ...inp, flex: 1 }}
+                    />
+                    <button
+                      disabled={busy}
+                      onClick={addFind}
+                      style={abtn(C.accent, busy)}
+                    >
+                      + Add
+                    </button>
                   </div>
                 </div>
-                <div style={{borderTop:`1px solid ${C.border}`,paddingTop:8}}>
-                  <div style={{fontSize:10,color:C.textSoft,letterSpacing:0.8,textTransform:"uppercase",marginBottom:6}}>Remediation</div>
-                  <div style={{display:"flex",gap:6}}>
-                    <button disabled={busy||!(selM.findings?.length)} onClick={genRem} style={abtn(C.accent,busy||!(selM.findings?.length))}>Generate Package</button>
-                    <button disabled={busy} onClick={appRem} style={abtn(C.green,busy)}>Apply Latest</button>
+                <div
+                  style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8 }}
+                >
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: C.textSoft,
+                      letterSpacing: 0.8,
+                      textTransform: "uppercase",
+                      marginBottom: 6,
+                    }}
+                  >
+                    Remediation
                   </div>
-                  {(selM.remediation_packages||[]).map(pkg=>{
-                    let parsed;try{parsed=JSON.parse(pkg.package_json);}catch{parsed=null;}
-                    return (<div key={pkg.id} style={{marginTop:8,padding:"8px 10px",background:pkg.applied?C.greenGlow:C.surface,border:`1px solid ${pkg.applied?C.green+"20":C.border}`,borderRadius:6}}>
-                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                        <span style={{fontFamily:MONO,fontSize:10,color:C.textDim}}>PKG-{pkg.id}</span>
-                        <Badge color={pkg.applied?C.green:C.amber}>{pkg.applied?"Applied":"Pending"}</Badge>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button
+                      disabled={busy || !selM.findings?.length}
+                      onClick={genRem}
+                      style={abtn(C.accent, busy || !selM.findings?.length)}
+                    >
+                      Generate Package
+                    </button>
+                    <button
+                      disabled={busy}
+                      onClick={appRem}
+                      style={abtn(C.green, busy)}
+                    >
+                      Apply Latest
+                    </button>
+                  </div>
+                  {(selM.remediation_packages || []).map((pkg) => {
+                    let parsed;
+                    try {
+                      parsed = JSON.parse(pkg.package_json);
+                    } catch {
+                      parsed = null;
+                    }
+                    return (
+                      <div
+                        key={pkg.id}
+                        style={{
+                          marginTop: 8,
+                          padding: "8px 10px",
+                          background: pkg.applied ? C.greenGlow : C.surface,
+                          border: `1px solid ${pkg.applied ? C.green + "20" : C.border}`,
+                          borderRadius: 6,
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            marginBottom: 4,
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontFamily: MONO,
+                              fontSize: 10,
+                              color: C.textDim,
+                            }}
+                          >
+                            PKG-{pkg.id}
+                          </span>
+                          <Badge color={pkg.applied ? C.green : C.amber}>
+                            {pkg.applied ? "Applied" : "Pending"}
+                          </Badge>
+                        </div>
+                        {parsed?.steps?.map((st, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              display: "flex",
+                              gap: 6,
+                              fontSize: 10,
+                              padding: "2px 0",
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontFamily: MONO,
+                                fontWeight: 700,
+                                color: ID_SEV_CLR[st.severity],
+                                minWidth: 20,
+                              }}
+                            >
+                              P{st.priority}
+                            </span>
+                            <span style={{ color: C.text, lineHeight: 1.4 }}>
+                              {st.action}
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                      {parsed?.steps?.map((st,i)=>(<div key={i} style={{display:"flex",gap:6,fontSize:10,padding:"2px 0"}}>
-                        <span style={{fontFamily:MONO,fontWeight:700,color:ID_SEV_CLR[st.severity],minWidth:20}}>P{st.priority}</span>
-                        <span style={{color:C.text,lineHeight:1.4}}>{st.action}</span>
-                      </div>))}
-                    </div>);
+                    );
                   })}
                 </div>
               </div>
@@ -3071,63 +7459,260 @@ function IdentityTab() {
       )}
 
       {/* ── Model Manager ── */}
-      {sub==="model"&&(
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+      {sub === "model" && (
+        <div
+          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}
+        >
           <Panel title="Provider" icon="⚙" accent={C.cyan}>
-            {prov?.current&&<div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:10}}>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:C.textSoft}}>Active</span><code style={{fontFamily:MONO,fontSize:11,color:C.text}}>{prov.current.provider}</code></div>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:C.textSoft}}>Ollama</span><PulseDot color={prov.ollama_reachable?C.green:C.textDim} size={6}/></div>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:C.textSoft}}>vLLM</span><PulseDot color={prov.vllm_reachable?C.green:C.textDim} size={6}/></div>
-            </div>}
-            <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-              {ID_PROVIDERS.map(p=><button key={p} disabled={busy||prov?.current?.provider===p} onClick={()=>switchProv(p)} style={sbtn(prov?.current?.provider===p,C.cyan)}>{p.replace(/_/g," ")}</button>)}
+            {prov?.current && (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4,
+                  marginBottom: 10,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: 11,
+                  }}
+                >
+                  <span style={{ color: C.textSoft }}>Active</span>
+                  <code
+                    style={{ fontFamily: MONO, fontSize: 11, color: C.text }}
+                  >
+                    {prov.current.provider}
+                  </code>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: 11,
+                  }}
+                >
+                  <span style={{ color: C.textSoft }}>Ollama</span>
+                  <PulseDot
+                    color={prov.ollama_reachable ? C.green : C.textDim}
+                    size={6}
+                  />
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: 11,
+                  }}
+                >
+                  <span style={{ color: C.textSoft }}>vLLM</span>
+                  <PulseDot
+                    color={prov.vllm_reachable ? C.green : C.textDim}
+                    size={6}
+                  />
+                </div>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+              {ID_PROVIDERS.map((p) => (
+                <button
+                  key={p}
+                  disabled={busy || prov?.current?.provider === p}
+                  onClick={() => switchProv(p)}
+                  style={sbtn(prov?.current?.provider === p, C.cyan)}
+                >
+                  {p.replace(/_/g, " ")}
+                </button>
+              ))}
             </div>
           </Panel>
           <Panel title="Ollama" icon="🧠" accent={C.cyan}>
-            <div style={{display:"flex",gap:6,marginBottom:8}}>
-              <button onClick={checkOllama} style={sbtn(false,C.cyan)}>Refresh</button>
-              {oHealth&&<Badge color={oHealth.reachable?C.green:C.red}>{oHealth.reachable?"Healthy":oHealth.status}</Badge>}
+            <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+              <button onClick={checkOllama} style={sbtn(false, C.cyan)}>
+                Refresh
+              </button>
+              {oHealth && (
+                <Badge color={oHealth.reachable ? C.green : C.red}>
+                  {oHealth.reachable ? "Healthy" : oHealth.status}
+                </Badge>
+              )}
             </div>
-            {oModels.map(m=><div key={m.name} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:`1px solid ${C.border}`}}>
-              <span style={{fontFamily:MONO,fontSize:11,color:C.text}}>{m.name}</span>
-              <span style={{fontFamily:MONO,fontSize:10,color:C.textDim}}>{m.size?`${(m.size/1e9).toFixed(1)}GB`:"—"}</span>
-            </div>)}
-            <div style={{display:"flex",gap:6,marginTop:8}}>
-              <input value={pullN} onChange={e=>setPullN(e.target.value)} placeholder="e.g. mistral:7b" style={{...inp,flex:1}}/>
-              <button disabled={busy||!pullN.trim()} onClick={doPull} style={abtn(C.cyan,busy||!pullN.trim())}>Pull</button>
+            {oModels.map((m) => (
+              <div
+                key={m.name}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  padding: "4px 0",
+                  borderBottom: `1px solid ${C.border}`,
+                }}
+              >
+                <span style={{ fontFamily: MONO, fontSize: 11, color: C.text }}>
+                  {m.name}
+                </span>
+                <span
+                  style={{ fontFamily: MONO, fontSize: 10, color: C.textDim }}
+                >
+                  {m.size ? `${(m.size / 1e9).toFixed(1)}GB` : "—"}
+                </span>
+              </div>
+            ))}
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              <input
+                value={pullN}
+                onChange={(e) => setPullN(e.target.value)}
+                placeholder="e.g. mistral:7b"
+                style={{ ...inp, flex: 1 }}
+              />
+              <button
+                disabled={busy || !pullN.trim()}
+                onClick={doPull}
+                style={abtn(C.cyan, busy || !pullN.trim())}
+              >
+                Pull
+              </button>
             </div>
-            {pullM&&<span style={{fontSize:10,fontFamily:MONO,color:C.purple,marginTop:4,display:"block"}}>{pullM}</span>}
+            {pullM && (
+              <span
+                style={{
+                  fontSize: 10,
+                  fontFamily: MONO,
+                  color: C.purple,
+                  marginTop: 4,
+                  display: "block",
+                }}
+              >
+                {pullM}
+              </span>
+            )}
           </Panel>
         </div>
       )}
 
       {/* ── Learning Dock ── */}
-      {sub==="learning"&&(
-        <Panel title="Learning Dock — Biomimetic Cycle" icon="🧬" accent={C.magenta} glow>
-          <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12}}>
-            <button disabled={busy} onClick={doLearn} style={abtn(C.magenta,busy)}>{busy?"Running…":"Run Cycle"}</button>
-            <span style={{fontSize:10,color:C.textDim}}>Sense → Interpret → Propose</span>
+      {sub === "learning" && (
+        <Panel
+          title="Learning Dock — Biomimetic Cycle"
+          icon="🧬"
+          accent={C.magenta}
+          glow
+        >
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+              marginBottom: 12,
+            }}
+          >
+            <button
+              disabled={busy}
+              onClick={doLearn}
+              style={abtn(C.magenta, busy)}
+            >
+              {busy ? "Running…" : "Run Cycle"}
+            </button>
+            <span style={{ fontSize: 10, color: C.textDim }}>
+              Sense → Interpret → Propose
+            </span>
           </div>
-          {lr&&(
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:C.textSoft}}>Run</span><code style={{fontFamily:MONO,fontSize:11,color:C.text}}>{lr.run_at}</code></div>
-              <div style={{fontSize:10,color:C.textSoft,letterSpacing:0.8,textTransform:"uppercase",marginTop:4}}>Sensed</div>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                <Stat label="Turns" value={lr.sensed?.conversation_turns??0} color={C.text} small/>
-                <Stat label="Market" value={lr.sensed?.market_snapshots??0} color={C.amber} small/>
-                <Stat label="Forecast" value={lr.sensed?.forecast_runs??0} color={C.accentBright} small/>
-                <Stat label="Events" value={lr.sensed?.audit_events??0} color={C.cyan} small/>
+          {lr && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  fontSize: 11,
+                }}
+              >
+                <span style={{ color: C.textSoft }}>Run</span>
+                <code style={{ fontFamily: MONO, fontSize: 11, color: C.text }}>
+                  {lr.run_at}
+                </code>
               </div>
-              <div style={{fontSize:10,color:C.textSoft,letterSpacing:0.8,textTransform:"uppercase",marginTop:4}}>Generated</div>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                <Stat label="Proposals" value={lr.generated?.proposals??0} color={C.accentBright} small/>
-                <Stat label="Reflect" value={lr.generated?.reflections??0} color={C.purple} small/>
-                <Stat label="Rules" value={lr.generated?.rules??0} color={C.cyan} small/>
-                <Stat label="Notes" value={lr.generated?.self_notes??0} color={C.magenta} small/>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: C.textSoft,
+                  letterSpacing: 0.8,
+                  textTransform: "uppercase",
+                  marginTop: 4,
+                }}
+              >
+                Sensed
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Stat
+                  label="Turns"
+                  value={lr.sensed?.conversation_turns ?? 0}
+                  color={C.text}
+                  small
+                />
+                <Stat
+                  label="Market"
+                  value={lr.sensed?.market_snapshots ?? 0}
+                  color={C.amber}
+                  small
+                />
+                <Stat
+                  label="Forecast"
+                  value={lr.sensed?.forecast_runs ?? 0}
+                  color={C.accentBright}
+                  small
+                />
+                <Stat
+                  label="Events"
+                  value={lr.sensed?.audit_events ?? 0}
+                  color={C.cyan}
+                  small
+                />
+              </div>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: C.textSoft,
+                  letterSpacing: 0.8,
+                  textTransform: "uppercase",
+                  marginTop: 4,
+                }}
+              >
+                Generated
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Stat
+                  label="Proposals"
+                  value={lr.generated?.proposals ?? 0}
+                  color={C.accentBright}
+                  small
+                />
+                <Stat
+                  label="Reflect"
+                  value={lr.generated?.reflections ?? 0}
+                  color={C.purple}
+                  small
+                />
+                <Stat
+                  label="Rules"
+                  value={lr.generated?.rules ?? 0}
+                  color={C.cyan}
+                  small
+                />
+                <Stat
+                  label="Notes"
+                  value={lr.generated?.self_notes ?? 0}
+                  color={C.magenta}
+                  small
+                />
               </div>
             </div>
           )}
-          {!lr&&!err&&<span style={{fontSize:11,color:C.textDim}}>Trigger a cycle to sense, interpret, and propose.</span>}
+          {!lr && !err && (
+            <span style={{ fontSize: 11, color: C.textDim }}>
+              Trigger a cycle to sense, interpret, and propose.
+            </span>
+          )}
         </Panel>
       )}
     </div>
@@ -3140,76 +7725,205 @@ function DevOpsTab() {
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <Panel title="One-Click Operations" icon="⚡" accent={C.accent}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-          {DEVOPS_WORKFLOWS.map(w => (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: 10,
+          }}
+        >
+          {DEVOPS_WORKFLOWS.map((w) => (
             <button
               key={w.id}
               onClick={() => setSelected(selected === w.id ? null : w.id)}
               style={{
-                padding: 14, background: selected === w.id ? `${w.color}12` : C.surface,
+                padding: 14,
+                background: selected === w.id ? `${w.color}12` : C.surface,
                 border: `1px solid ${selected === w.id ? w.color + "40" : C.border}`,
-                borderRadius: 8, cursor: "pointer", textAlign: "left",
+                borderRadius: 8,
+                cursor: "pointer",
+                textAlign: "left",
                 transition: "all 0.2s ease",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: 6,
+                }}
+              >
                 <span style={{ fontSize: 18 }}>{w.icon}</span>
-                <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{w.label}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
+                  {w.label}
+                </span>
               </div>
-              <div style={{ fontSize: 10, color: C.textSoft, lineHeight: 1.4 }}>{w.desc}</div>
+              <div style={{ fontSize: 10, color: C.textSoft, lineHeight: 1.4 }}>
+                {w.desc}
+              </div>
             </button>
           ))}
         </div>
       </Panel>
 
       {selected && (
-        <Panel title={`Configure: ${DEVOPS_WORKFLOWS.find(w => w.id === selected)?.label}`} icon="⚙" accent={DEVOPS_WORKFLOWS.find(w => w.id === selected)?.color}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <Panel
+          title={`Configure: ${DEVOPS_WORKFLOWS.find((w) => w.id === selected)?.label}`}
+          icon="⚙"
+          accent={DEVOPS_WORKFLOWS.find((w) => w.id === selected)?.color}
+        >
+          <div
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
+          >
             <div>
-              <label style={{ fontSize: 10, color: C.textSoft, display: "block", marginBottom: 4 }}>Target Environment</label>
-              <select style={{ width: "100%", padding: "8px 10px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: MONO, fontSize: 11 }}>
+              <label
+                style={{
+                  fontSize: 10,
+                  color: C.textSoft,
+                  display: "block",
+                  marginBottom: 4,
+                }}
+              >
+                Target Environment
+              </label>
+              <select
+                style={{
+                  width: "100%",
+                  padding: "8px 10px",
+                  background: C.surface,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 6,
+                  color: C.text,
+                  fontFamily: MONO,
+                  fontSize: 11,
+                }}
+              >
                 <option>staging</option>
                 <option>production</option>
               </select>
             </div>
             <div>
-              <label style={{ fontSize: 10, color: C.textSoft, display: "block", marginBottom: 4 }}>Branch</label>
-              <input defaultValue="main" style={{ width: "100%", padding: "8px 10px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: MONO, fontSize: 11, boxSizing: "border-box" }} />
+              <label
+                style={{
+                  fontSize: 10,
+                  color: C.textSoft,
+                  display: "block",
+                  marginBottom: 4,
+                }}
+              >
+                Branch
+              </label>
+              <input
+                defaultValue="main"
+                style={{
+                  width: "100%",
+                  padding: "8px 10px",
+                  background: C.surface,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 6,
+                  color: C.text,
+                  fontFamily: MONO,
+                  fontSize: 11,
+                  boxSizing: "border-box",
+                }}
+              />
             </div>
           </div>
-          <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
+          <div
+            style={{
+              marginTop: 12,
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+            }}
+          >
             <a
-              href={`https://github.com/HeruAhmose/QueenCalifia-CyberAI/actions/workflows/${DEVOPS_WORKFLOWS.find(w => w.id === selected)?.workflowFile}`}
+              href={`https://github.com/HeruAhmose/QueenCalifia-CyberAI/actions/workflows/${DEVOPS_WORKFLOWS.find((w) => w.id === selected)?.workflowFile}`}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ padding: "8px 20px", background: C.accent, color: "#fff", borderRadius: 6, fontSize: 12, fontWeight: 600, textDecoration: "none", display: "inline-block" }}
+              style={{
+                padding: "8px 20px",
+                background: C.accent,
+                color: "#fff",
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 600,
+                textDecoration: "none",
+                display: "inline-block",
+              }}
             >
               Open in GitHub Actions ↗
               <span className="sr-only"> (opens in new tab)</span>
             </a>
-            <button onClick={() => setSelected(null)} style={{ padding: "8px 16px", background: "transparent", color: C.textSoft, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+            <button
+              onClick={() => setSelected(null)}
+              style={{
+                padding: "8px 16px",
+                background: "transparent",
+                color: C.textSoft,
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                fontSize: 12,
+                cursor: "pointer",
+              }}
+            >
               Cancel
             </button>
           </div>
-          <p style={{ marginTop: 10, fontSize: 10, color: C.textDim, lineHeight: 1.5 }}>
-            This dashboard doesn't trigger workflow runs directly. "Open in GitHub Actions" takes you to the real workflow_dispatch page, where you can run it with your own credentials.
+          <p
+            style={{
+              marginTop: 10,
+              fontSize: 10,
+              color: C.textDim,
+              lineHeight: 1.5,
+            }}
+          >
+            This dashboard doesn't trigger workflow runs directly. "Open in
+            GitHub Actions" takes you to the real workflow_dispatch page, where
+            you can run it with your own credentials.
           </p>
         </Panel>
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <Panel title="CI/CD Workflows" icon="🔄" accent={C.green} headerRight={
-          <span style={{ fontSize: 9, color: C.textDim, fontFamily: MONO }}>links to real runs, not live status</span>
-        }>
-          {["ci.yml", "deploy-vm.yml", "promote-production.yml", "release-helm.yml", "bootstrap-k8s.yml", "protect-branches.yml", "deps-refresh.yml", "weekly-platform-upgrades.yml"].map(wf => (
+        <Panel
+          title="CI/CD Workflows"
+          icon="🔄"
+          accent={C.green}
+          headerRight={
+            <span style={{ fontSize: 9, color: C.textDim, fontFamily: MONO }}>
+              links to real runs, not live status
+            </span>
+          }
+        >
+          {[
+            "ci.yml",
+            "deploy-vm.yml",
+            "promote-production.yml",
+            "release-helm.yml",
+            "bootstrap-k8s.yml",
+            "protect-branches.yml",
+            "deps-refresh.yml",
+            "weekly-platform-upgrades.yml",
+          ].map((wf) => (
             <a
               key={wf}
               href={`https://github.com/HeruAhmose/QueenCalifia-CyberAI/actions/workflows/${wf}`}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${C.border}`, textDecoration: "none" }}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "6px 0",
+                borderBottom: `1px solid ${C.border}`,
+                textDecoration: "none",
+              }}
             >
-              <span style={{ fontSize: 11, fontFamily: MONO, color: C.text }}>{wf}</span>
+              <span style={{ fontSize: 11, fontFamily: MONO, color: C.text }}>
+                {wf}
+              </span>
               <span style={{ fontSize: 10, color: C.textDim }}>
                 view runs ↗<span className="sr-only"> (opens in new tab)</span>
               </span>
@@ -3217,15 +7931,37 @@ function DevOpsTab() {
           ))}
         </Panel>
 
-        <Panel title="Infrastructure" icon="🏗" accent={C.cyan} headerRight={
-          <span style={{ fontSize: 9, color: C.textDim, fontFamily: MONO }}>provisioned, not live-checked</span>
-        }>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <Panel
+          title="Infrastructure"
+          icon="🏗"
+          accent={C.cyan}
+          headerRight={
+            <span style={{ fontSize: 9, color: C.textDim, fontFamily: MONO }}>
+              provisioned, not live-checked
+            </span>
+          }
+        >
+          <div
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}
+          >
             {[
-              "K8s Cluster", "ArgoCD", "Cert-Manager", "Ingress",
-              "Redis", "Prometheus", "Grafana", "OTEL Collector",
-            ].map(label => (
-              <div key={label} style={{ padding: "6px 8px", background: C.surface, borderRadius: 4 }}>
+              "K8s Cluster",
+              "ArgoCD",
+              "Cert-Manager",
+              "Ingress",
+              "Redis",
+              "Prometheus",
+              "Grafana",
+              "OTEL Collector",
+            ].map((label) => (
+              <div
+                key={label}
+                style={{
+                  padding: "6px 8px",
+                  background: C.surface,
+                  borderRadius: 4,
+                }}
+              >
                 <span style={{ fontSize: 10, color: C.textSoft }}>{label}</span>
               </div>
             ))}
@@ -3262,61 +7998,92 @@ function GuidedWizard({ onExit, onAvatarStateChange, onSound }) {
       0;
 
     if (scanning) onAvatarStateChange("hex_shield");
-    else if (step >= 3 && result) onAvatarStateChange(critical > 0 ? "ascended" : "active");
+    else if (step >= 3 && result)
+      onAvatarStateChange(critical > 0 ? "ascended" : "active");
     else onAvatarStateChange("idle");
 
     return () => onAvatarStateChange("idle");
   }, [onAvatarStateChange, scanning, step, result]);
 
   const presets = [
-    { label: "Home Network", value: "192.168.1.0/24", desc: "Most home routers" },
+    {
+      label: "Home Network",
+      value: "192.168.1.0/24",
+      desc: "Most home routers",
+    },
     { label: "Office Range", value: "10.0.0.0/24", desc: "Common enterprise" },
     { label: "This Machine", value: "127.0.0.1", desc: "Localhost only" },
     { label: "Custom", value: "", desc: "Enter your target" },
   ];
 
   const runScan = async () => {
-    if (!ack) { setError("You must confirm you are authorized to scan this target."); return; }
-    setScanning(true); setError(""); setStep(2); setProgress(0);
+    if (!ack) {
+      setError("You must confirm you are authorized to scan this target.");
+      return;
+    }
+    setScanning(true);
+    setError("");
+    setStep(2);
+    setProgress(0);
     setRemediationPlan(null);
     onSound?.("scan_start");
 
     // Simulate progress while waiting for API
     const progressInterval = setInterval(() => {
-      setProgress(p => Math.min(p + Math.random() * 8, 92));
+      setProgress((p) => Math.min(p + Math.random() * 8, 92));
     }, 600);
 
     try {
       const headers = { "Content-Type": "application/json" };
       if (apiKey.trim()) headers["X-QC-API-Key"] = apiKey.trim();
 
-      const res = await qcFetchWithRetry(`${QC_API}/api/v1/one-click/scan-and-fix`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          target,
-          scan_type: scanType,
-          auto_approve: false,
-          acknowledge_authorized: true,
-        }),
-      });
+      const res = await qcFetchWithRetry(
+        `${QC_API}/api/v1/one-click/scan-and-fix`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            target,
+            scan_type: scanType,
+            auto_approve: false,
+            acknowledge_authorized: true,
+          }),
+        },
+      );
       const text = await res.text();
       let data = null;
-      try { data = text ? JSON.parse(text) : null; } catch {
-        throw new Error(`Non-JSON scan-and-fix response (${res.status}). Snippet: ${String(text).slice(0, 220)}`);
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        throw new Error(
+          `Non-JSON scan-and-fix response (${res.status}). Snippet: ${String(text).slice(0, 220)}`,
+        );
       }
-      if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
+      if (!res.ok)
+        throw new Error(data?.error || data?.message || `HTTP ${res.status}`);
       clearInterval(progressInterval);
       setProgress(100);
       setResult(data);
-      const workflowPlan = normalizeRemediationPlan(data?.phases?.remediation || null, data?.target || target);
+      const workflowPlan = normalizeRemediationPlan(
+        data?.phases?.remediation || null,
+        data?.target || target,
+      );
       if (workflowPlan?.priority_actions?.length) {
         setRemediationPlan(workflowPlan);
       } else {
         try {
-          const planResp = await qcFetchWithRetry(`${QC_API}/api/vulns/remediation`, { headers });
+          const planResp = await qcFetchWithRetry(
+            `${QC_API}/api/vulns/remediation`,
+            { headers },
+          );
           const planJson = await planResp.json().catch(() => ({}));
-          if (planResp.ok) setRemediationPlan(normalizeRemediationPlan(planJson?.data || null, data?.target || target));
+          if (planResp.ok)
+            setRemediationPlan(
+              normalizeRemediationPlan(
+                planJson?.data || null,
+                data?.target || target,
+              ),
+            );
         } catch {}
       }
       const critical =
@@ -3338,33 +8105,34 @@ function GuidedWizard({ onExit, onAvatarStateChange, onSound }) {
 
   const exportReport = (format) => {
     if (!result) return;
-    const content = format === "json"
-      ? JSON.stringify(result, null, 2)
-      : [
-          "# QueenCalifia CyberAI — Scan Report",
-          `# Target: ${result.target}`,
-          `# Date: ${result.completed_at}`,
-          `# Risk: ${result.risk_level}`,
-          `# Recommendation: ${result.recommendation}`,
-          "",
-          `## Scan Summary`,
-          `Hosts alive: ${result.phases?.scan?.hosts_alive || 0}`,
-          `Total findings: ${result.phases?.scan?.total_findings || 0}`,
-          `Critical: ${result.phases?.scan?.critical || 0}`,
-          `High: ${result.phases?.scan?.high || 0}`,
-          `Overall risk: ${result.phases?.scan?.overall_risk || 0}/10`,
-          `Quantum risk: ${result.phases?.scan?.quantum_risk || "N/A"}`,
-          "",
-          `## Learning`,
-          `New baselines: ${result.phases?.learning?.new_baselines || 0}`,
-          `Patterns learned: ${result.phases?.learning?.new_patterns || 0}`,
-          "",
-          `## Remediation`,
-          `Actions: ${result.phases?.remediation?.total_actions || 0}`,
-          "",
-          `## Evolution`,
-          `New rules: ${result.phases?.evolution?.new_detection_rules || 0}`,
-        ].join("\n");
+    const content =
+      format === "json"
+        ? JSON.stringify(result, null, 2)
+        : [
+            "# QueenCalifia CyberAI — Scan Report",
+            `# Target: ${result.target}`,
+            `# Date: ${result.completed_at}`,
+            `# Risk: ${result.risk_level}`,
+            `# Recommendation: ${result.recommendation}`,
+            "",
+            `## Scan Summary`,
+            `Hosts alive: ${result.phases?.scan?.hosts_alive || 0}`,
+            `Total findings: ${result.phases?.scan?.total_findings || 0}`,
+            `Critical: ${result.phases?.scan?.critical || 0}`,
+            `High: ${result.phases?.scan?.high || 0}`,
+            `Overall risk: ${result.phases?.scan?.overall_risk || 0}/10`,
+            `Quantum risk: ${result.phases?.scan?.quantum_risk || "N/A"}`,
+            "",
+            `## Learning`,
+            `New baselines: ${result.phases?.learning?.new_baselines || 0}`,
+            `Patterns learned: ${result.phases?.learning?.new_patterns || 0}`,
+            "",
+            `## Remediation`,
+            `Actions: ${result.phases?.remediation?.total_actions || 0}`,
+            "",
+            `## Evolution`,
+            `New rules: ${result.phases?.evolution?.new_detection_rules || 0}`,
+          ].join("\n");
 
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -3388,10 +8156,13 @@ function GuidedWizard({ onExit, onAvatarStateChange, onSound }) {
         "",
       ];
       for (const a of actions) {
-        lines.push(`# [P${a.priority}] ${a.title} (${a.cve_id || a.vuln_id || a.action_id}) — Severity: ${a.severity}`);
+        lines.push(
+          `# [P${a.priority}] ${a.title} (${a.cve_id || a.vuln_id || a.action_id}) — Severity: ${a.severity}`,
+        );
         lines.push(`# Asset: ${a.affected_asset || target || "n/a"}`);
         lines.push(`# Guidance: ${a.remediation || "n/a"}`);
-        if (Array.isArray(a.commands) && a.commands.length) lines.push(`# Commands: ${a.commands.join(" ; ")}`);
+        if (Array.isArray(a.commands) && a.commands.length)
+          lines.push(`# Commands: ${a.commands.join(" ; ")}`);
         lines.push("");
       }
       return lines.join("\n");
@@ -3409,7 +8180,9 @@ function GuidedWizard({ onExit, onAvatarStateChange, onSound }) {
       for (const a of actions) {
         lines.push(`    - name: "[P${a.priority}] ${a.title}"`);
         lines.push("      debug:");
-        lines.push(`        msg: "${String(a.remediation || "n/a").replaceAll('"', '\\"')}"`);
+        lines.push(
+          `        msg: "${String(a.remediation || "n/a").replaceAll('"', '\\"')}"`,
+        );
       }
       lines.push("");
       return lines.join("\n");
@@ -3423,7 +8196,9 @@ function GuidedWizard({ onExit, onAvatarStateChange, onSound }) {
       "",
     ];
     for (const a of actions) {
-      lines.push(`# [P${a.priority}] ${a.title} (${a.cve_id || a.vuln_id || a.action_id}) — Severity: ${a.severity}`);
+      lines.push(
+        `# [P${a.priority}] ${a.title} (${a.cve_id || a.vuln_id || a.action_id}) — Severity: ${a.severity}`,
+      );
       lines.push(`# Asset: ${a.affected_asset || target || "n/a"}`);
       lines.push(`# Guidance: ${a.remediation || "n/a"}`);
       if (Array.isArray(a.commands) && a.commands.length) {
@@ -3436,9 +8211,14 @@ function GuidedWizard({ onExit, onAvatarStateChange, onSound }) {
   };
 
   const stepStyle = (s) => ({
-    width: 32, height: 32, borderRadius: "50%",
-    display: "flex", alignItems: "center", justifyContent: "center",
-    fontSize: 14, fontWeight: 700,
+    width: 32,
+    height: 32,
+    borderRadius: "50%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 14,
+    fontWeight: 700,
     background: step >= s ? C.accent : C.surface,
     color: step >= s ? "#fff" : C.textDim,
     border: `2px solid ${step >= s ? C.accent : C.border}`,
@@ -3446,13 +8226,26 @@ function GuidedWizard({ onExit, onAvatarStateChange, onSound }) {
   });
 
   const connectorStyle = (s) => ({
-    flex: 1, height: 2,
+    flex: 1,
+    height: 2,
     background: step > s ? C.accent : C.border,
     transition: "all 0.3s ease",
   });
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: FONT, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: C.bg,
+        color: C.text,
+        fontFamily: FONT,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+      }}
+    >
       <style>{`
         @keyframes qcPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
@@ -3460,167 +8253,557 @@ function GuidedWizard({ onExit, onAvatarStateChange, onSound }) {
       `}</style>
 
       {/* Back button */}
-      <button onClick={onExit} style={{
-        position: "absolute", top: 16, left: 16, padding: "8px 16px",
-        background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6,
-        color: C.textDim, fontSize: 12, cursor: "pointer", fontFamily: FONT,
-      }}>← Dashboard</button>
+      <button
+        onClick={onExit}
+        style={{
+          position: "absolute",
+          top: 16,
+          left: 16,
+          padding: "8px 16px",
+          background: C.surface,
+          border: `1px solid ${C.border}`,
+          borderRadius: 6,
+          color: C.textDim,
+          fontSize: 12,
+          cursor: "pointer",
+          fontFamily: FONT,
+        }}
+      >
+        ← Dashboard
+      </button>
 
       <div style={{ width: "100%", maxWidth: 640 }}>
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: 32 }}>
           <div style={{ fontSize: 40, marginBottom: 8 }}>🛡</div>
-          <div style={{ fontSize: 20, fontWeight: 700 }}>QUEEN CALIFIA <span style={{ color: C.accent }}>QUICK SCAN</span></div>
-          <div style={{ fontSize: 12, color: C.textDim, marginTop: 4 }}>Scan your network in 3 easy steps</div>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>
+            QUEEN CALIFIA <span style={{ color: C.accent }}>QUICK SCAN</span>
+          </div>
+          <div style={{ fontSize: 12, color: C.textDim, marginTop: 4 }}>
+            Scan your network in 3 easy steps
+          </div>
         </div>
 
         {/* Progress steps */}
-        <div style={{ display: "flex", alignItems: "center", gap: 0, marginBottom: 40, padding: "0 40px" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 0,
+            marginBottom: 40,
+            padding: "0 40px",
+          }}
+        >
           <div style={stepStyle(1)}>1</div>
           <div style={connectorStyle(1)} />
           <div style={stepStyle(2)}>2</div>
           <div style={connectorStyle(2)} />
           <div style={stepStyle(3)}>3</div>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 32, marginTop: -32, padding: "0 20px" }}>
-          <span style={{ fontSize: 10, color: step >= 1 ? C.text : C.textDim, fontWeight: 600, width: 80, textAlign: "center" }}>Pick Target</span>
-          <span style={{ fontSize: 10, color: step >= 2 ? C.text : C.textDim, fontWeight: 600, width: 80, textAlign: "center" }}>Scan</span>
-          <span style={{ fontSize: 10, color: step >= 3 ? C.text : C.textDim, fontWeight: 600, width: 80, textAlign: "center" }}>Results</span>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            marginBottom: 32,
+            marginTop: -32,
+            padding: "0 20px",
+          }}
+        >
+          <span
+            style={{
+              fontSize: 10,
+              color: step >= 1 ? C.text : C.textDim,
+              fontWeight: 600,
+              width: 80,
+              textAlign: "center",
+            }}
+          >
+            Pick Target
+          </span>
+          <span
+            style={{
+              fontSize: 10,
+              color: step >= 2 ? C.text : C.textDim,
+              fontWeight: 600,
+              width: 80,
+              textAlign: "center",
+            }}
+          >
+            Scan
+          </span>
+          <span
+            style={{
+              fontSize: 10,
+              color: step >= 3 ? C.text : C.textDim,
+              fontWeight: 600,
+              width: 80,
+              textAlign: "center",
+            }}
+          >
+            Results
+          </span>
         </div>
 
         {/* Step 1: Pick Target */}
         {step === 1 && (
-          <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 12, padding: 24 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>Step 1: Choose Your Target</div>
+          <div
+            style={{
+              background: C.panel,
+              border: `1px solid ${C.border}`,
+              borderRadius: 12,
+              padding: 24,
+            }}
+          >
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>
+              Step 1: Choose Your Target
+            </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
-              {presets.map(p => (
-                <button key={p.label} onClick={() => { if (p.value) setTarget(p.value); }}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 8,
+                marginBottom: 16,
+              }}
+            >
+              {presets.map((p) => (
+                <button
+                  key={p.label}
+                  onClick={() => {
+                    if (p.value) setTarget(p.value);
+                  }}
                   style={{
-                    padding: "12px 14px", background: target === p.value ? `${C.accent}15` : C.surface,
-                    border: `1px solid ${target === p.value ? C.accent : C.border}`, borderRadius: 8,
-                    cursor: "pointer", textAlign: "left", fontFamily: FONT,
-                  }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{p.label}</div>
-                  <div style={{ fontSize: 10, color: C.textDim, fontFamily: MONO, marginTop: 2 }}>{p.value || "you type it"}</div>
+                    padding: "12px 14px",
+                    background:
+                      target === p.value ? `${C.accent}15` : C.surface,
+                    border: `1px solid ${target === p.value ? C.accent : C.border}`,
+                    borderRadius: 8,
+                    cursor: "pointer",
+                    textAlign: "left",
+                    fontFamily: FONT,
+                  }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>
+                    {p.label}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: C.textDim,
+                      fontFamily: MONO,
+                      marginTop: 2,
+                    }}
+                  >
+                    {p.value || "you type it"}
+                  </div>
                 </button>
               ))}
             </div>
 
             <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: C.textDim, marginBottom: 4, display: "block" }}>Target (IP, CIDR, or hostname)</label>
-              <input type="text" value={target} onChange={e => setTarget(e.target.value)}
-                style={{ width: "100%", padding: "10px 12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: MONO, fontSize: 13, outline: "none" }}
-                placeholder="e.g. 192.168.1.0/24" />
+              <label
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: C.textDim,
+                  marginBottom: 4,
+                  display: "block",
+                }}
+              >
+                Target (IP, CIDR, or hostname)
+              </label>
+              <input
+                type="text"
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  background: C.surface,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 6,
+                  color: C.text,
+                  fontFamily: MONO,
+                  fontSize: 13,
+                  outline: "none",
+                }}
+                placeholder="e.g. 192.168.1.0/24"
+              />
             </div>
 
             <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: C.textDim, marginBottom: 4, display: "block" }}>Scan Mode</label>
+              <label
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: C.textDim,
+                  marginBottom: 4,
+                  display: "block",
+                }}
+              >
+                Scan Mode
+              </label>
               <div style={{ display: "flex", gap: 8 }}>
-                {["quick", "full", "stealth"].map(m => (
-                  <button key={m} onClick={() => setScanType(m)} style={{
-                    flex: 1, padding: "8px", background: scanType === m ? `${C.accent}15` : C.surface,
-                    border: `1px solid ${scanType === m ? C.accent : C.border}`, borderRadius: 6,
-                    fontSize: 11, fontWeight: 600, cursor: "pointer", color: scanType === m ? C.accent : C.textDim, fontFamily: FONT,
-                  }}>{m === "quick" ? "⚡ Quick" : m === "full" ? "🔍 Full" : "🥷 Stealth"}</button>
+                {["quick", "full", "stealth"].map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setScanType(m)}
+                    style={{
+                      flex: 1,
+                      padding: "8px",
+                      background: scanType === m ? `${C.accent}15` : C.surface,
+                      border: `1px solid ${scanType === m ? C.accent : C.border}`,
+                      borderRadius: 6,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      color: scanType === m ? C.accent : C.textDim,
+                      fontFamily: FONT,
+                    }}
+                  >
+                    {m === "quick"
+                      ? "⚡ Quick"
+                      : m === "full"
+                        ? "🔍 Full"
+                        : "🥷 Stealth"}
+                  </button>
                 ))}
               </div>
             </div>
 
             <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: C.textDim, marginBottom: 4, display: "block" }}>API Key (optional if running locally)</label>
-              <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
-                style={{ width: "100%", padding: "10px 12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: MONO, fontSize: 12, outline: "none" }}
-                placeholder="Leave blank for local development" />
+              <label
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: C.textDim,
+                  marginBottom: 4,
+                  display: "block",
+                }}
+              >
+                API Key (optional if running locally)
+              </label>
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  background: C.surface,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 6,
+                  color: C.text,
+                  fontFamily: MONO,
+                  fontSize: 12,
+                  outline: "none",
+                }}
+                placeholder="Leave blank for local development"
+              />
             </div>
 
             {/* Authorization checkbox */}
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: 12, background: `${C.amber}08`, border: `1px solid ${C.amber}30`, borderRadius: 8, marginBottom: 16 }}>
-              <input type="checkbox" checked={ack} onChange={e => setAck(e.target.checked)} style={{ marginTop: 2, accentColor: C.accent }} />
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 10,
+                padding: 12,
+                background: `${C.amber}08`,
+                border: `1px solid ${C.amber}30`,
+                borderRadius: 8,
+                marginBottom: 16,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={ack}
+                onChange={(e) => setAck(e.target.checked)}
+                style={{ marginTop: 2, accentColor: C.accent }}
+              />
               <div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: C.amber }}>⚠ Authorization Required</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: C.amber }}>
+                  ⚠ Authorization Required
+                </div>
                 <div style={{ fontSize: 11, color: C.textDim, marginTop: 2 }}>
-                  I confirm I am authorized to scan this target. Unauthorized scanning is illegal. This tool is for white-hat, contracted security assessments only.
+                  I confirm I am authorized to scan this target. Unauthorized
+                  scanning is illegal. This tool is for white-hat, contracted
+                  security assessments only.
                 </div>
               </div>
             </div>
 
-            {error && <div style={{ padding: 10, background: `${C.red}10`, border: `1px solid ${C.red}30`, borderRadius: 6, fontSize: 11, color: C.red, marginBottom: 12 }}>{error}</div>}
+            {error && (
+              <div
+                style={{
+                  padding: 10,
+                  background: `${C.red}10`,
+                  border: `1px solid ${C.red}30`,
+                  borderRadius: 6,
+                  fontSize: 11,
+                  color: C.red,
+                  marginBottom: 12,
+                }}
+              >
+                {error}
+              </div>
+            )}
 
-            <button onClick={runScan} disabled={!target || !ack} style={{
-              width: "100%", padding: "14px", background: !target || !ack ? C.surface : `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-              border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 700,
-              cursor: !target || !ack ? "not-allowed" : "pointer", fontFamily: FONT, opacity: !target || !ack ? 0.5 : 1,
-            }}>🚀 Start Scan</button>
+            <button
+              onClick={runScan}
+              disabled={!target || !ack}
+              style={{
+                width: "100%",
+                padding: "14px",
+                background:
+                  !target || !ack
+                    ? C.surface
+                    : `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+                border: "none",
+                borderRadius: 8,
+                color: "#fff",
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: !target || !ack ? "not-allowed" : "pointer",
+                fontFamily: FONT,
+                opacity: !target || !ack ? 0.5 : 1,
+              }}
+            >
+              🚀 Start Scan
+            </button>
           </div>
         )}
 
         {/* Step 2: Scanning */}
         {step === 2 && (
-          <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 12, padding: 32, textAlign: "center" }}>
-            <div style={{ fontSize: 48, marginBottom: 16, animation: "qcPulse 2s ease-in-out infinite" }}>🔍</div>
-            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Scanning {target}</div>
+          <div
+            style={{
+              background: C.panel,
+              border: `1px solid ${C.border}`,
+              borderRadius: 12,
+              padding: 32,
+              textAlign: "center",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 48,
+                marginBottom: 16,
+                animation: "qcPulse 2s ease-in-out infinite",
+              }}
+            >
+              🔍
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>
+              Scanning {target}
+            </div>
             <div style={{ fontSize: 12, color: C.textDim, marginBottom: 24 }}>
-              Queen Califia is scanning → learning → predicting → planning fixes → evolving
+              Queen Califia is scanning → learning → predicting → planning fixes
+              → evolving
             </div>
-            <div style={{ width: "100%", height: 8, background: C.surface, borderRadius: 4, overflow: "hidden", marginBottom: 8 }}>
-              <div style={{ height: "100%", width: `${progress}%`, background: `linear-gradient(90deg, ${C.accent}, ${C.purple})`, borderRadius: 4, transition: "width 0.5s ease" }} />
+            <div
+              style={{
+                width: "100%",
+                height: 8,
+                background: C.surface,
+                borderRadius: 4,
+                overflow: "hidden",
+                marginBottom: 8,
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  width: `${progress}%`,
+                  background: `linear-gradient(90deg, ${C.accent}, ${C.purple})`,
+                  borderRadius: 4,
+                  transition: "width 0.5s ease",
+                }}
+              />
             </div>
-            <div style={{ fontSize: 11, fontFamily: MONO, color: C.textDim }}>{progress.toFixed(0)}%</div>
+            <div style={{ fontSize: 11, fontFamily: MONO, color: C.textDim }}>
+              {progress.toFixed(0)}%
+            </div>
           </div>
         )}
 
         {/* Step 3: Results */}
         {step === 3 && result && (
-          <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 12, padding: 24 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+          <div
+            style={{
+              background: C.panel,
+              border: `1px solid ${C.border}`,
+              borderRadius: 12,
+              padding: 24,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 16,
+                fontWeight: 700,
+                marginBottom: 16,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
               ✅ Scan Complete
-              <span style={{
-                padding: "4px 10px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                background: result.risk_level === "CRITICAL" ? `${C.red}20` : result.risk_level === "HIGH" ? `${C.amber}20` : `${C.green}20`,
-                color: result.risk_level === "CRITICAL" ? C.red : result.risk_level === "HIGH" ? C.amber : C.green,
-              }}>{result.risk_level}</span>
+              <span
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 4,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  background:
+                    result.risk_level === "CRITICAL"
+                      ? `${C.red}20`
+                      : result.risk_level === "HIGH"
+                        ? `${C.amber}20`
+                        : `${C.green}20`,
+                  color:
+                    result.risk_level === "CRITICAL"
+                      ? C.red
+                      : result.risk_level === "HIGH"
+                        ? C.amber
+                        : C.green,
+                }}
+              >
+                {result.risk_level}
+              </span>
             </div>
 
             {/* Summary cards */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 1fr",
+                gap: 8,
+                marginBottom: 16,
+              }}
+            >
               {[
-                { label: "Hosts Found", value: result.phases?.scan?.hosts_alive || 0, color: C.cyan },
-                { label: "Findings", value: result.phases?.scan?.total_findings || 0, color: result.phases?.scan?.critical > 0 ? C.red : C.amber },
-                { label: "Risk Score", value: `${result.phases?.scan?.overall_risk || 0}/10`, color: (result.phases?.scan?.overall_risk || 0) >= 7 ? C.red : C.green },
-              ].map(c => (
-                <div key={c.label} style={{ padding: 12, background: C.surface, borderRadius: 8, textAlign: "center" }}>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: c.color, fontFamily: MONO }}>{c.value}</div>
-                  <div style={{ fontSize: 10, color: C.textDim, marginTop: 2 }}>{c.label}</div>
+                {
+                  label: "Hosts Found",
+                  value: result.phases?.scan?.hosts_alive || 0,
+                  color: C.cyan,
+                },
+                {
+                  label: "Findings",
+                  value: result.phases?.scan?.total_findings || 0,
+                  color: result.phases?.scan?.critical > 0 ? C.red : C.amber,
+                },
+                {
+                  label: "Risk Score",
+                  value: `${result.phases?.scan?.overall_risk || 0}/10`,
+                  color:
+                    (result.phases?.scan?.overall_risk || 0) >= 7
+                      ? C.red
+                      : C.green,
+                },
+              ].map((c) => (
+                <div
+                  key={c.label}
+                  style={{
+                    padding: 12,
+                    background: C.surface,
+                    borderRadius: 8,
+                    textAlign: "center",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 24,
+                      fontWeight: 800,
+                      color: c.color,
+                      fontFamily: MONO,
+                    }}
+                  >
+                    {c.value}
+                  </div>
+                  <div style={{ fontSize: 10, color: C.textDim, marginTop: 2 }}>
+                    {c.label}
+                  </div>
                 </div>
               ))}
             </div>
 
             {/* Severity breakdown */}
-            {(result.phases?.scan?.critical > 0 || result.phases?.scan?.high > 0) && (
+            {(result.phases?.scan?.critical > 0 ||
+              result.phases?.scan?.high > 0) && (
               <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-                {result.phases?.scan?.critical > 0 && <Badge color={C.red}>{result.phases.scan.critical} CRITICAL</Badge>}
-                {result.phases?.scan?.high > 0 && <Badge color={C.amber}>{result.phases.scan.high} HIGH</Badge>}
+                {result.phases?.scan?.critical > 0 && (
+                  <Badge color={C.red}>
+                    {result.phases.scan.critical} CRITICAL
+                  </Badge>
+                )}
+                {result.phases?.scan?.high > 0 && (
+                  <Badge color={C.amber}>{result.phases.scan.high} HIGH</Badge>
+                )}
               </div>
             )}
 
             {/* Intelligence gained */}
-            <div style={{ padding: 12, background: C.surface, borderRadius: 8, marginBottom: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>🧠 Intelligence Gained</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, fontSize: 11, color: C.textDim }}>
-                <span>Baselines learned: {result.phases?.learning?.new_baselines || 0}</span>
-                <span>Patterns recognized: {result.phases?.learning?.new_patterns || 0}</span>
-                <span>Rules evolved: {result.phases?.evolution?.new_detection_rules || 0}</span>
-                <span>Remediation actions: {result.phases?.remediation?.total_actions || 0}</span>
+            <div
+              style={{
+                padding: 12,
+                background: C.surface,
+                borderRadius: 8,
+                marginBottom: 16,
+              }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
+                🧠 Intelligence Gained
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 4,
+                  fontSize: 11,
+                  color: C.textDim,
+                }}
+              >
+                <span>
+                  Baselines learned:{" "}
+                  {result.phases?.learning?.new_baselines || 0}
+                </span>
+                <span>
+                  Patterns recognized:{" "}
+                  {result.phases?.learning?.new_patterns || 0}
+                </span>
+                <span>
+                  Rules evolved:{" "}
+                  {result.phases?.evolution?.new_detection_rules || 0}
+                </span>
+                <span>
+                  Remediation actions:{" "}
+                  {result.phases?.remediation?.total_actions || 0}
+                </span>
               </div>
             </div>
 
-            <div style={{ fontSize: 12, fontWeight: 600, color: C.accent, marginBottom: 16 }}>
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: C.accent,
+                marginBottom: 16,
+              }}
+            >
               💡 {result.recommendation}
             </div>
 
-            <div style={{ padding: 12, background: C.surface, borderRadius: 8, marginBottom: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>🛠 Remediation Plan</div>
+            <div
+              style={{
+                padding: 12,
+                background: C.surface,
+                borderRadius: 8,
+                marginBottom: 16,
+              }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
+                🛠 Remediation Plan
+              </div>
               {!remediationPlan?.priority_actions?.length ? (
                 <div style={{ fontSize: 11, color: C.textDim }}>
                   No detailed remediation plan is loaded yet for this workflow.
@@ -3628,60 +8811,147 @@ function GuidedWizard({ onExit, onAvatarStateChange, onSound }) {
               ) : (
                 <div style={{ display: "grid", gap: 10 }}>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <Badge color={C.green}>Plan: <span style={{ fontFamily: MONO }}>{remediationPlan.plan_id}</span></Badge>
-                    <Badge color={C.textDim}>Total: {remediationPlan.total_vulnerabilities}</Badge>
-                    <Badge color={C.red}>Critical: {remediationPlan.summary?.critical || 0}</Badge>
-                    <Badge color={C.amber}>High: {remediationPlan.summary?.high || 0}</Badge>
+                    <Badge color={C.green}>
+                      Plan:{" "}
+                      <span style={{ fontFamily: MONO }}>
+                        {remediationPlan.plan_id}
+                      </span>
+                    </Badge>
+                    <Badge color={C.textDim}>
+                      Total: {remediationPlan.total_vulnerabilities}
+                    </Badge>
+                    <Badge color={C.red}>
+                      Critical: {remediationPlan.summary?.critical || 0}
+                    </Badge>
+                    <Badge color={C.amber}>
+                      High: {remediationPlan.summary?.high || 0}
+                    </Badge>
                   </div>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                    }}
+                  >
                     <select
                       value={scriptFmt}
                       onChange={(e) => setScriptFmt(e.target.value)}
-                      style={{ padding: "8px 12px", background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: MONO, fontSize: 12 }}
+                      style={{
+                        padding: "8px 12px",
+                        background: C.panel,
+                        border: `1px solid ${C.border}`,
+                        borderRadius: 6,
+                        color: C.text,
+                        fontFamily: MONO,
+                        fontSize: 12,
+                      }}
                     >
                       <option value="bash">Bash</option>
                       <option value="powershell">PowerShell</option>
                       <option value="ansible">Ansible YAML</option>
                     </select>
-                    <button onClick={() => {
-                      onSound?.("button_click");
-                      const ext = scriptFmt === "powershell" ? "ps1" : scriptFmt === "ansible" ? "yml" : "sh";
-                      const content = remediationToScript(remediationPlan, scriptFmt);
-                      const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = url;
-                      a.download = `qc_remediation_${remediationPlan.plan_id}.${ext}`;
-                      document.body.appendChild(a);
-                      a.click();
-                      a.remove();
-                      setTimeout(() => URL.revokeObjectURL(url), 500);
-                    }} style={{
-                      padding: "8px 16px", background: C.green, color: "#fff", border: "none",
-                      borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT,
-                    }}>
+                    <button
+                      onClick={() => {
+                        onSound?.("button_click");
+                        const ext =
+                          scriptFmt === "powershell"
+                            ? "ps1"
+                            : scriptFmt === "ansible"
+                              ? "yml"
+                              : "sh";
+                        const content = remediationToScript(
+                          remediationPlan,
+                          scriptFmt,
+                        );
+                        const blob = new Blob([content], {
+                          type: "text/plain;charset=utf-8",
+                        });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `qc_remediation_${remediationPlan.plan_id}.${ext}`;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                        setTimeout(() => URL.revokeObjectURL(url), 500);
+                      }}
+                      style={{
+                        padding: "8px 16px",
+                        background: C.green,
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: 6,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        fontFamily: FONT,
+                      }}
+                    >
                       Export Remediation Script
                     </button>
                   </div>
                   <div style={{ display: "grid", gap: 6 }}>
                     {remediationPlan.priority_actions.slice(0, 6).map((a) => (
-                      <div key={a.vuln_id || a.action_id} style={{ padding: "8px 10px", background: C.panel, borderRadius: 6 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+                      <div
+                        key={a.vuln_id || a.action_id}
+                        style={{
+                          padding: "8px 10px",
+                          background: C.panel,
+                          borderRadius: 6,
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 8,
+                            alignItems: "center",
+                          }}
+                        >
                           <div style={{ fontSize: 11, color: C.text }}>
-                            <span style={{ color: C.textDim, fontFamily: MONO }}>P{a.priority}</span>{" "}
+                            <span
+                              style={{ color: C.textDim, fontFamily: MONO }}
+                            >
+                              P{a.priority}
+                            </span>{" "}
                             {a.title}
                           </div>
-                          <Badge color={a.severity === "CRITICAL" ? C.red : a.severity === "HIGH" ? C.amber : C.textDim}>
+                          <Badge
+                            color={
+                              a.severity === "CRITICAL"
+                                ? C.red
+                                : a.severity === "HIGH"
+                                  ? C.amber
+                                  : C.textDim
+                            }
+                          >
                             {a.severity}
                           </Badge>
                         </div>
                         {!!a.affected_asset && (
-                          <div style={{ marginTop: 4, fontSize: 10, color: C.textDim }}>
-                            Asset: <span style={{ fontFamily: MONO }}>{a.affected_asset}</span>
+                          <div
+                            style={{
+                              marginTop: 4,
+                              fontSize: 10,
+                              color: C.textDim,
+                            }}
+                          >
+                            Asset:{" "}
+                            <span style={{ fontFamily: MONO }}>
+                              {a.affected_asset}
+                            </span>
                           </div>
                         )}
                         {!!a.remediation && (
-                          <div style={{ marginTop: 4, fontSize: 10, color: C.textDim }}>
+                          <div
+                            style={{
+                              marginTop: 4,
+                              fontSize: 10,
+                              color: C.textDim,
+                            }}
+                          >
                             Fix: {a.remediation}
                           </div>
                         )}
@@ -3694,18 +8964,61 @@ function GuidedWizard({ onExit, onAvatarStateChange, onSound }) {
 
             {/* Export buttons */}
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => exportReport("md")} style={{
-                flex: 1, padding: "12px", background: `${C.green}15`, border: `1px solid ${C.green}50`, borderRadius: 8,
-                color: C.green, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT,
-              }}>📄 Export Report</button>
-              <button onClick={() => exportReport("json")} style={{
-                flex: 1, padding: "12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8,
-                color: C.textDim, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT,
-              }}>{ "{}"} Export JSON</button>
-              <button onClick={() => { setStep(1); setResult(null); setAck(false); }} style={{
-                flex: 1, padding: "12px", background: `${C.purple}15`, border: `1px solid ${C.purple}50`, borderRadius: 8,
-                color: C.purple, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT,
-              }}>🔄 Scan Again</button>
+              <button
+                onClick={() => exportReport("md")}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  background: `${C.green}15`,
+                  border: `1px solid ${C.green}50`,
+                  borderRadius: 8,
+                  color: C.green,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: FONT,
+                }}
+              >
+                📄 Export Report
+              </button>
+              <button
+                onClick={() => exportReport("json")}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  background: C.surface,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 8,
+                  color: C.textDim,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: FONT,
+                }}
+              >
+                {"{}"} Export JSON
+              </button>
+              <button
+                onClick={() => {
+                  setStep(1);
+                  setResult(null);
+                  setAck(false);
+                }}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  background: `${C.purple}15`,
+                  border: `1px solid ${C.purple}50`,
+                  borderRadius: 8,
+                  color: C.purple,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: FONT,
+                }}
+              >
+                🔄 Scan Again
+              </button>
             </div>
           </div>
         )}
@@ -3718,7 +9031,11 @@ export default function QueenCalifiaCommandDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [tick, setTick] = useState(0);
   const [expertMode, setExpertMode] = useState(() => {
-    try { return window.sessionStorage?.getItem?.("qc_expert") === "1"; } catch { return false; }
+    try {
+      return window.sessionStorage?.getItem?.("qc_expert") === "1";
+    } catch {
+      return false;
+    }
   });
   const [wizardMode, setWizardMode] = useState(false);
   const [qcAvatarState, setQcAvatarState] = useState("idle");
@@ -3726,7 +9043,11 @@ export default function QueenCalifiaCommandDashboard() {
   const [authSavedAt, setAuthSavedAt] = useState(0);
   const [authForm, setAuthForm] = useState(() => loadStoredDashboardAuth());
   const [isNarrow, setIsNarrow] = useState(() => {
-    try { return window.innerWidth <= 980; } catch { return false; }
+    try {
+      return window.innerWidth <= 980;
+    } catch {
+      return false;
+    }
   });
   const { enabled, toggle, play } = useSound();
   const prevTabRef = useRef("overview");
@@ -3735,14 +9056,28 @@ export default function QueenCalifiaCommandDashboard() {
     const next = !expertMode;
     setExpertMode(next);
     play(next ? "prediction_reveal" : "button_click");
-    try { window.sessionStorage?.setItem?.("qc_expert", next ? "1" : "0"); } catch {}
+    try {
+      window.sessionStorage?.setItem?.("qc_expert", next ? "1" : "0");
+    } catch {}
     // If leaving expert mode, switch to a basic tab
-    if (!next && ["predictor","telemetry","mesh","qc","research","identity","devops"].includes(activeTab)) setActiveTab("overview");
+    if (
+      !next &&
+      [
+        "predictor",
+        "telemetry",
+        "mesh",
+        "qc",
+        "research",
+        "identity",
+        "devops",
+      ].includes(activeTab)
+    )
+      setActiveTab("overview");
   };
 
   // Refresh data every 15s
   useEffect(() => {
-    const interval = setInterval(() => setTick(t => t + 1), 15000);
+    const interval = setInterval(() => setTick((t) => t + 1), 15000);
     return () => clearInterval(interval);
   }, []);
 
@@ -3796,13 +9131,17 @@ export default function QueenCalifiaCommandDashboard() {
       telemetryFeedbackRes,
       telemetryHealthRes,
       iocsRes,
-    ] = results.map((item) => (item.status === "fulfilled" ? item.value : null));
+    ] = results.map((item) =>
+      item.status === "fulfilled" ? item.value : null,
+    );
 
     setLiveData({
       mesh: adaptMesh(meshRes),
       predictions: adaptPredictions(predictionsRes),
       predictorStatus: adaptPredictorStatus(predictorStatusRes),
-      incidents: Array.isArray(incidentsRes?.data) ? incidentsRes.data.map(adaptIncidentSummary) : [],
+      incidents: Array.isArray(incidentsRes?.data)
+        ? incidentsRes.data.map(adaptIncidentSummary)
+        : [],
       landscape: adaptLandscape(landscapeRes),
       telemetry: adaptTelemetry({
         status: telemetryStatusRes,
@@ -3829,24 +9168,58 @@ export default function QueenCalifiaCommandDashboard() {
   const telemetryData = liveData.telemetry;
   const iocs = liveData.iocs;
   const snapshotData = useMemo(
-    () => createOverviewSnapshot({ mesh, predictions, incidents, predictorStatus, telemetry: telemetryData }),
-    [mesh, predictions, incidents, predictorStatus, telemetryData]
+    () =>
+      createOverviewSnapshot({
+        mesh,
+        predictions,
+        incidents,
+        predictorStatus,
+        telemetry: telemetryData,
+      }),
+    [mesh, predictions, incidents, predictorStatus, telemetryData],
   );
 
-  const critCount = incidents.filter(i => i.severity === "CRITICAL").length;
-  const highPreds = predictions.filter(p => p.confidence > 0.7).length;
+  const critCount = incidents.filter((i) => i.severity === "CRITICAL").length;
+  const highPreds = predictions.filter((p) => p.confidence > 0.7).length;
   const avatarHeaderMeta = {
-    idle: { label: "Sentinel Mode", accent: C.amber, aura: "rgba(245,158,11,0.16)" },
-    active: { label: "Defense Active", accent: C.cyan, aura: "rgba(6,182,212,0.16)" },
-    ascended: { label: "Ancestors Online", accent: "#FFE178", aura: "rgba(255,225,120,0.18)" },
-    hex_shield: { label: "Hex Shield Active", accent: C.cyan, aura: "rgba(6,182,212,0.18)" },
-    energy_spiral: { label: "Energy Spiral", accent: C.amber, aura: "rgba(245,158,11,0.18)" },
-    staff_raised: { label: "Authority Mode", accent: "#FFE178", aura: "rgba(255,225,120,0.2)" },
+    idle: {
+      label: "Sentinel Mode",
+      accent: C.amber,
+      aura: "rgba(245,158,11,0.16)",
+    },
+    active: {
+      label: "Defense Active",
+      accent: C.cyan,
+      aura: "rgba(6,182,212,0.16)",
+    },
+    ascended: {
+      label: "Ancestors Online",
+      accent: "#FFE178",
+      aura: "rgba(255,225,120,0.18)",
+    },
+    hex_shield: {
+      label: "Hex Shield Active",
+      accent: C.cyan,
+      aura: "rgba(6,182,212,0.18)",
+    },
+    energy_spiral: {
+      label: "Energy Spiral",
+      accent: C.amber,
+      aura: "rgba(245,158,11,0.18)",
+    },
+    staff_raised: {
+      label: "Authority Mode",
+      accent: "#FFE178",
+      aura: "rgba(255,225,120,0.2)",
+    },
   };
-  const avatarHeaderState = avatarHeaderMeta[qcAvatarState] || avatarHeaderMeta.idle;
+  const avatarHeaderState =
+    avatarHeaderMeta[qcAvatarState] || avatarHeaderMeta.idle;
 
   const BASIC_TABS = ["overview", "vulns", "incidents"];
-  const visibleNav = expertMode ? NAV_ITEMS : NAV_ITEMS.filter(n => BASIC_TABS.includes(n.id));
+  const visibleNav = expertMode
+    ? NAV_ITEMS
+    : NAV_ITEMS.filter((n) => BASIC_TABS.includes(n.id));
 
   useEffect(() => {
     if (prevTabRef.current !== activeTab) {
@@ -3879,7 +9252,9 @@ export default function QueenCalifiaCommandDashboard() {
     saveStoredDashboardAuth(cleared);
     setAuthSavedAt(Date.now());
     play("button_click");
-    setLiveDataErrors(["Backend auth cleared. Re-enter a real API key to load protected routes."]);
+    setLiveDataErrors([
+      "Backend auth cleared. Re-enter a real API key to load protected routes.",
+    ]);
   }, [play]);
 
   useEffect(() => {
@@ -3893,36 +9268,79 @@ export default function QueenCalifiaCommandDashboard() {
       : "Live backend connected.";
 
   const renderActiveTab = () => {
-    if (activeTab === "overview") return <OverviewTab mesh={mesh} predictions={predictions} incidents={incidents} snapshotData={snapshotData} landscape={landscape} />;
-    if (activeTab === "predictor" && expertMode) return <PredictorTab predictions={predictions} predictorStatus={predictorStatus} />;
-    if (activeTab === "telemetry" && expertMode) return <TelemetryTab telemetry={telemetryData} />;
-    if (activeTab === "mesh" && expertMode) return <MeshTab mesh={mesh} iocs={iocs} />;
-    if (activeTab === "incidents") return <IncidentsTab incidents={incidents} onRefresh={loadLiveData} />;
-    if (activeTab === "vulns") return <VulnsTab onAvatarStateChange={setQcAvatarState} onSound={play} />;
+    if (activeTab === "overview")
+      return (
+        <OverviewTab
+          mesh={mesh}
+          predictions={predictions}
+          incidents={incidents}
+          snapshotData={snapshotData}
+          landscape={landscape}
+        />
+      );
+    if (activeTab === "predictor" && expertMode)
+      return (
+        <PredictorTab
+          predictions={predictions}
+          predictorStatus={predictorStatus}
+        />
+      );
+    if (activeTab === "telemetry" && expertMode)
+      return <TelemetryTab telemetry={telemetryData} />;
+    if (activeTab === "mesh" && expertMode)
+      return <MeshTab mesh={mesh} iocs={iocs} />;
+    if (activeTab === "incidents")
+      return <IncidentsTab incidents={incidents} onRefresh={loadLiveData} />;
+    if (activeTab === "vulns")
+      return <VulnsTab onAvatarStateChange={setQcAvatarState} onSound={play} />;
     if (activeTab === "qc" && expertMode) return <QCConsoleTab />;
     if (activeTab === "research" && expertMode) return <ResearchLabTab />;
     if (activeTab === "identity" && expertMode) return <IdentityTab />;
     if (activeTab === "devops" && expertMode) return <DevOpsTab />;
-    return <OverviewTab mesh={mesh} predictions={predictions} incidents={incidents} snapshotData={snapshotData} landscape={landscape} />;
+    return (
+      <OverviewTab
+        mesh={mesh}
+        predictions={predictions}
+        incidents={incidents}
+        snapshotData={snapshotData}
+        landscape={landscape}
+      />
+    );
   };
 
   // ── Guided Wizard ──────────────────────────────────────────────
-  if (wizardMode) return <GuidedWizard onExit={closeWizard} onAvatarStateChange={setQcAvatarState} onSound={play} />;
+  if (wizardMode)
+    return (
+      <GuidedWizard
+        onExit={closeWizard}
+        onAvatarStateChange={setQcAvatarState}
+        onSound={play}
+      />
+    );
 
   return (
-    <div style={{
-      minHeight: "100vh", background: C.bg, color: C.text, fontFamily: FONT,
-      padding: 0, margin: 0,
-      position: "relative",
-      overflow: "hidden",
-    }}>
-      <div style={{
-        position: "absolute",
-        inset: 0,
-        pointerEvents: "none",
-        background: "radial-gradient(circle at 20% 0%, rgba(6,182,212,0.07) 0%, transparent 32%), radial-gradient(circle at 80% 100%, rgba(167,139,250,0.08) 0%, transparent 28%), radial-gradient(circle at 50% 20%, rgba(37,99,235,0.06) 0%, transparent 36%)",
-        filter: "blur(8px)",
-      }} />
+    <div
+      style={{
+        minHeight: "100vh",
+        background: C.bg,
+        color: C.text,
+        fontFamily: FONT,
+        padding: 0,
+        margin: 0,
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          background:
+            "radial-gradient(circle at 20% 0%, rgba(6,182,212,0.07) 0%, transparent 32%), radial-gradient(circle at 80% 100%, rgba(167,139,250,0.08) 0%, transparent 28%), radial-gradient(circle at 50% 20%, rgba(37,99,235,0.06) 0%, transparent 36%)",
+          filter: "blur(8px)",
+        }}
+      />
       {/* Global keyframe animations */}
       <style>{`
         @keyframes qcPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
@@ -3939,26 +9357,42 @@ export default function QueenCalifiaCommandDashboard() {
         ::-webkit-scrollbar-thumb { background: ${C.borderLit}; border-radius: 3px; }
         * { box-sizing: border-box; }
       `}</style>
-      <div style={{
-        position: "absolute",
-        inset: "-10% 0 auto",
-        height: 260,
-        background: "linear-gradient(90deg, rgba(37,99,235,0.02), rgba(125,211,252,0.08), rgba(167,139,250,0.06), rgba(37,99,235,0.02))",
-        filter: "blur(28px)",
-        animation: "qcFlow 14s ease-in-out infinite",
-        pointerEvents: "none",
-      }} />
+      <div
+        style={{
+          position: "absolute",
+          inset: "-10% 0 auto",
+          height: 260,
+          background:
+            "linear-gradient(90deg, rgba(37,99,235,0.02), rgba(125,211,252,0.08), rgba(167,139,250,0.06), rgba(37,99,235,0.02))",
+          filter: "blur(28px)",
+          animation: "qcFlow 14s ease-in-out infinite",
+          pointerEvents: "none",
+        }}
+      />
 
       {/* Header */}
-      <header style={{
-        display: "flex", justifyContent: "space-between", alignItems: isNarrow ? "stretch" : "center",
-        flexWrap: "wrap",
-        padding: "12px 24px", borderBottom: `1px solid ${C.border}`,
-        background: `linear-gradient(180deg, ${C.panel} 0%, ${C.bg} 100%)`,
-        position: "relative",
-        zIndex: 2,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0, flex: "1 1 420px" }}>
+      <header
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: isNarrow ? "stretch" : "center",
+          flexWrap: "wrap",
+          padding: "12px 24px",
+          borderBottom: `1px solid ${C.border}`,
+          background: `linear-gradient(180deg, ${C.panel} 0%, ${C.bg} 100%)`,
+          position: "relative",
+          zIndex: 2,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 16,
+            minWidth: 0,
+            flex: "1 1 420px",
+          }}
+        >
           <motion.div
             key={`header-avatar-${qcAvatarState}`}
             initial={{ opacity: 0.72, scale: 0.92, y: 4 }}
@@ -4026,59 +9460,128 @@ export default function QueenCalifiaCommandDashboard() {
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <PulseDot color={avatarHeaderState.accent} size={10} />
-                <span style={{ fontSize: 10, color: C.textSoft, fontFamily: MONO, letterSpacing: "0.08em" }}>
+                <span
+                  style={{
+                    fontSize: 10,
+                    color: C.textSoft,
+                    fontFamily: MONO,
+                    letterSpacing: "0.08em",
+                  }}
+                >
                   {qcAvatarState.replaceAll("_", " ")}
                 </span>
               </div>
             </div>
           </motion.div>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: C.text, letterSpacing: 0.3 }}>
+            <div
+              style={{
+                fontSize: 15,
+                fontWeight: 700,
+                color: C.text,
+                letterSpacing: 0.3,
+              }}
+            >
               QUEEN CALIFIA <span style={{ color: C.accent }}>CYBERAI</span>
             </div>
-            <div style={{ fontSize: 9, color: C.textDim, letterSpacing: 1.5, textTransform: "uppercase" }}>
-              {expertMode ? "Defense-Grade Cybersecurity Intelligence Platform" : "Network Security Scanner"}
+            <div
+              style={{
+                fontSize: 9,
+                color: C.textDim,
+                letterSpacing: 1.5,
+                textTransform: "uppercase",
+              }}
+            >
+              {expertMode
+                ? "Defense-Grade Cybersecurity Intelligence Platform"
+                : "Network Security Scanner"}
             </div>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: isNarrow ? "flex-start" : "flex-end", gap: 12, flexWrap: "wrap", flex: "1 1 360px", marginTop: isNarrow ? 12 : 0 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: isNarrow ? "flex-start" : "flex-end",
+            gap: 12,
+            flexWrap: "wrap",
+            flex: "1 1 360px",
+            marginTop: isNarrow ? 12 : 0,
+          }}
+        >
           <button
-            onClick={() => setShowAuthPanel(v => !v)}
+            onClick={() => setShowAuthPanel((v) => !v)}
             style={{
               padding: isNarrow ? "10px 14px" : "6px 12px",
-              background: !authConfigured || liveDataErrors.length > 0 ? `${C.red}10` : `${C.green}12`,
+              background:
+                !authConfigured || liveDataErrors.length > 0
+                  ? `${C.red}10`
+                  : `${C.green}12`,
               border: `1px solid ${!authConfigured || liveDataErrors.length > 0 ? C.red + "35" : C.green + "40"}`,
               borderRadius: 999,
               cursor: "pointer",
               fontSize: isNarrow ? 11 : 10,
               fontWeight: 700,
               fontFamily: MONO,
-              color: !authConfigured || liveDataErrors.length > 0 ? C.red : C.green,
+              color:
+                !authConfigured || liveDataErrors.length > 0 ? C.red : C.green,
               letterSpacing: "0.08em",
             }}
           >
-            {!authConfigured ? "CONNECT BACKEND" : liveDataErrors.length > 0 ? "CHECK BACKEND" : "AUTH READY"}
+            {!authConfigured
+              ? "CONNECT BACKEND"
+              : liveDataErrors.length > 0
+                ? "CHECK BACKEND"
+                : "AUTH READY"}
           </button>
           {/* Wizard launcher */}
-          <button onClick={openWizard} style={{
-            padding: "6px 14px", background: `linear-gradient(135deg, ${C.green}20, ${C.green}08)`,
-            border: `1px solid ${C.green}50`, borderRadius: 6, cursor: "pointer",
-            fontSize: 11, fontWeight: 600, color: C.green, fontFamily: FONT,
-          }}>⚡ Quick Scan</button>
+          <button
+            onClick={openWizard}
+            style={{
+              padding: "6px 14px",
+              background: `linear-gradient(135deg, ${C.green}20, ${C.green}08)`,
+              border: `1px solid ${C.green}50`,
+              borderRadius: 6,
+              cursor: "pointer",
+              fontSize: 11,
+              fontWeight: 600,
+              color: C.green,
+              fontFamily: FONT,
+            }}
+          >
+            ⚡ Quick Scan
+          </button>
 
           {/* Expert toggle */}
-          <button onClick={toggleExpert} title={expertMode ? "Switch to Simple Mode" : "Switch to Expert Mode"} style={{
-            padding: "6px 14px",
-            background: expertMode ? `${C.purple}15` : C.surface,
-            border: `1px solid ${expertMode ? C.purple + "50" : C.border}`,
-            borderRadius: 6, cursor: "pointer",
-            fontSize: 11, fontWeight: 600, fontFamily: FONT,
-            color: expertMode ? C.purple : C.textDim,
-          }}>{expertMode ? "🔬 Expert" : "👤 Simple"}</button>
+          <button
+            onClick={toggleExpert}
+            title={
+              expertMode ? "Switch to Simple Mode" : "Switch to Expert Mode"
+            }
+            style={{
+              padding: "6px 14px",
+              background: expertMode ? `${C.purple}15` : C.surface,
+              border: `1px solid ${expertMode ? C.purple + "50" : C.border}`,
+              borderRadius: 6,
+              cursor: "pointer",
+              fontSize: 11,
+              fontWeight: 600,
+              fontFamily: FONT,
+              color: expertMode ? C.purple : C.textDim,
+            }}
+          >
+            {expertMode ? "🔬 Expert" : "👤 Simple"}
+          </button>
 
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <PulseDot color={critCount > 0 ? C.red : C.green} />
-            <span style={{ fontSize: 11, color: critCount > 0 ? C.red : C.green, fontFamily: MONO }}>
+            <span
+              style={{
+                fontSize: 11,
+                color: critCount > 0 ? C.red : C.green,
+                fontFamily: MONO,
+              }}
+            >
               {critCount > 0 ? `${critCount} CRITICAL` : "ALL CLEAR"}
             </span>
           </div>
@@ -4111,31 +9614,58 @@ export default function QueenCalifiaCommandDashboard() {
         </div>
       </header>
 
-      <div style={{
-        padding: isNarrow ? "12px 16px" : "12px 24px",
-        borderBottom: `1px solid ${C.border}`,
-        background: !authConfigured || liveDataErrors.length > 0
-          ? `linear-gradient(135deg, ${C.redGlow}, ${C.panel})`
-          : `linear-gradient(135deg, ${C.greenGlow}, ${C.panel})`,
-        position: "relative",
-        zIndex: 2,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+      <div
+        style={{
+          padding: isNarrow ? "12px 16px" : "12px 24px",
+          borderBottom: `1px solid ${C.border}`,
+          background:
+            !authConfigured || liveDataErrors.length > 0
+              ? `linear-gradient(135deg, ${C.redGlow}, ${C.panel})`
+              : `linear-gradient(135deg, ${C.greenGlow}, ${C.panel})`,
+          position: "relative",
+          zIndex: 2,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
           <div style={{ display: "grid", gap: 4 }}>
-            <div style={{ fontSize: 10, color: !authConfigured || liveDataErrors.length > 0 ? C.red : C.green, fontFamily: MONO, letterSpacing: "0.12em", textTransform: "uppercase" }}>
-              {!authConfigured ? "Backend auth required" : liveDataErrors.length > 0 ? "Backend needs attention" : "Backend live"}
+            <div
+              style={{
+                fontSize: 10,
+                color:
+                  !authConfigured || liveDataErrors.length > 0
+                    ? C.red
+                    : C.green,
+                fontFamily: MONO,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+              }}
+            >
+              {!authConfigured
+                ? "Backend auth required"
+                : liveDataErrors.length > 0
+                  ? "Backend needs attention"
+                  : "Backend live"}
             </div>
             <div style={{ fontSize: isNarrow ? 12 : 13, color: C.text }}>
               {authPrompt}
             </div>
             {authConfigured && (
               <div style={{ fontSize: 10, color: C.textDim, fontFamily: MONO }}>
-                Saved headers: `X-QC-API-Key` {authForm.adminKey ? "and `X-QC-Admin-Key`" : ""}
+                Saved headers: `X-QC-API-Key`{" "}
+                {authForm.adminKey ? "and `X-QC-Admin-Key`" : ""}
               </div>
             )}
           </div>
           <button
-            onClick={() => setShowAuthPanel(v => !v)}
+            onClick={() => setShowAuthPanel((v) => !v)}
             style={{
               padding: "10px 14px",
               background: C.surface,
@@ -4155,26 +9685,42 @@ export default function QueenCalifiaCommandDashboard() {
       </div>
 
       {showAuthPanel && (
-        <div style={{
-          padding: isNarrow ? "14px 16px" : "12px 24px",
-          borderBottom: `1px solid ${C.border}`,
-          background: `linear-gradient(180deg, ${C.panel} 0%, ${C.bg} 100%)`,
-          position: "relative",
-          zIndex: 2,
-        }}>
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: isNarrow ? "1fr" : "1.4fr 1.4fr auto auto",
-            gap: 10,
-            alignItems: "end",
-          }}>
+        <div
+          style={{
+            padding: isNarrow ? "14px 16px" : "12px 24px",
+            borderBottom: `1px solid ${C.border}`,
+            background: `linear-gradient(180deg, ${C.panel} 0%, ${C.bg} 100%)`,
+            position: "relative",
+            zIndex: 2,
+          }}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isNarrow ? "1fr" : "1.4fr 1.4fr auto auto",
+              gap: 10,
+              alignItems: "end",
+            }}
+          >
             <div>
-              <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, fontFamily: MONO, letterSpacing: "0.08em" }}>X-QC-API-Key</div>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: C.textDim,
+                  marginBottom: 6,
+                  fontFamily: MONO,
+                  letterSpacing: "0.08em",
+                }}
+              >
+                X-QC-API-Key
+              </div>
               <input
                 data-testid="qc-auth-api-key"
                 type="password"
                 value={authForm.apiKey}
-                onChange={(e) => setAuthForm((prev) => ({ ...prev, apiKey: e.target.value }))}
+                onChange={(e) =>
+                  setAuthForm((prev) => ({ ...prev, apiKey: e.target.value }))
+                }
                 placeholder="Reader / analyst / admin API key"
                 style={{
                   width: "100%",
@@ -4190,12 +9736,24 @@ export default function QueenCalifiaCommandDashboard() {
               />
             </div>
             <div>
-              <div style={{ fontSize: 10, color: C.textDim, marginBottom: 6, fontFamily: MONO, letterSpacing: "0.08em" }}>X-QC-Admin-Key</div>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: C.textDim,
+                  marginBottom: 6,
+                  fontFamily: MONO,
+                  letterSpacing: "0.08em",
+                }}
+              >
+                X-QC-Admin-Key
+              </div>
               <input
                 data-testid="qc-auth-admin-key"
                 type="password"
                 value={authForm.adminKey}
-                onChange={(e) => setAuthForm((prev) => ({ ...prev, adminKey: e.target.value }))}
+                onChange={(e) =>
+                  setAuthForm((prev) => ({ ...prev, adminKey: e.target.value }))
+                }
                 placeholder="Only needed for admin-only actions"
                 style={{
                   width: "100%",
@@ -4244,9 +9802,28 @@ export default function QueenCalifiaCommandDashboard() {
               Clear
             </button>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginTop: 8, fontSize: 10, color: C.textDim }}>
-            <span>Enter the exact header values here: `X-QC-API-Key = your QC_API_KEY` and `X-QC-Admin-Key = your QC_ADMIN_KEY` for admin-only actions. These are stored only in this browser session.</span>
-            <span style={{ fontFamily: MONO, color: authSavedAt ? C.green : C.textDim }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 16,
+              flexWrap: "wrap",
+              marginTop: 8,
+              fontSize: 10,
+              color: C.textDim,
+            }}
+          >
+            <span>
+              Enter the exact header values here: `X-QC-API-Key = your
+              QC_API_KEY` and `X-QC-Admin-Key = your QC_ADMIN_KEY` for
+              admin-only actions. These are stored only in this browser session.
+            </span>
+            <span
+              style={{
+                fontFamily: MONO,
+                color: authSavedAt ? C.green : C.textDim,
+              }}
+            >
               {authSavedAt ? "SESSION AUTH SAVED" : "NOT SAVED"}
             </span>
           </div>
@@ -4258,14 +9835,18 @@ export default function QueenCalifiaCommandDashboard() {
         role="tablist"
         aria-label="Dashboard sections"
         style={{
-          display: "flex", gap: 2, padding: isNarrow ? "0 8px" : "0 24px",
-          borderBottom: `1px solid ${C.border}`, background: C.panel,
+          display: "flex",
+          gap: 2,
+          padding: isNarrow ? "0 8px" : "0 24px",
+          borderBottom: `1px solid ${C.border}`,
+          background: C.panel,
           position: "relative",
           zIndex: 2,
           overflowX: "auto",
           scrollbarWidth: "thin",
-        }}>
-        {visibleNav.map(item => (
+        }}
+      >
+        {visibleNav.map((item) => (
           <button
             key={item.id}
             role="tab"
@@ -4274,25 +9855,79 @@ export default function QueenCalifiaCommandDashboard() {
             aria-controls={`tabpanel-${item.id}`}
             onClick={() => setActiveTab(item.id)}
             style={{
-              padding: "10px 16px", background: "transparent",
-              border: "none", borderBottom: `2px solid ${activeTab === item.id ? C.accent : "transparent"}`,
+              padding: "10px 16px",
+              background: "transparent",
+              border: "none",
+              borderBottom: `2px solid ${activeTab === item.id ? C.accent : "transparent"}`,
               color: activeTab === item.id ? C.text : C.textSoft,
-              fontSize: 11, fontWeight: 600, cursor: "pointer",
-              fontFamily: FONT, letterSpacing: 0.3,
-              display: "flex", alignItems: "center", gap: 6,
+              fontSize: 11,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: FONT,
+              letterSpacing: 0.3,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
               transition: "all 0.2s ease",
             }}
           >
-            <span style={{ fontSize: 13 }} aria-hidden="true">{item.icon}</span>
+            <span style={{ fontSize: 13 }} aria-hidden="true">
+              {item.icon}
+            </span>
             {item.label}
             {item.id === "predictor" && highPreds > 0 && (
-              <span style={{ width: 16, height: 16, borderRadius: "50%", background: C.purple, color: "#fff", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{highPreds}</span>
+              <span
+                style={{
+                  width: 16,
+                  height: 16,
+                  borderRadius: "50%",
+                  background: C.purple,
+                  color: "#fff",
+                  fontSize: 9,
+                  fontWeight: 700,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {highPreds}
+              </span>
             )}
             {item.id === "telemetry" && telemetryData.beacons.length > 0 && (
-              <span style={{ width: 16, height: 16, borderRadius: "50%", background: C.cyan, color: "#fff", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{telemetryData.beacons.length}</span>
+              <span
+                style={{
+                  width: 16,
+                  height: 16,
+                  borderRadius: "50%",
+                  background: C.cyan,
+                  color: "#fff",
+                  fontSize: 9,
+                  fontWeight: 700,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {telemetryData.beacons.length}
+              </span>
             )}
             {item.id === "incidents" && critCount > 0 && (
-              <span style={{ width: 16, height: 16, borderRadius: "50%", background: C.red, color: "#fff", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{critCount}</span>
+              <span
+                style={{
+                  width: 16,
+                  height: 16,
+                  borderRadius: "50%",
+                  background: C.red,
+                  color: "#fff",
+                  fontSize: 9,
+                  fontWeight: 700,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {critCount}
+              </span>
             )}
           </button>
         ))}
@@ -4301,8 +9936,21 @@ export default function QueenCalifiaCommandDashboard() {
       {/* Content */}
       <main style={{ padding: 24, position: "relative", zIndex: 1 }}>
         {liveDataErrors.length > 0 && (
-          <div style={{ marginBottom: 16, padding: "10px 12px", background: C.amberDim, border: `1px solid ${C.amber}35`, borderRadius: 10, fontSize: 11, color: C.text }}>
-            Live dashboard data is partially degraded. The UI is showing only backend-fed values that were available on this refresh; some engines may require auth, runtime input, or additional telemetry before their panels populate.
+          <div
+            style={{
+              marginBottom: 16,
+              padding: "10px 12px",
+              background: C.amberDim,
+              border: `1px solid ${C.amber}35`,
+              borderRadius: 10,
+              fontSize: 11,
+              color: C.text,
+            }}
+          >
+            Live dashboard data is partially degraded. The UI is showing only
+            backend-fed values that were available on this refresh; some engines
+            may require auth, runtime input, or additional telemetry before
+            their panels populate.
           </div>
         )}
         <AnimatePresence mode="wait">
@@ -4323,19 +9971,67 @@ export default function QueenCalifiaCommandDashboard() {
       </main>
 
       {/* Footer */}
-      <footer style={{
-        padding: "8px 24px", borderTop: `1px solid ${C.border}`,
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-        background: C.panel,
-      }}>
+      <footer
+        style={{
+          padding: "8px 24px",
+          borderTop: `1px solid ${C.border}`,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          background: C.panel,
+        }}
+      >
         <div style={{ fontSize: 9, color: C.textDim, fontFamily: MONO }}>
-          TAMERIAN MATERIALS / QUEENCALIFIA-CYBERAI v4.2.1 — {expertMode ? "LIVE DATA MODE" : "SCANNER MODE"}
+          TAMERIAN MATERIALS / QUEENCALIFIA-CYBERAI v4.2.1 —{" "}
+          {expertMode ? "LIVE DATA MODE" : "SCANNER MODE"}
         </div>
-        <div style={{ display: "flex", gap: 12, fontSize: 9, color: C.textDim, fontFamily: MONO }}>
-          <span>Mesh: <span style={{ color: mesh.topology.total_nodes > 0 ? C.green : C.amber }}>{mesh.topology.total_nodes > 0 ? "LIVE" : "NO DATA"}</span></span>
-          {expertMode && <span>Predictor: <span style={{ color: predictorStatus.timestamp ? C.purple : C.amber }}>{predictorStatus.timestamp ? "LIVE" : "IDLE"}</span></span>}
-          {expertMode && <span>Telemetry: <span style={{ color: telemetryData.timestamp ? C.cyan : C.amber }}>{telemetryData.timestamp ? "LIVE" : "NO DATA"}</span></span>}
-          <span>Nodes: <span style={{ color: C.green }}>{mesh.topology.active_nodes}/{mesh.topology.total_nodes}</span></span>
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            fontSize: 9,
+            color: C.textDim,
+            fontFamily: MONO,
+          }}
+        >
+          <span>
+            Mesh:{" "}
+            <span
+              style={{
+                color: mesh.topology.total_nodes > 0 ? C.green : C.amber,
+              }}
+            >
+              {mesh.topology.total_nodes > 0 ? "LIVE" : "NO DATA"}
+            </span>
+          </span>
+          {expertMode && (
+            <span>
+              Predictor:{" "}
+              <span
+                style={{
+                  color: predictorStatus.timestamp ? C.purple : C.amber,
+                }}
+              >
+                {predictorStatus.timestamp ? "LIVE" : "IDLE"}
+              </span>
+            </span>
+          )}
+          {expertMode && (
+            <span>
+              Telemetry:{" "}
+              <span
+                style={{ color: telemetryData.timestamp ? C.cyan : C.amber }}
+              >
+                {telemetryData.timestamp ? "LIVE" : "NO DATA"}
+              </span>
+            </span>
+          )}
+          <span>
+            Nodes:{" "}
+            <span style={{ color: C.green }}>
+              {mesh.topology.active_nodes}/{mesh.topology.total_nodes}
+            </span>
+          </span>
         </div>
       </footer>
     </div>

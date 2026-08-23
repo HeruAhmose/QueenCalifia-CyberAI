@@ -4,7 +4,8 @@ import SovereignAwakening from "./components/SovereignAwakening.jsx";
 import SovereignCommandFrame from "./components/SovereignCommandFrame.jsx";
 import { SoundProvider } from "./contexts/SoundContext.jsx";
 
-const loadDashboard = () => import("./QueenCalifia_Unified_Command_Dashboard.jsx");
+const loadDashboard = () =>
+  import("./QueenCalifia_Unified_Command_Dashboard.jsx");
 const loadLegacy = () => import("./AppLegacy.jsx");
 const loadTrainingConsole = () => import("./panels/QCTrainingConsole.jsx");
 
@@ -33,21 +34,61 @@ function ShellLoading({ label = "Linking sovereign systems..." }) {
     >
       <div style={{ width: 132, height: 132, position: "relative" }}>
         <motion.div
-          style={{ position: "absolute", inset: 0, borderRadius: "50%", border: "1px solid rgba(212,175,55,.28)" }}
+          style={{
+            position: "absolute",
+            inset: 0,
+            borderRadius: "50%",
+            border: "1px solid rgba(212,175,55,.28)",
+          }}
           animate={{ rotate: 360 }}
           transition={{ duration: 16, repeat: Infinity, ease: "linear" }}
         />
         <motion.div
-          style={{ position: "absolute", inset: 16, borderRadius: "50%", border: "1px dashed rgba(125,211,252,.28)" }}
+          style={{
+            position: "absolute",
+            inset: 16,
+            borderRadius: "50%",
+            border: "1px dashed rgba(125,211,252,.28)",
+          }}
           animate={{ rotate: -360 }}
           transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
         />
-        <div style={{ position: "absolute", inset: 42, display: "grid", placeItems: "center", borderRadius: "50%", background: "#050910", border: "1px solid rgba(212,175,55,.26)", boxShadow: "0 0 54px rgba(212,175,55,.08)" }}>
-          <span style={{ font: "700 21px/1 Georgia,serif", color: "#d4af37" }}>QC</span>
+        <div
+          style={{
+            position: "absolute",
+            inset: 42,
+            display: "grid",
+            placeItems: "center",
+            borderRadius: "50%",
+            background: "#050910",
+            border: "1px solid rgba(212,175,55,.26)",
+            boxShadow: "0 0 54px rgba(212,175,55,.08)",
+          }}
+        >
+          <span style={{ font: "700 21px/1 Georgia,serif", color: "#d4af37" }}>
+            QC
+          </span>
         </div>
       </div>
-      <div style={{ font: "600 10px/1.4 'JetBrains Mono',monospace", letterSpacing: ".22em", textTransform: "uppercase", color: "#7dd3fc" }}>{label}</div>
-      <div style={{ font: "500 8px/1.4 'JetBrains Mono',monospace", letterSpacing: ".16em", color: "#536984" }}>HUMAN AUTHORITY · SOURCE PROVENANCE · DEFENSIBLE DECISIONS</div>
+      <div
+        style={{
+          font: "600 10px/1.4 'JetBrains Mono',monospace",
+          letterSpacing: ".22em",
+          textTransform: "uppercase",
+          color: "#7dd3fc",
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          font: "500 8px/1.4 'JetBrains Mono',monospace",
+          letterSpacing: ".16em",
+          color: "#536984",
+        }}
+      >
+        HUMAN AUTHORITY · SOURCE PROVENANCE · DEFENSIBLE DECISIONS
+      </div>
     </motion.div>
   );
 }
@@ -71,7 +112,9 @@ export default function App() {
 
   if (trainingConsole) {
     return (
-      <Suspense fallback={<ShellLoading label="Loading training command center..." />}>
+      <Suspense
+        fallback={<ShellLoading label="Loading training command center..." />}
+      >
         <QCTrainingConsole />
       </Suspense>
     );
@@ -80,7 +123,9 @@ export default function App() {
   if (useLegacy) {
     return (
       <SoundProvider>
-        <Suspense fallback={<ShellLoading label="Recovering legacy command stack..." />}>
+        <Suspense
+          fallback={<ShellLoading label="Recovering legacy command stack..." />}
+        >
           <AppLegacy />
         </Suspense>
       </SoundProvider>
@@ -111,7 +156,11 @@ export default function App() {
             transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
           >
             <SovereignCommandFrame>
-              <Suspense fallback={<ShellLoading label="Materializing command field..." />}>
+              <Suspense
+                fallback={
+                  <ShellLoading label="Materializing command field..." />
+                }
+              >
                 <QueenCalifiaUnifiedCommandDashboard />
               </Suspense>
             </SovereignCommandFrame>
