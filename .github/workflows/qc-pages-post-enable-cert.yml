@@ -12,9 +12,9 @@ permissions:
   actions: read
 
 jobs:
-  certify:
+  diagnose:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 3
     steps:
       - name: Inspect latest dashboard publisher runs
         shell: bash
@@ -36,6 +36,10 @@ jobs:
           echo 'QC_PUBLISHER_LATEST_JOBS'
           printf '%s' "$jobs" | jq -c '.jobs[] | {id,name,status,conclusion,steps:[.steps[]? | {name,status,conclusion}]}'
 
+  certify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
       - name: Certify exact deployed revision and sovereign UI
         shell: bash
         env:
