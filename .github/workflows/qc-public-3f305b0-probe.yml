@@ -45,12 +45,34 @@ jobs:
           chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
           test -n "$chrome"
           timeout 70s "$chrome" --headless --no-sandbox --disable-gpu --virtual-time-budget=18000 --dump-dom "$BASE_URL" > /tmp/qc-live.html
-          grep -Fqi 'Queen Califia' /tmp/qc-live.html
-          grep -Fqi 'SOVEREIGN COGNITIVE DEFENSE' /tmp/qc-live.html
-          grep -Fqi 'HUMAN AUTHORITY' /tmp/qc-live.html
-          echo 'QC_PUBLIC_PRESTIGE_BROWSER=PASS'
+          echo "QC_PUBLIC_DOM_BYTES=$(wc -c < /tmp/qc-live.html | tr -d ' ')"
+          browser_ok=1
+          for marker in 'Queen Califia' 'SOVEREIGN COGNITIVE DEFENSE' 'HUMAN AUTHORITY'; do
+            if grep -Fqi "$marker" /tmp/qc-live.html; then
+              echo "QC_PUBLIC_MARKER_${marker// /_}=PASS"
+            else
+              echo "QC_PUBLIC_MARKER_${marker// /_}=MISSING"
+              browser_ok=0
+            fi
+          done
+          python3 - <<'PY'
+          import html
+          import re
+          from pathlib import Path
 
-          ENTRY_URL="$asset_url" python3 - <<'PY'
+          raw = Path('/tmp/qc-live.html').read_text(encoding='utf-8', errors='replace')
+          title = re.search(r'<title[^>]*>(.*?)</title>', raw, flags=re.I | re.S)
+          print('QC_PUBLIC_TITLE=' + (html.unescape(title.group(1)).strip() if title else ''))
+          body = re.sub(r'<script\b[^>]*>.*?</script>', ' ', raw, flags=re.I | re.S)
+          body = re.sub(r'<style\b[^>]*>.*?</style>', ' ', body, flags=re.I | re.S)
+          body = re.sub(r'<[^>]+>', ' ', body)
+          body = html.unescape(body)
+          body = re.sub(r'\s+', ' ', body).strip()
+          print('QC_PUBLIC_VISIBLE_TEXT=' + body[:2400])
+          PY
+
+          binding_ok=0
+          if ENTRY_URL="$asset_url" python3 - <<'PY'
           import os
           import re
           import sys
@@ -86,8 +108,16 @@ jobs:
           print(f"QC_PUBLIC_JS_CHUNKS_SCANNED={len(seen)}")
           print(f"QC_PUBLIC_API_BINDING_CHUNK={matched or ''}")
           if not matched:
-              sys.exit("Canonical QC API hostname not found in deployed JavaScript chunk graph")
+              sys.exit(1)
           PY
+          then
+            binding_ok=1
+          else
+            echo 'QC_PUBLIC_CANONICAL_API_BINDING=MISSING'
+          fi
 
+          test "$browser_ok" = 1
+          test "$binding_ok" = 1
           echo 'QC_PUBLIC_EXACT_SHA=PASS'
+          echo 'QC_PUBLIC_PRESTIGE_BROWSER=PASS'
           echo 'QC_PUBLIC_CANONICAL_API_BINDING=PASS'
