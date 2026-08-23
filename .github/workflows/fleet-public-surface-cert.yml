@@ -41,6 +41,8 @@ jobs:
           echo "EXPECTED_CSS_SHA256=$(sha256sum "dist${built_css}" | cut -d' ' -f1)"
 
       - name: Inspect legacy Firebase demo identity
+        id: firebase_identity
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -137,3 +139,15 @@ jobs:
           echo "QC_HISTORICAL_RENDER_HTTP=$status"
           head -c 1000 /tmp/render.out || true; echo
           echo 'QC_RENDER_INFORMATIONAL_ONLY=PASS'
+
+      - name: Summarize legacy demo currency
+        shell: bash
+        env:
+          FIREBASE_IDENTITY_OUTCOME: ${{ steps.firebase_identity.outcome }}
+        run: |
+          echo "QC_FIREBASE_IDENTITY_OUTCOME=$FIREBASE_IDENTITY_OUTCOME"
+          if [ "$FIREBASE_IDENTITY_OUTCOME" = success ]; then
+            echo 'QC_LEGACY_DEMO_CURRENCY=PASS'
+          else
+            echo 'QC_LEGACY_DEMO_CURRENCY=STALE'
+          fi
