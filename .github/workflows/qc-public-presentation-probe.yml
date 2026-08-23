@@ -1,0 +1,48 @@
+name: QC Public Presentation Probe
+
+on:
+  push:
+    branches: [probe/qc-public-presentation-c33b8a22-20260823]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: c33b8a22d68db7f4b86268f8a4f8c4f48c12a86b
+      BASE_URL: https://heruahmose.github.io/QueenCalifia-CyberAI/
+    steps:
+      - name: Certify exact public presentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          observed=''
+          for i in $(seq 1 40); do
+            observed="$(curl -fsSL "${BASE_URL}deploy-commit.txt" 2>/dev/null | tr -d '\r\n' || true)"
+            [ "$observed" = "$EXPECTED_SHA" ] && break
+            sleep 6
+          done
+          echo "QC_PUBLIC_EXPECTED_SHA=$EXPECTED_SHA"
+          echo "QC_PUBLIC_OBSERVED_SHA=$observed"
+          test "$observed" = "$EXPECTED_SHA"
+
+          html="$(curl -fsSL "$BASE_URL")"
+          asset="$(printf '%s' "$html" | grep -oE '/QueenCalifia-CyberAI/assets/index-[A-Za-z0-9_-]+\.js' | head -n1)"
+          test -n "$asset"
+          curl -fsSL "https://heruahmose.github.io${asset}" > /tmp/qc-live.js
+          grep -Fq 'qc.tamerian-materials.com' /tmp/qc-live.js
+
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
+          test -n "$chrome"
+          timeout 70s "$chrome" --headless --no-sandbox --disable-gpu --virtual-time-budget=18000 --dump-dom "$BASE_URL" > /tmp/qc-live.html
+          grep -Fqi 'Queen Califia' /tmp/qc-live.html
+          grep -Fqi 'SOVEREIGN COGNITIVE DEFENSE' /tmp/qc-live.html
+          grep -Fqi 'HUMAN AUTHORITY' /tmp/qc-live.html
+
+          echo 'QC_PUBLIC_EXACT_SHA=PASS'
+          echo 'QC_PUBLIC_CANONICAL_API_BINDING=PASS'
+          echo 'QC_PUBLIC_PRESTIGE_BROWSER=PASS'
