@@ -31,21 +31,21 @@ import { getQcApiBase } from "./utils/qcApiBase.js";
 
 // ─── Color System ─────────────────────────────────────────────────────────
 const C = {
-  void: "#020409",
-  bg: "#060a14",
-  panel: "#0a0f1e",
-  panelHover: "#0e1528",
-  surface: "#111b2e",
-  border: "#131d33",
-  borderLit: "#1a2d50",
+  void: "#010307",
+  bg: "#04070c",
+  panel: "#070c14",
+  panelHover: "#0b1320",
+  surface: "#0c1624",
+  border: "#182433",
+  borderLit: "#294359",
   borderHot: "#2563eb",
   glow: "rgba(37,99,235,0.06)",
   glowHot: "rgba(37,99,235,0.14)",
   text: "#d4dff0",
   textSoft: "#8a9dbd",
   textDim: "#4a6080",
-  accent: "#2563eb",
-  accentBright: "#60a5fa",
+  accent: "#d4af37",
+  accentBright: "#7dd3fc",
   green: "#10b981",
   greenDim: "rgba(16,185,129,0.10)",
   greenGlow: "rgba(16,185,129,0.04)",
@@ -129,15 +129,15 @@ const Stat = ({ label, value, sub, color = C.text, trend, small }) => (
 
 const Panel = ({ children, title, icon, accent = C.accent, style, headerRight, glow }) => (
   <div style={{
-    background: C.panel, border: `1px solid ${C.border}`,
-    borderRadius: 8, overflow: "hidden",
-    boxShadow: glow ? `0 0 30px ${accent}08, inset 0 1px 0 ${accent}10` : `inset 0 1px 0 ${C.borderLit}20`,
+    background: `linear-gradient(145deg, ${C.panel}, ${C.void})`, border: `1px solid ${C.border}`,
+    borderRadius: 14, overflow: "hidden",
+    boxShadow: glow ? `0 24px 70px rgba(0,0,0,.24), 0 0 42px ${accent}0b, inset 0 1px 0 ${accent}12` : `0 16px 46px rgba(0,0,0,.16), inset 0 1px 0 ${C.borderLit}24`,
     ...style,
   }}>
     {title && (
       <div style={{
         display: "flex", justifyContent: "space-between", alignItems: "center",
-        padding: "10px 16px", borderBottom: `1px solid ${C.border}`,
+        padding: "12px 16px", borderBottom: `1px solid ${C.border}`,
         background: `linear-gradient(135deg, ${accent}06 0%, transparent 60%)`,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
