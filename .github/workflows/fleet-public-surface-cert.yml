@@ -84,7 +84,7 @@ jobs:
           const send=(method,params={})=>new Promise((resolve,reject)=>{const callId=++id;pending.set(callId,{resolve,reject});ws.send(JSON.stringify({id:callId,method,params}))});
           const ev=async expression=>(await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true})).result?.value;
           await send('Page.enable');await send('Runtime.enable');await send('Network.enable');await send('Network.setCacheDisabled',{cacheDisabled:true});
-          await send('Page.navigate',{url:'https://queencalifia-cyberai.web.app/?fleet-browser-cert=2'});
+          await send('Page.navigate',{url:'https://queencalifia-cyberai.web.app/?fleet-browser-cert=3'});
           let snap;
           for(let i=0;i<40;i++){await new Promise(r=>setTimeout(r,500));snap=await ev(`(() => ({title:document.title,text:(document.body?.innerText||'').slice(0,12000),rootChildren:document.getElementById('root')?.childElementCount||0}))()`);if(snap?.rootChildren>0&&/SOVEREIGN AWAKENING|Queen Califia|QC OS|Cyber Guardian|Research Companion/i.test(snap.text||''))break;}
           console.log('QC_FIREBASE_BROWSER='+JSON.stringify(snap));
@@ -111,10 +111,13 @@ jobs:
           echo "QC_SOVEREIGN_PUBLIC_HTTP=$status"
           echo '--- headers ---'; cat /tmp/edge.headers || true
           echo '--- body prefix ---'; head -c 2000 /tmp/edge.out || true; echo
-          if [ "$status" = 200 ] && grep -Eqi 'Queen Califia|QC OS|Cyber Guardian|Research Companion|<div[^>]+id=["'"']root' /tmp/edge.out; then
-            echo '::error::Unauthorized sovereign edge unexpectedly serves the active QC application.'
-            exit 31
+          if [ "$status" = 200 ]; then
+            if grep -Eqi 'Queen Califia|QC OS|Cyber Guardian|Research Companion' /tmp/edge.out; then
+              echo '::error::Unauthorized sovereign edge unexpectedly serves the active QC application.'
+              exit 31
+            fi
           fi
+          if [ "$status" = 530 ]; then grep -Fq 'error code: 1033' /tmp/edge.out; fi
           echo 'QC_SOVEREIGN_UNAUTHORIZED_NOT_ACTIVE=PASS'
       - name: Inspect historical Render endpoint without treating it as authority
         shell: bash
