@@ -41,12 +41,26 @@ jobs:
           grep -R -q 'HUMAN AUTHORITY' frontend/dist
           grep -Fq '/QueenCalifia-CyberAI/assets/' frontend/dist/index.html
       # GitHub Pages is enabled in repository Settings with Source = GitHub Actions.
-      # This protected merge is the first publication trigger after that one-time enablement.
-      # All actions are immutable SHA pins to satisfy QC's hardened workflow policy.
+      # Package the Pages artifact explicitly so every action invocation remains full-SHA pinned.
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
-      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa
+      - name: Archive Pages artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar \
+            --dereference --hard-dereference \
+            --directory frontend/dist \
+            -cvf "$RUNNER_TEMP/artifact.tar" \
+            --exclude=.git \
+            --exclude=.github \
+            .
+      - name: Upload Pages artifact with repository-approved immutable action pin
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          path: frontend/dist
+          name: github-pages
+          path: ${{ runner.temp }}/artifact.tar
+          retention-days: 1
+          if-no-files-found: error
 
   deploy:
     environment:
