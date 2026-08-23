@@ -41,6 +41,7 @@ jobs:
           grep -R -q 'HUMAN AUTHORITY' frontend/dist
           grep -Fq '/QueenCalifia-CyberAI/assets/' frontend/dist/index.html
       # GitHub Pages is enabled in repository Settings with Source = GitHub Actions.
+      # This protected merge is the first publication trigger after that one-time enablement.
       # All actions are immutable SHA pins to satisfy QC's hardened workflow policy.
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa
