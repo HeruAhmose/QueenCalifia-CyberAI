@@ -1,0 +1,139 @@
+name: Fleet Public Surface Certification
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    if: github.head_ref == 'probe/fleet-public-surface-cert-20260823'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 5a5a89c509b4315efe11c431b327d46ef3e6af29
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build exact current QC frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd frontend
+          npm ci --ignore-scripts
+          npm run build
+          test -s dist/index.html
+          built_js="$(grep -oE '/assets/[^\" ]+\.js' dist/index.html | head -n1)"
+          built_css="$(grep -oE '/assets/[^\" ]+\.css' dist/index.html | head -n1)"
+          echo "EXPECTED_SHA=$(git -C .. rev-parse HEAD)"
+          echo "EXPECTED_JS=$built_js"
+          echo "EXPECTED_CSS=$built_css"
+          echo "EXPECTED_JS_SHA256=$(sha256sum "dist${built_js}" | cut -d' ' -f1)"
+          echo "EXPECTED_CSS_SHA256=$(sha256sum "dist${built_css}" | cut -d' ' -f1)"
+
+      - name: Inspect legacy Firebase demo identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://queencalifia-cyberai.web.app'
+          status="$(curl --silent --show-error --location -H 'Cache-Control: no-cache' --output /tmp/firebase.html --write-out '%{http_code}' "$base/?fleet-cert=${GITHUB_SHA}")"
+          echo "FIREBASE_HTTP=$status"
+          test "$status" = 200
+          live_js="$(grep -oE '/assets/[^\" ]+\.js' /tmp/firebase.html | head -n1 || true)"
+          live_css="$(grep -oE '/assets/[^\" ]+\.css' /tmp/firebase.html | head -n1 || true)"
+          built_js="$(grep -oE '/assets/[^\" ]+\.js' frontend/dist/index.html | head -n1)"
+          built_css="$(grep -oE '/assets/[^\" ]+\.css' frontend/dist/index.html | head -n1)"
+          echo "FIREBASE_JS=$live_js"
+          echo "FIREBASE_CSS=$live_css"
+          echo "BUILT_JS=$built_js"
+          echo "BUILT_CSS=$built_css"
+          if [ "$live_js" = "$built_js" ] && [ "$live_css" = "$built_css" ]; then
+            curl --fail --silent --show-error --location -H 'Cache-Control: no-cache' "$base$live_js?fleet-cert=bytes" > /tmp/firebase.js
+            curl --fail --silent --show-error --location -H 'Cache-Control: no-cache' "$base$live_css?fleet-cert=bytes" > /tmp/firebase.css
+            cmp -s "frontend/dist${built_js}" /tmp/firebase.js
+            cmp -s "frontend/dist${built_css}" /tmp/firebase.css
+            echo 'QC_FIREBASE_EXACT_CURRENT_MAIN=PASS'
+          else
+            echo 'QC_FIREBASE_EXACT_CURRENT_MAIN=FAIL'
+            exit 21
+          fi
+
+      - name: Execute legacy Firebase demo in Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
+          test -n "$chrome"
+          "$chrome" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --window-size=1280,800 --remote-debugging-port=9222 --user-data-dir=/tmp/qc-fleet-cert about:blank >/tmp/chrome.log 2>&1 &
+          chrome_pid=$!
+          trap 'kill "$chrome_pid" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 30); do curl --fail --silent http://127.0.0.1:9222/json/version >/dev/null 2>&1 && break; sleep 1; done
+          cat >/tmp/qc-browser.mjs <<'NODE'
+          const list = await (await fetch('http://127.0.0.1:9222/json/list')).json();
+          const page = list.find(x => x.type === 'page');
+          if (!page?.webSocketDebuggerUrl) throw new Error('No Chrome page target');
+          const ws = new WebSocket(page.webSocketDebuggerUrl);
+          let id=0; const pending=new Map();
+          ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.id&&pending.has(m.id)){const p=pending.get(m.id);pending.delete(m.id);m.error?p.reject(new Error(JSON.stringify(m.error))):p.resolve(m.result)}};
+          await new Promise((r,j)=>{ws.onopen=r;ws.onerror=j});
+          const send=(method,params={})=>new Promise((resolve,reject)=>{const callId=++id;pending.set(callId,{resolve,reject});ws.send(JSON.stringify({id:callId,method,params}))});
+          const ev=async expression=>(await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true})).result?.value;
+          await send('Page.enable'); await send('Runtime.enable'); await send('Network.enable'); await send('Network.setCacheDisabled',{cacheDisabled:true});
+          await send('Page.navigate',{url:'https://queencalifia-cyberai.web.app/?fleet-browser-cert=1'});
+          let snap;
+          for(let i=0;i<40;i++){
+            await new Promise(r=>setTimeout(r,500));
+            snap=await ev(`(() => ({title:document.title,text:(document.body?.innerText||'').slice(0,12000),rootChildren:document.getElementById('root')?.childElementCount||0}))()`);
+            if(snap?.rootChildren>0 && /Queen Califia|QC OS|Cyber Guardian|Research Companion/i.test(snap.text||'')) break;
+          }
+          console.log('QC_FIREBASE_BROWSER='+JSON.stringify(snap));
+          if(!snap || snap.rootChildren<=0) throw new Error('QC Firebase React root did not commit');
+          if(!/Queen Califia|QC OS|Cyber Guardian|Research Companion/i.test(snap.text||'')) throw new Error('Expected QC dashboard content not found');
+          console.log('QC_FIREBASE_BROWSER_RENDER=PASS');
+          ws.close();
+          NODE
+          node /tmp/qc-browser.mjs
+
+      - name: Verify sovereign edge remains dormant while unauthorized
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          data=json.load(open('config/sovereign-edge-deployment-state.json', encoding='utf-8'))
+          assert data['production_authorized'] is False
+          assert data['runtime']['runtime_authorized'] is False
+          assert data['production_cutover_complete'] is False
+          assert data['ingress']['public_hostname']=='qc.tamerian-materials.com'
+          assert data['ingress']['dormant_public_response']=='cloudflare-1033'
+          print('QC_SOVEREIGN_LEDGER_DORMANT_CONTRACT=PASS')
+          PY
+          status="$(curl --silent --show-error --location --max-time 20 --output /tmp/edge.out --dump-header /tmp/edge.headers --write-out '%{http_code}' 'https://qc.tamerian-materials.com/?fleet-cert=dormant' || true)"
+          echo "QC_SOVEREIGN_PUBLIC_HTTP=$status"
+          echo '--- headers ---'; cat /tmp/edge.headers || true
+          echo '--- body prefix ---'; head -c 2000 /tmp/edge.out || true; echo
+          if [ "$status" = 200 ]; then
+            if grep -Eqi 'Queen Califia|QC OS|Cyber Guardian|Research Companion|<div[^>]+id=["'"']root' /tmp/edge.out; then
+              echo '::error::Unauthorized sovereign edge unexpectedly serves the active QC application.'
+              exit 31
+            fi
+          fi
+          echo 'QC_SOVEREIGN_UNAUTHORIZED_NOT_ACTIVE=PASS'
+
+      - name: Inspect historical Render endpoint without treating it as authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --location --max-time 30 --output /tmp/render.out --write-out '%{http_code}' 'https://queencalifia-cyberai.onrender.com/healthz' || true)"
+          echo "QC_HISTORICAL_RENDER_HTTP=$status"
+          head -c 1000 /tmp/render.out || true; echo
+          echo 'QC_RENDER_INFORMATIONAL_ONLY=PASS'
