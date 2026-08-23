@@ -40,9 +40,7 @@ jobs:
             /*) asset_url="https://heruahmose.github.io${asset}" ;;
             *) asset_url="${BASE_URL}${asset#./}" ;;
           esac
-          echo "QC_PUBLIC_JS_ASSET=$asset_url"
-          curl -fsSL "$asset_url" > /tmp/qc-live.js
-          grep -Fq 'qc.tamerian-materials.com' /tmp/qc-live.js
+          echo "QC_PUBLIC_JS_ENTRY=$asset_url"
 
           chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
           test -n "$chrome"
@@ -50,7 +48,46 @@ jobs:
           grep -Fqi 'Queen Califia' /tmp/qc-live.html
           grep -Fqi 'SOVEREIGN COGNITIVE DEFENSE' /tmp/qc-live.html
           grep -Fqi 'HUMAN AUTHORITY' /tmp/qc-live.html
+          echo 'QC_PUBLIC_PRESTIGE_BROWSER=PASS'
+
+          ENTRY_URL="$asset_url" python3 - <<'PY'
+          import os
+          import re
+          import sys
+          from urllib.parse import urljoin, urlparse
+          from urllib.request import Request, urlopen
+
+          target = "qc.tamerian-materials.com"
+          allowed_host = "heruahmose.github.io"
+          allowed_path = "/QueenCalifia-CyberAI/"
+          queue = [os.environ["ENTRY_URL"]]
+          seen = set()
+          matched = None
+
+          while queue and len(seen) < 250:
+              url = queue.pop(0)
+              if url in seen:
+                  continue
+              parsed = urlparse(url)
+              if parsed.netloc != allowed_host or not parsed.path.startswith(allowed_path):
+                  continue
+              seen.add(url)
+              request = Request(url, headers={"User-Agent": "qc-public-cert/1.0"})
+              with urlopen(request, timeout=20) as response:
+                  text = response.read().decode("utf-8", errors="replace")
+              if target in text:
+                  matched = url
+                  break
+              for ref in re.findall(r"[\"']([^\"']+\.js(?:\?[^\"']*)?)[\"']", text):
+                  resolved = urljoin(url, ref)
+                  if resolved not in seen:
+                      queue.append(resolved)
+
+          print(f"QC_PUBLIC_JS_CHUNKS_SCANNED={len(seen)}")
+          print(f"QC_PUBLIC_API_BINDING_CHUNK={matched or ''}")
+          if not matched:
+              sys.exit("Canonical QC API hostname not found in deployed JavaScript chunk graph")
+          PY
 
           echo 'QC_PUBLIC_EXACT_SHA=PASS'
           echo 'QC_PUBLIC_CANONICAL_API_BINDING=PASS'
-          echo 'QC_PUBLIC_PRESTIGE_BROWSER=PASS'
