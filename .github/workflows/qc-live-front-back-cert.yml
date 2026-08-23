@@ -1,0 +1,55 @@
+name: QC Live Front Back Certification
+
+on:
+  push:
+    branches: [probe/qc-live-front-back-cert-20260823]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Require current public dashboard revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED='ed6dfe47af9230406e4ba116dfb862283a4b74d8'
+          BASE='https://heruahmose.github.io/QueenCalifia-CyberAI/'
+          observed="$(curl -fsSL "${BASE}deploy-commit.txt" | tr -d '\r\n')"
+          echo "QC_DASHBOARD_EXPECTED=$EXPECTED"
+          echo "QC_DASHBOARD_OBSERVED=$observed"
+          test "$observed" = "$EXPECTED"
+
+      - name: Certify sovereign presentation in Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
+          timeout 70s "$chrome" --headless --no-sandbox --disable-gpu --virtual-time-budget=22000 --dump-dom 'https://heruahmose.github.io/QueenCalifia-CyberAI/' > /tmp/qc.html
+          test -s /tmp/qc.html
+          grep -Fq 'SOVEREIGN COGNITIVE DEFENSE' /tmp/qc.html
+          grep -Fq 'HUMAN AUTHORITY' /tmp/qc.html
+          grep -Eiq 'SOVEREIGN SEAL|QUEEN CALIFIA|COMMAND FIELD' /tmp/qc.html
+          echo 'QC_PUBLIC_PRESTIGE=PASS'
+
+      - name: Probe canonical sovereign backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://qc.tamerian-materials.com'
+          for path in '/health' '/api/health' '/'; do
+            code="$(curl -k -sS -L --max-time 20 -o /tmp/body -w '%{http_code}' "${base}${path}" || true)"
+            echo "QC_BACKEND ${path} HTTP=${code}"
+            head -c 400 /tmp/body 2>/dev/null || true
+            echo
+          done
+          code="$(curl -k -sS -L --max-time 20 -o /tmp/health -w '%{http_code}' "${base}/health" || true)"
+          test "$code" = '200'
+          grep -Eiq 'ok|healthy|status|service|queen|califia' /tmp/health
+          echo 'QC_CANONICAL_BACKEND=PASS'
