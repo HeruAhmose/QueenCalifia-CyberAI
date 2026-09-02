@@ -9,14 +9,17 @@
 import { useState, useEffect, useRef } from "react";
 import { useSound } from "../contexts/SoundContext.jsx";
 
-// ── Asset paths (relative to /public/qc-assets/) ──────────────────────────
+// Keep public avatar assets portable across root hosting and the GitHub Pages
+// repository subpath. Vite replaces BASE_URL with the active deployment base.
+const QC_ASSET_BASE = `${import.meta.env.BASE_URL}qc-assets`;
+
 const AVATAR_PATHS = {
-  idle:          "/qc-assets/idle_avatar",
-  active:        "/qc-assets/active_avatar",
-  ascended:      "/qc-assets/ascended_avatar",
-  hex_shield:    "/qc-assets/hex_shield_avatar",
-  energy_spiral: "/qc-assets/energy_spiral_avatar",
-  staff_raised:  "/qc-assets/staff_raised_avatar",
+  idle:          `${QC_ASSET_BASE}/idle_avatar`,
+  active:        `${QC_ASSET_BASE}/active_avatar`,
+  ascended:      `${QC_ASSET_BASE}/ascended_avatar`,
+  hex_shield:    `${QC_ASSET_BASE}/hex_shield_avatar`,
+  energy_spiral: `${QC_ASSET_BASE}/energy_spiral_avatar`,
+  staff_raised:  `${QC_ASSET_BASE}/staff_raised_avatar`,
 };
 
 const STATE_META = {
