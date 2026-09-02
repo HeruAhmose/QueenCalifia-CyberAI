@@ -40,6 +40,12 @@ jobs:
           grep -R -q 'SOVEREIGN COGNITIVE DEFENSE' frontend/dist
           grep -R -q 'HUMAN AUTHORITY' frontend/dist
           grep -Fq '/QueenCalifia-CyberAI/assets/' frontend/dist/index.html
+          grep -Fq '/QueenCalifia-CyberAI/manifest.json' frontend/dist/index.html
+          grep -Fq '/QueenCalifia-CyberAI/qc-assets/branding/' frontend/dist/index.html
+          grep -R -Fq '/QueenCalifia-CyberAI/qc-assets' frontend/dist/assets
+          grep -R -Fq 'idle_avatar' frontend/dist/assets
+          ! grep -R -Fq '"/qc-assets/' frontend/dist/assets
+          test -s frontend/dist/qc-assets/idle_avatar_sm.png
       # GitHub Pages is enabled in repository Settings with Source = GitHub Actions.
       # Package the Pages artifact explicitly so every action invocation remains full-SHA pinned.
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
@@ -83,6 +89,9 @@ jobs:
             sleep 6
           done
           test "$live_sha" = "$GITHUB_SHA"
+          curl -fsS "${PAGE_URL}manifest.json" >/dev/null
+          curl -fsS "${PAGE_URL}qc-assets/branding/sigil/sigil_icon_32.png" >/dev/null
+          curl -fsS "${PAGE_URL}qc-assets/idle_avatar_sm.png" >/dev/null
           chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
           timeout 60s "$chrome" --headless --no-sandbox --disable-gpu --virtual-time-budget=14000 --dump-dom "$PAGE_URL" > /tmp/qc.html
           grep -Fqi 'Queen Califia' /tmp/qc.html
