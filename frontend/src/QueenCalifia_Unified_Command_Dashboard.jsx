@@ -5,6 +5,7 @@ import QueenCalifiaAvatar from "./components/QueenCalifiaAvatar.jsx";
 import { useSound } from "./contexts/SoundContext.jsx";
 import { normalizeRemediationPlan, enrichScanResultForUi } from "./utils/qcNormalize.js";
 import { getQcApiBase } from "./utils/qcApiBase.js";
+import { boundedPercent } from "./utils/qcMetrics.js";
 
 /*
  * QueenCalifia CyberAI — Unified Command Dashboard
@@ -177,7 +178,7 @@ const PulseDot = ({ color = C.green, size = 8 }) => (
 
 const ProgressBar = ({ value, max = 100, color = C.accent, height = 4, bg }) => (
   <div style={{ height, borderRadius: height, background: bg || `${color}15`, overflow: "hidden" }}>
-    <div style={{ height: "100%", width: `${Math.min(100, (value / max) * 100)}%`, background: `linear-gradient(90deg, ${color}, ${color}cc)`, borderRadius: height, transition: "width 0.8s ease" }} />
+    <div style={{ height: "100%", width: `${boundedPercent(value, max)}%`, background: `linear-gradient(90deg, ${color}, ${color}cc)`, borderRadius: height, transition: "width 0.8s ease" }} />
   </div>
 );
 
@@ -586,6 +587,10 @@ function OverviewTab({ mesh, predictions, incidents, snapshotData, landscape }) 
   const topPreds = predictions.slice(0, 3);
   const criticalIncidents = incidents.filter(i => i.severity === "CRITICAL").length;
   const highPreds = predictions.filter(p => p.confidence > 0.7).length;
+  const hasMeshData = mesh.topology.total_nodes > 0;
+  const meshIntegrity = Math.round(
+    boundedPercent(mesh.topology.active_nodes, mesh.topology.total_nodes)
+  );
 
   // Threat posture score: 0-100 (lower is better)
   const postureScore = Math.round(
@@ -652,7 +657,7 @@ function OverviewTab({ mesh, predictions, incidents, snapshotData, landscape }) 
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                 <span style={{ fontSize: 10, color: C.textSoft }}>Mesh Integrity</span>
-                <span style={{ fontSize: 10, color: C.green, fontFamily: MONO }}>{Math.round(mesh.topology.active_nodes / mesh.topology.total_nodes * 100)}%</span>
+                <span style={{ fontSize: 10, color: hasMeshData ? C.green : C.textDim, fontFamily: MONO }}>{hasMeshData ? `${meshIntegrity}%` : "NO DATA"}</span>
               </div>
               <ProgressBar value={mesh.topology.active_nodes} max={mesh.topology.total_nodes} color={C.green} />
             </div>

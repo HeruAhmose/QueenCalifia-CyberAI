@@ -197,10 +197,11 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install and build
+      - name: Install, test, and build
         working-directory: frontend
         run: |
-          npm install
+          npm ci
+          node --test src/utils/qcMetrics.test.mjs
           npm run build
 
   docker-prod-frontend:
