@@ -31,6 +31,7 @@ jobs:
         working-directory: frontend
         run: |
           npm ci
+          node --test src/utils/qcMetrics.test.mjs
           npm run build -- --base /QueenCalifia-CyberAI/
           printf '%s\n' "$GITHUB_SHA" > dist/deploy-commit.txt
       - name: Assert canonical backend binding, prestige surface, and Pages asset base
