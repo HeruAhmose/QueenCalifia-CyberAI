@@ -81,6 +81,47 @@ jobs:
               raise SystemExit("unexpected Image Updater readiness check shape")
           bootstrap.write_text(text.replace(old, new), encoding="utf-8")
 
+          windows = Path("scripts/dev/python_bootstrap_windows.ps1")
+          text = windows.read_text(encoding="utf-8")
+          text = text.replace(
+              "  - Installs requirements.txt and (optionally) requirements-dev.txt.\n",
+              "  - Installs backend/requirements.txt and, with -Dev, bootstrap requirements plus pytest.\n",
+          )
+          old = '''  if (Test-Path "requirements.txt") {
+            Write-Info "installing requirements.txt"
+            Exec $venvPy @("-m","pip","install","-r","requirements.txt")
+          } else {
+            Write-Warn "requirements.txt not found; skipping"
+          }
+
+          if ($Dev) {
+            if (Test-Path "requirements-dev.txt") {
+              Write-Info "installing requirements-dev.txt"
+              Exec $venvPy @("-m","pip","install","-r","requirements-dev.txt")
+            } elseif (Test-Path "requirements-dev.lock") {
+              Write-Info "installing requirements-dev.lock"
+              Exec $venvPy @("-m","pip","install","-r","requirements-dev.lock")
+            } else {
+              Write-Warn "no dev requirements file found; skipping"
+            }
+          }
+'''
+          new = '''  $backendReq = Join-Path $root "backend\\requirements.txt"
+          if (-not (Test-Path $backendReq)) { throw "backend requirements not found: $backendReq" }
+          Write-Info "installing backend/requirements.txt"
+          Exec $venvPy @("-m","pip","install","-r",$backendReq)
+
+          if ($Dev) {
+            $bootstrapReq = Join-Path $root "scripts\\bootstrap\\requirements.txt"
+            if (-not (Test-Path $bootstrapReq)) { throw "bootstrap requirements not found: $bootstrapReq" }
+            Write-Info "installing bootstrap requirements and pytest"
+            Exec $venvPy @("-m","pip","install","-r",$bootstrapReq,"pytest")
+          }
+'''
+          if text.count(old) != 1:
+              raise SystemExit("unexpected Windows dependency block shape")
+          windows.write_text(text.replace(old, new), encoding="utf-8")
+
           for obsolete in (
               Path(".github/workflows/deps-refresh.yml"),
               Path("scripts/lock.sh"),
@@ -99,8 +140,8 @@ jobs:
             echo "retired lock target is still advertised" >&2
             exit 1
           fi
-          if grep -R -n --exclude='Dockerfile' --exclude='verify-maintenance-repair.yml' 'scripts/lock.sh\|requirements-dev.lock' Makefile .github scripts; then
-            echo "retired root-lock references remain" >&2
+          if grep -R -n --exclude='Dockerfile' --exclude='verify-maintenance-repair.yml' 'scripts/lock.sh\|requirements-dev.lock\|requirements-dev.txt' Makefile .github scripts; then
+            echo "retired root dependency references remain" >&2
             exit 1
           fi
           if grep -Fn '\1' Makefile; then
@@ -111,6 +152,24 @@ jobs:
           grep -q 'pip-audit -r requirements.txt' .github/workflows/dependency-audit.yml
           grep -q 'COPY backend/requirements.txt' Dockerfile
           grep -q 'COPY backend/requirements.txt' backend/Dockerfile
+          grep -q 'backend\\requirements.txt' scripts/dev/python_bootstrap_windows.ps1
+          grep -q 'scripts\\bootstrap\\requirements.txt' scripts/dev/python_bootstrap_windows.ps1
+          grep -q '"pytest"' scripts/dev/python_bootstrap_windows.ps1
+
+      - name: Validate Windows bootstrap syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/dev/python_bootstrap_windows.ps1'),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
 
       - name: Bump chart versions exactly as scheduled maintenance does
         shell: bash
@@ -156,7 +215,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A -- Makefile scripts/bootstrap/bootstrap_cluster.sh .github/workflows/deps-refresh.yml scripts/lock.sh
+          git add -A -- Makefile scripts/bootstrap/bootstrap_cluster.sh scripts/dev/python_bootstrap_windows.ps1 .github/workflows/deps-refresh.yml scripts/lock.sh
           git diff --cached --check
           git commit -m "fix(maintenance): repair scheduled QC workflows"
           git push origin HEAD:fix/maintenance-workflows-20260909
