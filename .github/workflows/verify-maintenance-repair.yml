@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   repair-and-verify:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -38,97 +37,15 @@ jobs:
           version: ${{ steps.versions.outputs.helm }}
 
       - name: Install jq
+        shell: bash
         run: |
+          set -euo pipefail
           sudo apt-get update -y >/dev/null
           sudo apt-get install -y jq >/dev/null
 
-      - name: Apply maintenance repair
-        shell: python
-        run: |
-          from pathlib import Path
-
-          makefile = Path("Makefile")
-          text = makefile.read_text(encoding="utf-8")
-          help_lines = (
-              '\t@echo "  make lock          - generate requirements.lock + requirements-dev.lock with hashes (Docker required)"\n'
-              '\t@echo "  make lock-upgrade  - same as lock, but upgrades within constraints"\n'
-          )
-          if text.count(help_lines) != 1:
-              raise SystemExit("unexpected Makefile lock help shape")
-          text = text.replace(help_lines, "")
-          lock_targets = (
-              "\nlock:\n"
-              "\t@./scripts/lock.sh\n\n"
-              "lock-upgrade:\n"
-              "\t@QC_LOCK_UPGRADE=1 ./scripts/lock.sh\n"
-          )
-          if text.count(lock_targets) != 1:
-              raise SystemExit("unexpected Makefile lock target shape")
-          text = text.replace(lock_targets, "\n")
-
-          broken = "\n" + r"\1" + "\n.PHONY: kind-ingress-e2e\n"
-          fixed = "\n.PHONY: kind-ingress-e2e\n"
-          if text.count(broken) != 1:
-              raise SystemExit("unexpected Makefile corruption shape")
-          text = text.replace(broken, fixed)
-          makefile.write_text(text, encoding="utf-8")
-
-          bootstrap = Path("scripts/bootstrap/bootstrap_cluster.sh")
-          text = bootstrap.read_text(encoding="utf-8")
-          old = "kubectl -n argocd-image-updater rollout status deploy/argocd-image-updater --timeout=10m"
-          new = "kubectl -n argocd-image-updater rollout status deployment -l app.kubernetes.io/instance=argocd-image-updater --timeout=10m"
-          if text.count(old) != 1:
-              raise SystemExit("unexpected Image Updater readiness check shape")
-          bootstrap.write_text(text.replace(old, new), encoding="utf-8")
-
-          windows = Path("scripts/dev/python_bootstrap_windows.ps1")
-          text = windows.read_text(encoding="utf-8")
-          text = text.replace(
-              "  - Installs requirements.txt and (optionally) requirements-dev.txt.\n",
-              "  - Installs backend/requirements.txt and, with -Dev, bootstrap requirements plus pytest.\n",
-          )
-          old = '''  if (Test-Path "requirements.txt") {
-            Write-Info "installing requirements.txt"
-            Exec $venvPy @("-m","pip","install","-r","requirements.txt")
-          } else {
-            Write-Warn "requirements.txt not found; skipping"
-          }
-
-          if ($Dev) {
-            if (Test-Path "requirements-dev.txt") {
-              Write-Info "installing requirements-dev.txt"
-              Exec $venvPy @("-m","pip","install","-r","requirements-dev.txt")
-            } elseif (Test-Path "requirements-dev.lock") {
-              Write-Info "installing requirements-dev.lock"
-              Exec $venvPy @("-m","pip","install","-r","requirements-dev.lock")
-            } else {
-              Write-Warn "no dev requirements file found; skipping"
-            }
-          }
-'''
-          new = '''  $backendReq = Join-Path $root "backend\\requirements.txt"
-          if (-not (Test-Path $backendReq)) { throw "backend requirements not found: $backendReq" }
-          Write-Info "installing backend/requirements.txt"
-          Exec $venvPy @("-m","pip","install","-r",$backendReq)
-
-          if ($Dev) {
-            $bootstrapReq = Join-Path $root "scripts\\bootstrap\\requirements.txt"
-            if (-not (Test-Path $bootstrapReq)) { throw "bootstrap requirements not found: $bootstrapReq" }
-            Write-Info "installing bootstrap requirements and pytest"
-            Exec $venvPy @("-m","pip","install","-r",$bootstrapReq,"pytest")
-          }
-'''
-          if text.count(old) != 1:
-              raise SystemExit("unexpected Windows dependency block shape")
-          windows.write_text(text.replace(old, new), encoding="utf-8")
-
-          for obsolete in (
-              Path(".github/workflows/deps-refresh.yml"),
-              Path("scripts/lock.sh"),
-          ):
-              if not obsolete.exists():
-                  raise SystemExit(f"expected obsolete path missing: {obsolete}")
-              obsolete.unlink()
+      - name: Apply isolated maintenance repair
+        shell: bash
+        run: python .github/scripts/apply_qc_maintenance_repair.py
 
       - name: Validate static maintenance contract
         shell: bash
@@ -136,18 +53,9 @@ jobs:
           set -euo pipefail
           bash -n scripts/bootstrap/bootstrap_cluster.sh
           make help > /tmp/qc-make-help.txt
-          if grep -q 'make lock' /tmp/qc-make-help.txt; then
-            echo "retired lock target is still advertised" >&2
-            exit 1
-          fi
-          if grep -R -n --exclude='Dockerfile' --exclude='verify-maintenance-repair.yml' 'scripts/lock.sh\|requirements-dev.lock\|requirements-dev.txt' Makefile .github scripts; then
-            echo "retired root dependency references remain" >&2
-            exit 1
-          fi
-          if grep -Fn '\1' Makefile; then
-            echo "malformed Makefile escape remains" >&2
-            exit 1
-          fi
+          ! grep -q 'make lock' /tmp/qc-make-help.txt
+          ! grep -R -n --exclude='Dockerfile' 'scripts/lock.sh\|requirements-dev.lock\|requirements-dev.txt' Makefile .github scripts
+          ! grep -Fn '\1' Makefile
           grep -q 'working-directory: backend' .github/workflows/dependency-audit.yml
           grep -q 'pip-audit -r requirements.txt' .github/workflows/dependency-audit.yml
           grep -q 'COPY backend/requirements.txt' Dockerfile
@@ -155,8 +63,12 @@ jobs:
           grep -q 'backend\\requirements.txt' scripts/dev/python_bootstrap_windows.ps1
           grep -q 'scripts\\bootstrap\\requirements.txt' scripts/dev/python_bootstrap_windows.ps1
           grep -q '"pytest"' scripts/dev/python_bootstrap_windows.ps1
+          test ! -e .github/workflows/deps-refresh.yml
+          test ! -e scripts/lock.sh
+          test ! -e .github/workflows/verify-maintenance-repair.yml
+          test ! -e .github/scripts/apply_qc_maintenance_repair.py
 
-      - name: Validate Windows bootstrap syntax
+      - name: Validate Windows bootstrap syntax and parameters
         shell: pwsh
         run: |
           $tokens = $null
@@ -169,6 +81,10 @@ jobs:
           if ($errors.Count -gt 0) {
             $errors | ForEach-Object { Write-Error $_.Message }
             exit 1
+          }
+          $parameters = (Get-Command ./scripts/dev/python_bootstrap_windows.ps1).Parameters.Keys
+          foreach ($required in @('Dev','Recreate','Python','RepoRoot')) {
+            if ($required -notin $parameters) { throw "missing script parameter: $required" }
           }
 
       - name: Bump chart versions exactly as scheduled maintenance does
@@ -209,13 +125,14 @@ jobs:
           git restore scripts/bootstrap/bump_versions.sh scripts/bootstrap/versions.env
           git diff --check
 
-      - name: Commit verified repair
+      - name: Commit verified repair only
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A -- Makefile scripts/bootstrap/bootstrap_cluster.sh scripts/dev/python_bootstrap_windows.ps1 .github/workflows/deps-refresh.yml scripts/lock.sh
+          git add -A
           git diff --cached --check
+          git status --short
           git commit -m "fix(maintenance): repair scheduled QC workflows"
           git push origin HEAD:fix/maintenance-workflows-20260909
