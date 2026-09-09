@@ -49,7 +49,7 @@ echo "==> Wait for readiness"
 kubectl -n ingress-nginx rollout status deploy/ingress-nginx-controller --timeout=10m
 kubectl -n cert-manager rollout status deploy/cert-manager --timeout=10m
 kubectl -n argocd rollout status deploy/argocd-server --timeout=10m
-kubectl -n argocd-image-updater rollout status deploy/argocd-image-updater --timeout=10m
+kubectl -n argocd-image-updater rollout status deployment -l app.kubernetes.io/instance=argocd-image-updater --timeout=10m
 
 if [ "$QC_INSTALL_CLUSTER_ISSUERS" = "1" ]; then
   echo "==> ClusterIssuers"

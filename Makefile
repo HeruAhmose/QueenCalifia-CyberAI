@@ -35,8 +35,6 @@ help:
 	@echo "  make prod-edge-up  - docker compose (edge TLS) up --build -d (HTTPS: https://localhost:8443)"
 	@echo "  make prod-edge-acme-up - docker compose (edge TLS + ACME) up --build -d (requires QC_DOMAIN/QC_EMAIL)"
 	@echo "  make prod-down     - docker compose (production) down -v"
-	@echo "  make lock          - generate requirements.lock + requirements-dev.lock with hashes (Docker required)"
-	@echo "  make lock-upgrade  - same as lock, but upgrades within constraints"
 
 up:
 	@if [ ! -f .env ]; then cp .env.example .env; echo "📋 Created .env from .env.example"; fi
@@ -155,11 +153,6 @@ spki-pin-runbook:
 	fi
 
 
-lock:
-	@./scripts/lock.sh
-
-lock-upgrade:
-	@QC_LOCK_UPGRADE=1 ./scripts/lock.sh
 
 prod-up:
 	@if [ ! -f .env ]; then cp .env.example .env; echo "📋 Created .env from .env.example"; fi
@@ -204,7 +197,6 @@ k8s-validate:
 	@echo "Rendered manifests written to /tmp/qc-helm-rendered.yaml and /tmp/qc-kustomize-rendered.yaml"
 
 
-\1
 .PHONY: kind-ingress-e2e
 kind-ingress-e2e: ## Run Ingress E2E test (port-forward ingress-nginx) against the current kind context
 	./scripts/ci/kind_ingress_e2e.sh
