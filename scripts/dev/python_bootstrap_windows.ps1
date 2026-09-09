@@ -6,7 +6,7 @@
 .DESCRIPTION
   - Ensures the *base* Python has pip (via ensurepip).
   - Creates (or recreates) a local .venv.
-  - Installs requirements.txt and (optionally) requirements-dev.txt.
+  - Installs backend/requirements.txt and, with -Dev, bootstrap requirements plus pytest.
 
   This script is intentionally "boring": no downloads beyond pip installs.
   If you are behind a proxy, configure pip accordingly.
@@ -18,15 +18,15 @@
   pwsh -File scripts/dev/python_bootstrap_windows.ps1 -Python py
 #>
 
-Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
-
 param(
   [switch] $Dev,
   [switch] $Recreate,
   [string] $Python = "python",
   [string] $RepoRoot
 )
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
 
 function Write-Info([string] $Msg) { Write-Host "[py-bootstrap] $Msg" }
 function Write-Warn([string] $Msg) { Write-Warning "[py-bootstrap] $Msg" }
@@ -86,23 +86,16 @@ try {
   Write-Info "upgrading pip in venv"
   Exec $venvPy @("-m","pip","install","--upgrade","pip","setuptools","wheel")
 
-  if (Test-Path "requirements.txt") {
-    Write-Info "installing requirements.txt"
-    Exec $venvPy @("-m","pip","install","-r","requirements.txt")
-  } else {
-    Write-Warn "requirements.txt not found; skipping"
-  }
+  $backendReq = Join-Path $root "backend\requirements.txt"
+  if (-not (Test-Path $backendReq)) { throw "backend requirements not found: $backendReq" }
+  Write-Info "installing backend/requirements.txt"
+  Exec $venvPy @("-m","pip","install","-r",$backendReq)
 
   if ($Dev) {
-    if (Test-Path "requirements-dev.txt") {
-      Write-Info "installing requirements-dev.txt"
-      Exec $venvPy @("-m","pip","install","-r","requirements-dev.txt")
-    } elseif (Test-Path "requirements-dev.lock") {
-      Write-Info "installing requirements-dev.lock"
-      Exec $venvPy @("-m","pip","install","-r","requirements-dev.lock")
-    } else {
-      Write-Warn "no dev requirements file found; skipping"
-    }
+    $bootstrapReq = Join-Path $root "scripts\bootstrap\requirements.txt"
+    if (-not (Test-Path $bootstrapReq)) { throw "bootstrap requirements not found: $bootstrapReq" }
+    Write-Info "installing bootstrap requirements and pytest"
+    Exec $venvPy @("-m","pip","install","-r",$bootstrapReq,"pytest")
   }
 
   Write-Info "done"
