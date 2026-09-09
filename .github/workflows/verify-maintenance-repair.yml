@@ -65,6 +65,12 @@ jobs:
           if text.count(lock_targets) != 1:
               raise SystemExit("unexpected Makefile lock target shape")
           text = text.replace(lock_targets, "\n")
+
+          broken = "\n" + r"\1" + "\n.PHONY: kind-ingress-e2e\n"
+          fixed = "\n.PHONY: kind-ingress-e2e\n"
+          if text.count(broken) != 1:
+              raise SystemExit("unexpected Makefile corruption shape")
+          text = text.replace(broken, fixed)
           makefile.write_text(text, encoding="utf-8")
 
           bootstrap = Path("scripts/bootstrap/bootstrap_cluster.sh")
@@ -95,6 +101,10 @@ jobs:
           fi
           if grep -R -n --exclude='Dockerfile' --exclude='verify-maintenance-repair.yml' 'scripts/lock.sh\|requirements-dev.lock' Makefile .github scripts; then
             echo "retired root-lock references remain" >&2
+            exit 1
+          fi
+          if grep -Fn '\1' Makefile; then
+            echo "malformed Makefile escape remains" >&2
             exit 1
           fi
           grep -q 'working-directory: backend' .github/workflows/dependency-audit.yml
