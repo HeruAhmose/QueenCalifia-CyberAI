@@ -30,13 +30,11 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-
           p = Path('frontend/src/components/CinematicIntro.jsx')
           s = p.read_text(encoding='utf-8')
           old_host = 'https://d2xsxph8kpxj0f.cloudfront.net/310419663029216973/6A6PRiSc2SBdMKdQGVopRa'
           assert s.count(old_host) == 1, f'expected one CDN declaration, found {s.count(old_host)}'
           assert s.count('${CDN}/') == 4, f'expected four CDN consumers, found {s.count("${CDN}/")}'
-
           s = s.replace(f'const CDN = "{old_host}";', 'const QC_ASSET_BASE = `${import.meta.env.BASE_URL}qc-assets`;')
           s = s.replace(
               'backgroundImage: `url("${CDN}/qc-hex-grid-bg-Ckjfegc53A383DCfoyh5Xe.webp")`,\n        backgroundSize: "cover", backgroundPosition: "center",',
@@ -45,7 +43,6 @@ jobs:
           s = s.replace('<img src={`${CDN}/idle_avatar_sm_6294a66d.png`} alt="Queen Califia"', '<img src={`${QC_ASSET_BASE}/idle_avatar_sm.png`} alt="Queen Califia"')
           s = s.replace('<img src={`${CDN}/idle_avatar_lg_d2e3a5df.png`} alt="Queen Califia — Sovereign"', '<img src={`${QC_ASSET_BASE}/idle_avatar_lg.png`} alt="Queen Califia — Sovereign"')
           s = s.replace('backgroundImage: `url("${CDN}/qc-circuit-texture-crouTXBwBSsyVGQspVekAy.webp")`,', 'backgroundImage: `url("${QC_ASSET_BASE}/sovereign_circuitry_banner_1920x1080.png")`,')
-
           assert old_host not in s
           assert '${CDN}/' not in s
           for expected in ('idle_avatar_sm.png', 'idle_avatar_lg.png', 'sovereign_circuitry_banner_1920x1080.png'):
@@ -55,9 +52,10 @@ jobs:
 
       - name: Verify canonical local assets exist
         run: |
-          test -s frontend/public/qc-assets/idle_avatar_sm.png
-          test -s frontend/public/qc-assets/idle_avatar_lg.png
-          test -s frontend/public/qc-assets/sovereign_circuitry_banner_1920x1080.png
+          for f in idle_avatar_sm.png idle_avatar_lg.png sovereign_circuitry_banner_1920x1080.png; do
+            test -s "frontend/public/qc-assets/$f" || { echo "MISSING_PUBLIC_ASSET=$f"; exit 1; }
+            echo "PUBLIC_ASSET_OK=$f"
+          done
           ! grep -R -F 'd2xsxph8kpxj0f.cloudfront.net' frontend/src
 
       - name: Install frontend dependencies
@@ -71,14 +69,16 @@ jobs:
       - name: Verify root-hosting artifact carries local QC assets
         shell: bash
         run: |
-          test -s frontend/dist/qc-assets/idle_avatar_sm.png
-          test -s frontend/dist/qc-assets/idle_avatar_lg.png
-          test -s frontend/dist/qc-assets/sovereign_circuitry_banner_1920x1080.png
-          grep -R -Fq 'idle_avatar_sm.png' frontend/dist/assets
-          grep -R -Fq 'idle_avatar_lg.png' frontend/dist/assets
-          grep -R -Fq 'sovereign_circuitry_banner_1920x1080.png' frontend/dist/assets
-          grep -R -Fq '/qc-assets' frontend/dist/assets
-          ! grep -R -Fq 'd2xsxph8kpxj0f.cloudfront.net' frontend/dist
+          set -euo pipefail
+          for f in idle_avatar_sm.png idle_avatar_lg.png sovereign_circuitry_banner_1920x1080.png; do
+            test -s "frontend/dist/qc-assets/$f" || { echo "MISSING_DIST_ASSET=$f"; exit 1; }
+            grep -R -Fq "$f" frontend/dist/assets || { echo "BUNDLE_REFERENCE_MISSING=$f"; exit 1; }
+            echo "ROOT_ARTIFACT_OK=$f"
+          done
+          if grep -R -Fq 'd2xsxph8kpxj0f.cloudfront.net' frontend/dist; then
+            echo 'DEAD_CDN_STILL_PRESENT=root'
+            exit 1
+          fi
 
       - name: Build GitHub Pages artifact
         working-directory: frontend
@@ -87,12 +87,17 @@ jobs:
       - name: Verify Pages artifact remains portable
         shell: bash
         run: |
+          set -euo pipefail
           test -s frontend/dist/qc-assets/idle_avatar_sm.png
-          grep -R -Fq '/QueenCalifia-CyberAI/qc-assets' frontend/dist/assets
-          grep -R -Fq 'idle_avatar_sm.png' frontend/dist/assets
-          grep -R -Fq 'idle_avatar_lg.png' frontend/dist/assets
-          grep -R -Fq 'sovereign_circuitry_banner_1920x1080.png' frontend/dist/assets
-          ! grep -R -Fq 'd2xsxph8kpxj0f.cloudfront.net' frontend/dist
+          grep -R -Fq '/QueenCalifia-CyberAI/qc-assets' frontend/dist/assets || { echo 'PAGES_BASE_MISSING'; exit 1; }
+          for f in idle_avatar_sm.png idle_avatar_lg.png sovereign_circuitry_banner_1920x1080.png; do
+            grep -R -Fq "$f" frontend/dist/assets || { echo "PAGES_BUNDLE_REFERENCE_MISSING=$f"; exit 1; }
+            echo "PAGES_ARTIFACT_OK=$f"
+          done
+          if grep -R -Fq 'd2xsxph8kpxj0f.cloudfront.net' frontend/dist; then
+            echo 'DEAD_CDN_STILL_PRESENT=pages'
+            exit 1
+          fi
 
       - name: Commit only verified source repair
         if: success()
