@@ -103,10 +103,12 @@ jobs:
       - name: Certify animated identity in Chromium
         run: |
           set -euo pipefail
-          cd frontend
-          npm run preview -- --host 127.0.0.1 --port 4173 >/tmp/qc-preview.log 2>&1 &
-          preview_pid=$!
-          trap 'kill "$preview_pid" 2>/dev/null || true' EXIT
+          rm -rf /tmp/qc-pages-host
+          mkdir -p /tmp/qc-pages-host/QueenCalifia-CyberAI
+          cp -a frontend/dist/. /tmp/qc-pages-host/QueenCalifia-CyberAI/
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory /tmp/qc-pages-host >/tmp/qc-pages-host.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           for i in {1..30}; do
             if curl -fsS http://127.0.0.1:4173/QueenCalifia-CyberAI/ >/dev/null; then
               break
@@ -114,6 +116,9 @@ jobs:
             sleep 1
           done
           curl -fsS http://127.0.0.1:4173/QueenCalifia-CyberAI/ >/dev/null
+          entry="$(grep -oE '/QueenCalifia-CyberAI/assets/index-[^\"]+\.js' frontend/dist/index.html | head -1)"
+          test -n "$entry"
+          curl -fsS "http://127.0.0.1:4173${entry}" >/dev/null
           cd /tmp/qc-identity-browser
           node verify.mjs
 
