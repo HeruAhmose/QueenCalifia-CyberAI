@@ -34,7 +34,7 @@ jobs:
           node --test src/utils/qcMetrics.test.mjs
           npm run build -- --base /QueenCalifia-CyberAI/
           printf '%s\n' "$GITHUB_SHA" > dist/deploy-commit.txt
-      - name: Assert canonical backend binding, prestige surface, and Pages asset base
+      - name: Assert canonical backend, sovereign identity, prestige surface, and Pages asset base
         run: |
           set -euo pipefail
           grep -R -q 'qc.tamerian-materials.com' frontend/dist
@@ -42,11 +42,22 @@ jobs:
           grep -R -q 'HUMAN AUTHORITY' frontend/dist
           grep -Fq '/QueenCalifia-CyberAI/assets/' frontend/dist/index.html
           grep -Fq '/QueenCalifia-CyberAI/manifest.json' frontend/dist/index.html
-          grep -Fq '/QueenCalifia-CyberAI/qc-assets/branding/' frontend/dist/index.html
+          grep -Fq '/QueenCalifia-CyberAI/qc-assets/branding/sigil/sigil_icon_32.png' frontend/dist/index.html
+          grep -Fq '/QueenCalifia-CyberAI/qc-assets/branding/sigil/sigil_icon_512.png' frontend/dist/index.html
           grep -R -Fq '/QueenCalifia-CyberAI/qc-assets' frontend/dist/assets
-          grep -R -Fq 'idle_avatar' frontend/dist/assets
+          grep -R -Fq 'data-qc-sovereign-portrait' frontend/dist/assets
+          grep -R -Fq 'qc-awaken-holo-scan' frontend/dist/assets
+          grep -R -Fq 'qc-ring-spin' frontend/dist/assets
+          for state in idle_avatar active_avatar staff_raised_avatar ascended_avatar; do
+            grep -R -Fq "$state" frontend/dist/assets
+          done
+          for file in idle_avatar_sm.png active_avatar_sm.png staff_raised_avatar_sm.png ascended_avatar_sm.png; do
+            test -s "frontend/dist/qc-assets/$file"
+          done
+          test -s frontend/dist/qc-assets/branding/sigil/sigil_icon_32.png
+          test -s frontend/dist/qc-assets/branding/sigil/sigil_icon_512.png
           ! grep -R -Fq '"/qc-assets/' frontend/dist/assets
-          test -s frontend/dist/qc-assets/idle_avatar_sm.png
+          ! grep -R -Fq 'd2xsxph8kpxj0f.cloudfront.net' frontend/dist
       # GitHub Pages is enabled in repository Settings with Source = GitHub Actions.
       # Package the Pages artifact explicitly so every action invocation remains full-SHA pinned.
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
@@ -79,7 +90,7 @@ jobs:
       - name: Deploy exact dashboard artifact
         id: deployment
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e
-      - name: Certify public revision and browser-rendered prestige content
+      - name: Certify public revision, sovereign identity assets, and browser-rendered prestige content
         env:
           PAGE_URL: ${{ steps.deployment.outputs.page_url }}
         run: |
@@ -92,11 +103,17 @@ jobs:
           test "$live_sha" = "$GITHUB_SHA"
           curl -fsS "${PAGE_URL}manifest.json" >/dev/null
           curl -fsS "${PAGE_URL}qc-assets/branding/sigil/sigil_icon_32.png" >/dev/null
-          curl -fsS "${PAGE_URL}qc-assets/idle_avatar_sm.png" >/dev/null
+          curl -fsS "${PAGE_URL}qc-assets/branding/sigil/sigil_icon_512.png" >/dev/null
+          for file in idle_avatar_sm.png active_avatar_sm.png staff_raised_avatar_sm.png ascended_avatar_sm.png; do
+            curl -fsS "${PAGE_URL}qc-assets/${file}" >/dev/null
+          done
           chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
           timeout 60s "$chrome" --headless --no-sandbox --disable-gpu --virtual-time-budget=14000 --dump-dom "$PAGE_URL" > /tmp/qc.html
           grep -Fqi 'Queen Califia' /tmp/qc.html
+          grep -Fqi 'Queen Califia — idle' /tmp/qc.html
+          grep -Fqi 'data-qc-sovereign-portrait="active-awakening"' /tmp/qc.html
           grep -Fqi 'SOVEREIGN COGNITIVE DEFENSE' /tmp/qc.html
           grep -Fqi 'HUMAN AUTHORITY' /tmp/qc.html
           echo "QC_DASHBOARD_PUBLIC_SHA=$live_sha"
+          echo 'QC_DASHBOARD_PUBLIC_IDENTITY=PASS'
           echo 'QC_DASHBOARD_PUBLIC_BROWSER=PASS'
