@@ -126,16 +126,11 @@ const STATE_VISUALS = {
 
 // ── Avatar image with lazy-loading + fallback ──────────────────────────────
 function AvatarImage({ state, size }) {
-  const [loaded, setLoaded] = useState(false);
-  const [src, setSrc] = useState(null);
+  const [loadedPath, setLoadedPath] = useState(null);
 
   const suffix = size <= 200 ? "_sm" : size <= 400 ? "_md" : "_lg";
   const path = `${AVATAR_PATHS[state]}${suffix}.png`;
-
-  useEffect(() => {
-    setLoaded(false);
-    setSrc(path);
-  }, [path]);
+  const loaded = loadedPath === path;
 
   return (
     <div style={{ position: "relative", width: size, height: size }}>
@@ -150,9 +145,9 @@ function AvatarImage({ state, size }) {
         </div>
       )}
       <img
-        src={src}
+        src={path}
         alt={`Queen Califia — ${state}`}
-        onLoad={() => setLoaded(true)}
+        onLoad={() => setLoadedPath(path)}
         style={{
           width: size, height: size,
           objectFit: "cover",
