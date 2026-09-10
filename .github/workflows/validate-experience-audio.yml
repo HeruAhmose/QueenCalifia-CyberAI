@@ -56,8 +56,23 @@ jobs:
           test -s frontend/dist/qc-assets/branding/sigil/sigil_icon_32.png
           test -s frontend/dist/qc-assets/branding/sigil/sigil_icon_512.png
       - name: Browser-certify independent awakening and audio consent
+        shell: bash
         working-directory: frontend
-        run: node scripts/audit-experience-runtime.mjs
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/qc-experience-chrome
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          "$chrome" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage \
+            --no-first-run --disable-background-networking \
+            --remote-debugging-address=127.0.0.1 --remote-debugging-port=9239 \
+            --remote-allow-origins='*' --user-data-dir=/tmp/qc-experience-chrome \
+            about:blank >/tmp/qc-experience-chrome.log 2>&1 &
+          chrome_pid=$!
+          trap 'kill "$chrome_pid" 2>/dev/null || true; cat /tmp/qc-experience-chrome.log || true' EXIT
+          for _ in $(seq 1 80); do curl --fail --silent http://127.0.0.1:9239/json/version >/dev/null && break; sleep .25; done
+          curl --fail --silent http://127.0.0.1:9239/json/version >/dev/null
+          QC_CDP_URL=http://127.0.0.1:9239 node scripts/audit-experience-runtime.mjs
       - name: Commit verified production changes
         shell: bash
         run: |
