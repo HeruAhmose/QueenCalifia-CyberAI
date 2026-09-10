@@ -1,0 +1,117 @@
+name: Verify QC sovereign identity
+
+on:
+  push:
+    branches:
+      - fix/sovereign-awakening-identity-20260909
+
+permissions:
+  contents: read
+
+jobs:
+  identity-browser-cert:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Verify canonical identity assets and metadata
+        run: |
+          set -euo pipefail
+          for f in \
+            idle_avatar_sm.png \
+            active_avatar_sm.png \
+            staff_raised_avatar_sm.png \
+            ascended_avatar_sm.png \
+            branding/sigil/sigil_icon_32.png \
+            branding/sigil/sigil_icon_512.png; do
+            test -s "frontend/public/qc-assets/$f"
+            echo "QC_ASSET_OK=$f"
+          done
+          test -s frontend/public/manifest.json
+          grep -Fq '%BASE_URL%qc-assets/branding/sigil/sigil_icon_32.png' frontend/index.html
+          grep -Fq '%BASE_URL%qc-assets/branding/sigil/sigil_icon_512.png' frontend/index.html
+          grep -Fq '%BASE_URL%manifest.json' frontend/index.html
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build and certify root-hosting artifact
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          npm run build
+          for f in idle_avatar_sm.png active_avatar_sm.png staff_raised_avatar_sm.png ascended_avatar_sm.png; do
+            test -s "dist/qc-assets/$f"
+            grep -R -Fq "$f" dist/assets
+          done
+          test -s dist/qc-assets/branding/sigil/sigil_icon_32.png
+          test -s dist/qc-assets/branding/sigil/sigil_icon_512.png
+          grep -Fq 'href="/qc-assets/branding/sigil/sigil_icon_32.png"' dist/index.html
+          grep -Fq 'href="/qc-assets/branding/sigil/sigil_icon_512.png"' dist/index.html
+          grep -Fq 'href="/manifest.json"' dist/index.html
+          ! grep -R -Fq 'd2xsxph8kpxj0f.cloudfront.net' dist
+          echo ROOT_HOST_IDENTITY_ARTIFACT=PASS
+
+      - name: Build and certify GitHub Pages artifact
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          npm run build -- --base /QueenCalifia-CyberAI/
+          for f in idle_avatar_sm.png active_avatar_sm.png staff_raised_avatar_sm.png ascended_avatar_sm.png; do
+            test -s "dist/qc-assets/$f"
+            grep -R -Fq "$f" dist/assets
+          done
+          test -s dist/qc-assets/branding/sigil/sigil_icon_32.png
+          test -s dist/qc-assets/branding/sigil/sigil_icon_512.png
+          grep -Fq '/QueenCalifia-CyberAI/qc-assets/branding/sigil/sigil_icon_32.png' dist/index.html
+          grep -Fq '/QueenCalifia-CyberAI/qc-assets/branding/sigil/sigil_icon_512.png' dist/index.html
+          grep -Fq '/QueenCalifia-CyberAI/manifest.json' dist/index.html
+          grep -R -Fq 'data-qc-sovereign-portrait' dist/assets
+          grep -R -Fq 'qc-awaken-holo-scan' dist/assets
+          ! grep -R -Fq 'd2xsxph8kpxj0f.cloudfront.net' dist
+          echo PAGES_IDENTITY_ARTIFACT=PASS
+
+      - name: Prepare isolated Playwright verifier
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/qc-identity-browser
+          cp .github/scripts/verify_qc_sovereign_identity.mjs /tmp/qc-identity-browser/verify.mjs
+          cd /tmp/qc-identity-browser
+          npm init -y >/dev/null 2>&1
+          npm install --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Certify animated identity in Chromium
+        run: |
+          set -euo pipefail
+          cd frontend
+          npm run preview -- --host 127.0.0.1 --port 4173 >/tmp/qc-preview.log 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid" 2>/dev/null || true' EXIT
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/QueenCalifia-CyberAI/ >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4173/QueenCalifia-CyberAI/ >/dev/null
+          cd /tmp/qc-identity-browser
+          node verify.mjs
+
+      - name: Upload empirical identity evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: qc-sovereign-identity-evidence
+          path: /tmp/qc-identity-browser/qc-identity-evidence/
+          if-no-files-found: warn
+          retention-days: 14
