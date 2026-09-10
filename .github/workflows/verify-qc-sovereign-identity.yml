@@ -40,6 +40,56 @@ jobs:
           grep -Fq '%BASE_URL%qc-assets/branding/sigil/sigil_icon_512.png' frontend/index.html
           grep -Fq '%BASE_URL%manifest.json' frontend/index.html
 
+      - name: Apply avatar transition race fix in checkout
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('frontend/src/components/QueenCalifiaAvatar.jsx')
+          s = p.read_text(encoding='utf-8')
+          old = '''function AvatarImage({ state, size }) {
+            const [loaded, setLoaded] = useState(false);
+            const [src, setSrc] = useState(null);
+
+            const suffix = size <= 200 ? "_sm" : size <= 400 ? "_md" : "_lg";
+            const path = `${AVATAR_PATHS[state]}${suffix}.png`;
+
+            useEffect(() => {
+              setLoaded(false);
+              setSrc(path);
+            }, [path]);
+
+            return (
+              <div style={{ position: "relative", width: size, height: size }}>
+                {!loaded && (
+          '''
+          new = '''function AvatarImage({ state, size }) {
+            const [loadedPath, setLoadedPath] = useState(null);
+
+            const suffix = size <= 200 ? "_sm" : size <= 400 ? "_md" : "_lg";
+            const path = `${AVATAR_PATHS[state]}${suffix}.png`;
+            const loaded = loadedPath === path;
+
+            return (
+              <div style={{ position: "relative", width: size, height: size }}>
+                {!loaded && (
+          '''
+          if old not in s:
+              raise SystemExit('AvatarImage state block did not match expected source')
+          s = s.replace(old, new, 1)
+          s = s.replace('''        src={src}
+                  alt={`Queen Califia — ${state}`}
+                  onLoad={() => setLoaded(true)}''', '''        src={path}
+                  alt={`Queen Califia — ${state}`}
+                  onLoad={() => setLoadedPath(path)}''', 1)
+          if 'src={src}' in s or 'setSrc(path)' in s:
+              raise SystemExit('stale delayed src binding remains')
+          if 'src={path}' not in s or 'setLoadedPath(path)' not in s:
+              raise SystemExit('direct avatar src binding was not applied')
+          p.write_text(s, encoding='utf-8')
+          PY
+          git diff --check
+          git diff -- frontend/src/components/QueenCalifiaAvatar.jsx
+
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
