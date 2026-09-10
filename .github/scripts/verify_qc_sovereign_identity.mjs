@@ -14,15 +14,21 @@ const viewports = {
 const report = { generatedAt: new Date().toISOString(), viewports: {}, reducedMotion: null };
 let failures = 0;
 
-async function waitForPortrait(page, state) {
-  const image = page.locator(`img[alt="Queen Califia — ${state}"]`).first();
+async function waitForPortrait(page, state, expectedFile) {
+  const alt = `Queen Califia — ${state}`;
+  const image = page.locator(`img[alt="${alt}"]`).first();
   await image.waitFor({ state: "visible", timeout: 10000 });
   await page.waitForFunction(
-    (alt) => {
-      const img = [...document.images].find((node) => node.alt === alt);
-      return Boolean(img?.complete && img.naturalWidth > 0 && img.naturalHeight > 0);
+    ({ altText, filename }) => {
+      const img = [...document.images].find((node) => node.alt === altText);
+      return Boolean(
+        img?.complete &&
+        img.naturalWidth > 0 &&
+        img.naturalHeight > 0 &&
+        new URL(img.currentSrc || img.src, location.href).pathname.endsWith(`/qc-assets/${filename}`)
+      );
     },
-    `Queen Califia — ${state}`,
+    { altText: alt, filename: expectedFile },
     { timeout: 10000 },
   );
   return image;
@@ -72,7 +78,7 @@ for (const [name, viewport] of Object.entries(viewports)) {
     await awakening.waitFor({ state: "visible", timeout: 10000 });
     if ((await awakening.getAttribute("data-qc-awakening-phase")) !== "sealed") throw new Error("awakening did not start sealed");
     if ((await awakening.getAttribute("data-qc-awakening-avatar-state")) !== "idle") throw new Error("sealed phase is not mapped to idle portrait");
-    const idleImage = await waitForPortrait(page, "idle");
+    const idleImage = await waitForPortrait(page, "idle", "idle_avatar_sm.png");
     result.idleSrc = await idleImage.getAttribute("src");
 
     const ringAnimation = await page.locator(".qc-ring-spin").first().evaluate((node) => getComputedStyle(node).animationName);
@@ -84,16 +90,16 @@ for (const [name, viewport] of Object.entries(viewports)) {
 
     await page.getByRole("button", { name: "AWAKEN SOVEREIGN INTELLIGENCE" }).click();
     await page.waitForFunction(() => document.querySelector(".qc-sovereign-awakening")?.dataset.qcAwakeningPhase === "linking", null, { timeout: 5000 });
-    const activeImage = await waitForPortrait(page, "active");
+    const activeImage = await waitForPortrait(page, "active", "active_avatar_sm.png");
     result.activeSrc = await activeImage.getAttribute("src");
 
     await page.waitForFunction(() => document.querySelector(".qc-sovereign-awakening")?.dataset.qcAwakeningPhase === "authorized", null, { timeout: 5000 });
-    const authorityImage = await waitForPortrait(page, "staff_raised");
+    const authorityImage = await waitForPortrait(page, "staff_raised", "staff_raised_avatar_sm.png");
     result.authoritySrc = await authorityImage.getAttribute("src");
     await page.getByRole("button", { name: "ENTER COMMAND FIELD" }).click();
 
     await page.waitForFunction(() => document.querySelector(".qc-sovereign-awakening")?.dataset.qcAwakeningPhase === "entering", null, { timeout: 3000 });
-    const ascendedImage = await waitForPortrait(page, "ascended");
+    const ascendedImage = await waitForPortrait(page, "ascended", "ascended_avatar_sm.png");
     result.ascendedSrc = await ascendedImage.getAttribute("src");
     await page.screenshot({ path: `${evidenceDir}/${name}-awakening-ascended.png`, fullPage: true });
 
