@@ -29,6 +29,7 @@ export function SoundProvider({ children }) {
       if (next) {
         setMasterVolume(0.3);
         startAmbient();
+        playSound("button_click");
       } else {
         setMasterVolume(0);
         stopAmbient();

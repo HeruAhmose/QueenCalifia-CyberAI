@@ -1,0 +1,87 @@
+name: experience-runtime
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/experience-runtime.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/experience-runtime.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: experience-runtime-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install and test frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          node --test src/utils/qcMetrics.test.mjs
+
+      - name: Build canonical Pages topology
+        working-directory: frontend
+        run: npm run build -- --base /QueenCalifia-CyberAI/
+
+      - name: Assert identity assets remain packaged
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s frontend/dist/qc-assets/idle_avatar_sm.png
+          test -s frontend/dist/qc-assets/idle_avatar_lg.png
+          find frontend/dist/qc-assets -maxdepth 1 -type f | grep -Eq 'sigil|favicon'
+
+      - name: Launch Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/qc-experience-chrome
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          "$chrome" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage \
+            --no-first-run --disable-background-networking \
+            --remote-debugging-address=127.0.0.1 --remote-debugging-port=9239 \
+            --remote-allow-origins='*' --user-data-dir=/tmp/qc-experience-chrome \
+            about:blank >/tmp/qc-experience-chrome.log 2>&1 &
+          echo $! >/tmp/qc-experience-chrome.pid
+          for _ in $(seq 1 240); do
+            curl --fail --silent http://127.0.0.1:9239/json/version >/dev/null && exit 0
+            sleep .25
+          done
+          cat /tmp/qc-experience-chrome.log || true
+          exit 1
+
+      - name: Browser-certify consent, SFX, motion, reduced motion, identity assets, and layout
+        working-directory: frontend
+        run: |
+          node scripts/audit-experience-runtime.mjs
+          cat qc-experience-audit.json
+
+      - name: Stop Chrome
+        if: always()
+        shell: bash
+        run: |
+          if test -f /tmp/qc-experience-chrome.pid; then
+            kill "$(cat /tmp/qc-experience-chrome.pid)" 2>/dev/null || true
+          fi
+          cat /tmp/qc-experience-chrome.log || true
