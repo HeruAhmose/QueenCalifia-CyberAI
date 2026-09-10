@@ -73,8 +73,6 @@ jobs:
 
       - name: Browser-certify consent, SFX, motion, reduced motion, identity assets, and layout
         working-directory: frontend
-        env:
-          QC_CDP_URL: http://127.0.0.1:9239
         run: |
           node scripts/audit-experience-runtime.mjs
           cat qc-experience-audit.json
