@@ -2,11 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import QueenCalifiaAvatar from "./QueenCalifiaAvatar.jsx";
 import { useSound } from "../contexts/SoundContext.jsx";
-import {
-  playSound,
-  setMasterVolume,
-  startAmbient,
-} from "../lib/SoundEngine.js";
 
 const states = [
   ["IDENTITY", "SOVEREIGN"],
@@ -27,7 +22,7 @@ export default function SovereignAwakening({ onComplete, onAwaken }) {
   const [phase, setPhase] = useState("sealed");
   const [signal, setSignal] = useState(0);
   const timerRef = useRef([]);
-  const { toggle, enabled } = useSound();
+  const { toggle, enabled, play } = useSound();
 
   useEffect(() => () => timerRef.current.forEach(clearTimeout), []);
   useEffect(() => {
@@ -46,19 +41,16 @@ export default function SovereignAwakening({ onComplete, onAwaken }) {
 
   const awaken = useCallback(() => {
     if (phase === "sealed") {
-      if (!enabled) toggle();
-      else {
-        setMasterVolume(0.26);
-        startAmbient();
-      }
-      playSound("sovereign_awaken");
+      // Awakening and audio consent are independent. Sound only plays after
+      // the dedicated sound control has been explicitly enabled.
+      play("sovereign_awaken");
       onAwaken?.();
       setPhase("linking");
       timerRef.current.push(setTimeout(() => setPhase("authorized"), 1700));
       return;
     }
     if (phase === "authorized") {
-      playSound("button_click");
+      play("button_click");
       setPhase("entering");
       timerRef.current.push(setTimeout(onComplete, 650));
     }
@@ -299,6 +291,25 @@ export default function SovereignAwakening({ onComplete, onAwaken }) {
               : phase === "linking"
                 ? "LINKING INTELLIGENCE LATTICE…"
                 : "ENTER COMMAND FIELD"}
+          </button>
+
+          <button
+            type="button"
+            onClick={toggle}
+            aria-pressed={enabled}
+            data-qc-sound={enabled ? "on" : "off"}
+            style={{
+              marginTop: 12,
+              padding: "9px 14px",
+              border: "1px solid rgba(125,211,252,.2)",
+              background: "rgba(4,8,14,.54)",
+              color: enabled ? "#bde9f8" : "#8091aa",
+              font: "600 8px/1 'JetBrains Mono',monospace",
+              letterSpacing: ".18em",
+              cursor: "pointer",
+            }}
+          >
+            {enabled ? "SOUND /// ON" : "SOUND /// OFF · ENABLE"}
           </button>
         </motion.section>
       </div>
