@@ -1,0 +1,69 @@
+name: Validate Queen Califia experience audio
+
+on:
+  push:
+    branches:
+      - fix/experience-runtime-audio-20260910
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Apply exact audio-consent repair
+        run: python3 scripts/apply-experience-audio-repair.py
+      - name: Verify scope and source contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          changed="$(git diff --name-only | sort)"
+          expected=$'frontend/src/components/SovereignAwakening.jsx\nfrontend/src/contexts/SoundContext.jsx'
+          printf '%s\n' "$changed"
+          test "$changed" = "$expected"
+          grep -Fq 'data-qc-sound={enabled ? "on" : "off"}' frontend/src/components/SovereignAwakening.jsx
+          ! grep -Fq 'if (!enabled) toggle();' frontend/src/components/SovereignAwakening.jsx
+      - name: Install and test frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          node --test src/utils/qcMetrics.test.mjs
+      - name: Build exact Pages-base artifact
+        working-directory: frontend
+        run: npm run build -- --base /QueenCalifia-CyberAI/
+      - name: Verify compiled audio contract and identity assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -R -Fq 'data-qc-sound' frontend/dist/assets
+          grep -R -Fq 'SOUND /// OFF' frontend/dist/assets
+          test -s frontend/dist/qc-assets/idle_avatar_sm.png
+          test -s frontend/dist/qc-assets/active_avatar_sm.png
+          test -s frontend/dist/qc-assets/staff_raised_avatar_sm.png
+          test -s frontend/dist/qc-assets/ascended_avatar_sm.png
+          test -s frontend/dist/qc-assets/branding/sigil/sigil_icon_32.png
+          test -s frontend/dist/qc-assets/branding/sigil/sigil_icon_512.png
+      - name: Browser-certify independent awakening and audio consent
+        working-directory: frontend
+        run: node scripts/audit-experience-runtime.mjs
+      - name: Commit verified production changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Heru_Ahmose'
+          git config user.email 'aitconsult22@gmail.com'
+          git add frontend/src/components/SovereignAwakening.jsx frontend/src/contexts/SoundContext.jsx
+          git commit -m 'fix(frontend): separate Queen Califia awakening from audio consent'
+          git push origin HEAD:fix/experience-runtime-audio-20260910
