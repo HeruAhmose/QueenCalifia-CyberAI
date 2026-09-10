@@ -1,0 +1,120 @@
+name: Verify QC cinematic local assets
+
+on:
+  push:
+    branches:
+      - fix/cinematic-local-assets-20260909
+
+permissions:
+  contents: write
+
+jobs:
+  repair-and-verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Replace obsolete cross-origin cinematic assets
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('frontend/src/components/CinematicIntro.jsx')
+          s = p.read_text(encoding='utf-8')
+          old_host = 'https://d2xsxph8kpxj0f.cloudfront.net/310419663029216973/6A6PRiSc2SBdMKdQGVopRa'
+          assert s.count(old_host) == 1, f'expected one CDN declaration, found {s.count(old_host)}'
+          assert s.count('${CDN}/') == 4, f'expected four CDN consumers, found {s.count("${CDN}/")}'
+
+          s = s.replace(
+              f'const CDN = "{old_host}";',
+              'const QC_ASSET_BASE = `${import.meta.env.BASE_URL}qc-assets`;'
+          )
+          s = s.replace(
+              'backgroundImage: `url("${CDN}/qc-hex-grid-bg-Ckjfegc53A383DCfoyh5Xe.webp")`,\n        backgroundSize: "cover", backgroundPosition: "center",',
+              'backgroundImage: "linear-gradient(30deg, rgba(212,175,55,0.2) 12%, transparent 12.5%, transparent 87%, rgba(212,175,55,0.2) 87.5%), linear-gradient(150deg, rgba(0,220,250,0.14) 12%, transparent 12.5%, transparent 87%, rgba(0,220,250,0.14) 87.5%)",\n        backgroundSize: "52px 90px", backgroundPosition: "center",'
+          )
+          s = s.replace(
+              '<img src={`${CDN}/idle_avatar_sm_6294a66d.png`} alt="Queen Califia"',
+              '<img src={`${QC_ASSET_BASE}/idle_avatar_sm.png`} alt="Queen Califia"'
+          )
+          s = s.replace(
+              '<img src={`${CDN}/idle_avatar_lg_d2e3a5df.png`} alt="Queen Califia — Sovereign"',
+              '<img src={`${QC_ASSET_BASE}/idle_avatar_lg.png`} alt="Queen Califia — Sovereign"'
+          )
+          s = s.replace(
+              'backgroundImage: `url("${CDN}/qc-circuit-texture-crouTXBwBSsyVGQspVekAy.webp")`,',
+              'backgroundImage: `url("${QC_ASSET_BASE}/sovereign_circuitry_banner_1920x1080.png")`,'
+          )
+
+          assert old_host not in s
+          assert '${CDN}/' not in s
+          assert 'idle_avatar_sm.png' in s
+          assert 'idle_avatar_lg.png' in s
+          assert 'sovereign_circuitry_banner_1920x1080.png' in s
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Verify canonical local assets exist
+        run: |
+          test -s frontend/public/qc-assets/idle_avatar_sm.png
+          test -s frontend/public/qc-assets/idle_avatar_lg.png
+          test -s frontend/public/qc-assets/sovereign_circuitry_banner_1920x1080.png
+          ! grep -R -F 'd2xsxph8kpxj0f.cloudfront.net' frontend/src
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build root-hosting artifact
+        working-directory: frontend
+        env:
+          VITE_BASE_PATH: /
+        run: npm run build
+
+      - name: Verify root-hosting artifact carries local QC assets
+        shell: bash
+        run: |
+          test -s frontend/dist/qc-assets/idle_avatar_sm.png
+          test -s frontend/dist/qc-assets/idle_avatar_lg.png
+          test -s frontend/dist/qc-assets/sovereign_circuitry_banner_1920x1080.png
+          grep -R -Fq 'qc-assets/idle_avatar_sm.png' frontend/dist/assets
+          grep -R -Fq 'qc-assets/idle_avatar_lg.png' frontend/dist/assets
+          grep -R -Fq 'qc-assets/sovereign_circuitry_banner_1920x1080.png' frontend/dist/assets
+          ! grep -R -Fq 'd2xsxph8kpxj0f.cloudfront.net' frontend/dist
+
+      - name: Build GitHub Pages artifact
+        working-directory: frontend
+        env:
+          VITE_BASE_PATH: /QueenCalifia-CyberAI/
+        run: npm run build
+
+      - name: Verify Pages artifact remains portable
+        shell: bash
+        run: |
+          grep -R -Fq '/QueenCalifia-CyberAI/qc-assets/idle_avatar_sm.png' frontend/dist/assets
+          grep -R -Fq '/QueenCalifia-CyberAI/qc-assets/idle_avatar_lg.png' frontend/dist/assets
+          ! grep -R -Fq 'd2xsxph8kpxj0f.cloudfront.net' frontend/dist
+
+      - name: Commit only verified source repair
+        if: success()
+        shell: bash
+        run: |
+          rm .github/workflows/verify-cinematic-local-assets.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add frontend/src/components/CinematicIntro.jsx .github/workflows/verify-cinematic-local-assets.yml
+          git diff --cached --check
+          git commit -m 'fix(frontend): serve cinematic QC assets locally'
+          git push origin HEAD:fix/cinematic-local-assets-20260909
