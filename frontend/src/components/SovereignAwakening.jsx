@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import QueenCalifiaAvatar from "./QueenCalifiaAvatar.jsx";
 import { useSound } from "../contexts/SoundContext.jsx";
 import {
   playSound,
@@ -13,6 +14,13 @@ const states = [
   ["RESEARCH", "LINKED"],
   ["HUMAN AUTHORITY", "REQUIRED"],
 ];
+
+const AVATAR_STATE_BY_PHASE = {
+  sealed: "idle",
+  linking: "active",
+  authorized: "staff_raised",
+  entering: "ascended",
+};
 
 export default function SovereignAwakening({ onComplete, onAwaken }) {
   const reduce = !!useReducedMotion();
@@ -60,10 +68,13 @@ export default function SovereignAwakening({ onComplete, onAwaken }) {
 
   const ready = phase === "authorized";
   const active = phase !== "sealed";
+  const avatarState = AVATAR_STATE_BY_PHASE[phase] ?? "idle";
 
   return (
     <main
       className="qc-sovereign-awakening"
+      data-qc-awakening-phase={phase}
+      data-qc-awakening-avatar-state={avatarState}
       style={{
         position: "fixed",
         inset: 0,
@@ -76,9 +87,15 @@ export default function SovereignAwakening({ onComplete, onAwaken }) {
     >
       <style>{`
         .qc-sovereign-awakening:before{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(rgba(125,211,252,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(125,211,252,.025) 1px,transparent 1px);background-size:48px 48px;mask-image:radial-gradient(circle at 50% 48%,#000,transparent 72%)}
-        .qc-sovereign-awakening:after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 45%,rgba(212,175,55,.105),transparent 18%),radial-gradient(circle at 50% 48%,rgba(14,116,144,.07),transparent 43%),linear-gradient(180deg,transparent,rgba(0,0,0,.42))}
+        .qc-sovereign-awakening:after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 42%,rgba(212,175,55,.12),transparent 20%),radial-gradient(circle at 50% 48%,rgba(14,116,144,.09) 0%,transparent 44%),linear-gradient(180deg,transparent,rgba(0,0,0,.42))}
         .qc-seal-line{position:absolute;left:50%;top:50%;width:1px;height:42%;transform-origin:center top;background:linear-gradient(#d4af37,transparent);opacity:.15}
-        @media(max-width:760px){.qc-awaken-telemetry{display:none!important}.qc-awaken-status{grid-template-columns:1fr 1fr!important}.qc-awaken-card{width:min(88vw,26rem)!important}}
+        .qc-awaken-portrait{width:238px;height:238px;margin:0 auto 26px;position:relative;display:grid;place-items:center;isolation:isolate}
+        .qc-awaken-portrait:before{content:"";position:absolute;inset:-20px;border-radius:50%;background:radial-gradient(circle,rgba(0,220,250,.08),transparent 65%);filter:blur(14px);pointer-events:none}
+        .qc-awaken-holo-scan{position:absolute;z-index:6;left:16px;right:16px;height:1px;background:linear-gradient(90deg,transparent,rgba(125,211,252,.9),transparent);box-shadow:0 0 14px rgba(125,211,252,.5);mix-blend-mode:screen;pointer-events:none;animation:qc-awaken-holo-scan 3.8s ease-in-out infinite}
+        .qc-awaken-phase-chip{position:absolute;z-index:8;left:50%;bottom:-4px;transform:translateX(-50%);white-space:nowrap;border:1px solid rgba(212,175,55,.32);background:rgba(2,4,7,.82);backdrop-filter:blur(12px);padding:5px 9px;font:700 8px/1 'JetBrains Mono',monospace;letter-spacing:.18em;color:#d4af37;text-transform:uppercase}
+        @keyframes qc-awaken-holo-scan{0%,100%{top:18%;opacity:.12}50%{top:80%;opacity:.72}}
+        @media(max-width:760px){.qc-awaken-telemetry{display:none!important}.qc-awaken-status{grid-template-columns:1fr 1fr!important}.qc-awaken-card{width:min(90vw,26rem)!important}.qc-awaken-portrait{transform:scale(.86);margin-bottom:6px}.qc-awaken-card h1{font-size:clamp(2.35rem,13vw,3.7rem)!important}.qc-awaken-card button{margin-top:24px!important}}
+        @media(max-height:700px){.qc-awaken-status{display:none!important}.qc-awaken-portrait{transform:scale(.76);margin-top:-24px;margin-bottom:-18px}.qc-awaken-card button{margin-top:18px!important}}
       `}</style>
 
       {[0, 45, 90, 135].map((deg) => (
@@ -180,69 +197,44 @@ export default function SovereignAwakening({ onComplete, onAwaken }) {
               : { opacity: 1, scale: 1, filter: "blur(0px)" }
           }
         >
-          <div
-            style={{
-              position: "relative",
-              width: 190,
-              height: 190,
-              margin: "0 auto 34px",
+          <motion.div
+            className="qc-awaken-portrait"
+            data-qc-sovereign-portrait="active-awakening"
+            initial={{ opacity: 0, scale: 0.94 }}
+            animate={{
+              opacity: 1,
+              scale: active ? [1, 1.012, 1] : 1,
+              y: active ? [0, -3, 0] : 0,
+            }}
+            transition={{
+              opacity: { duration: 0.65 },
+              scale: active
+                ? { duration: 4.6, repeat: Infinity, ease: "easeInOut" }
+                : { duration: 0.65 },
+              y: active
+                ? { duration: 4.6, repeat: Infinity, ease: "easeInOut" }
+                : { duration: 0.65 },
             }}
           >
-            <motion.div
-              style={{
-                position: "absolute",
-                inset: 0,
-                border: "1px solid rgba(212,175,55,.28)",
-                borderRadius: "50%",
-              }}
-              animate={{ rotate: 360 }}
-              transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
+            <QueenCalifiaAvatar
+              state={avatarState}
+              size={190}
+              showLabel={false}
+              showStatus={false}
+              showDescription={false}
+              style={{ pointerEvents: "none", cursor: "default", zIndex: 4 }}
             />
-            <motion.div
-              style={{
-                position: "absolute",
-                inset: 18,
-                border: "1px solid rgba(125,211,252,.2)",
-                borderRadius: "50%",
-                borderStyle: "dashed",
-              }}
-              animate={{ rotate: -360 }}
-              transition={{ duration: 22, repeat: Infinity, ease: "linear" }}
-            />
-            <motion.div
-              style={{
-                position: "absolute",
-                inset: 42,
-                border: "1px solid rgba(212,175,55,.34)",
-                transform: "rotate(45deg)",
-                background: "rgba(212,175,55,.025)",
-              }}
-              animate={
-                active
-                  ? { scale: [1, 1.08, 1], opacity: [0.45, 1, 0.45] }
-                  : { opacity: 0.42 }
-              }
-              transition={{ duration: 2.5, repeat: Infinity }}
-            />
-            <div
-              style={{
-                position: "absolute",
-                inset: 65,
-                display: "grid",
-                placeItems: "center",
-                borderRadius: "50%",
-                border: "1px solid rgba(125,211,252,.32)",
-                background: "#050910",
-                boxShadow: active ? "0 0 70px rgba(212,175,55,.12)" : "none",
-              }}
-            >
-              <span
-                style={{ font: "700 30px/1 Georgia,serif", color: "#d4af37" }}
-              >
-                QC
-              </span>
-            </div>
-          </div>
+            <span className="qc-awaken-holo-scan" aria-hidden="true" />
+            <span className="qc-awaken-phase-chip" aria-hidden="true">
+              {avatarState === "idle"
+                ? "SENTINEL"
+                : avatarState === "active"
+                  ? "DEFENSE ACTIVE"
+                  : avatarState === "staff_raised"
+                    ? "AUTHORITY"
+                    : "ASCENDED"}
+            </span>
+          </motion.div>
 
           <p
             style={{
@@ -253,7 +245,7 @@ export default function SovereignAwakening({ onComplete, onAwaken }) {
             }}
           >
             {phase === "sealed"
-              ? "SOVEREIGN SEAL /// DORMANT"
+              ? "SOVEREIGN IDENTITY /// SENTINEL"
               : phase === "linking"
                 ? "INTELLIGENCE LATTICE /// LINKING"
                 : phase === "authorized"
@@ -303,7 +295,7 @@ export default function SovereignAwakening({ onComplete, onAwaken }) {
             }}
           >
             {phase === "sealed"
-              ? "OPEN SOVEREIGN SEAL"
+              ? "AWAKEN SOVEREIGN INTELLIGENCE"
               : phase === "linking"
                 ? "LINKING INTELLIGENCE LATTICE…"
                 : "ENTER COMMAND FIELD"}
