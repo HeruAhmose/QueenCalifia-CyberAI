@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 const PORT = 4189;
 const ROOT = "/tmp/qc-experience-pages";
 const BASE = `http://127.0.0.1:${PORT}/QueenCalifia-CyberAI/`;
-const CDP_HTTP = process.env.QC_CDP_URL || "http://127.0.0.1:9239";
+const CDP_HTTP = "http://127.0.0.1:9239";
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function waitFor(url, attempts = 80) {
