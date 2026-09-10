@@ -51,13 +51,19 @@ jobs:
           npm run build
           for f in idle_avatar_sm.png active_avatar_sm.png staff_raised_avatar_sm.png ascended_avatar_sm.png; do
             test -s "dist/qc-assets/$f"
-            grep -R -Fq "$f" dist/assets
+            echo "ROOT_FILE_OK=$f"
+          done
+          for state in idle_avatar active_avatar staff_raised_avatar ascended_avatar; do
+            grep -R -Fq "$state" dist/assets || { echo "ROOT_STATE_BASE_MISSING=$state"; exit 1; }
+            echo "ROOT_STATE_BASE_OK=$state"
           done
           test -s dist/qc-assets/branding/sigil/sigil_icon_32.png
           test -s dist/qc-assets/branding/sigil/sigil_icon_512.png
           grep -Fq 'href="/qc-assets/branding/sigil/sigil_icon_32.png"' dist/index.html
           grep -Fq 'href="/qc-assets/branding/sigil/sigil_icon_512.png"' dist/index.html
           grep -Fq 'href="/manifest.json"' dist/index.html
+          grep -R -Fq 'data-qc-sovereign-portrait' dist/assets
+          grep -R -Fq 'qc-awaken-holo-scan' dist/assets
           ! grep -R -Fq 'd2xsxph8kpxj0f.cloudfront.net' dist
           echo ROOT_HOST_IDENTITY_ARTIFACT=PASS
 
@@ -68,7 +74,11 @@ jobs:
           npm run build -- --base /QueenCalifia-CyberAI/
           for f in idle_avatar_sm.png active_avatar_sm.png staff_raised_avatar_sm.png ascended_avatar_sm.png; do
             test -s "dist/qc-assets/$f"
-            grep -R -Fq "$f" dist/assets
+            echo "PAGES_FILE_OK=$f"
+          done
+          for state in idle_avatar active_avatar staff_raised_avatar ascended_avatar; do
+            grep -R -Fq "$state" dist/assets || { echo "PAGES_STATE_BASE_MISSING=$state"; exit 1; }
+            echo "PAGES_STATE_BASE_OK=$state"
           done
           test -s dist/qc-assets/branding/sigil/sigil_icon_32.png
           test -s dist/qc-assets/branding/sigil/sigil_icon_512.png
