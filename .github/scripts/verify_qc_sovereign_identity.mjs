@@ -63,15 +63,17 @@ for (const [name, viewport] of Object.entries(viewports)) {
     }
     if (!manifestHref?.includes("/QueenCalifia-CyberAI/manifest.json")) throw new Error("web manifest path is not portable");
     for (const href of [...faviconHrefs, appleTouchHref, manifestHref].filter(Boolean)) {
-      const assetResponse = await context.request.get(href);
-      if (!assetResponse.ok()) throw new Error(`identity metadata asset returned ${assetResponse.status()}: ${href}`);
+      const absoluteHref = new URL(href, page.url()).href;
+      const assetResponse = await context.request.get(absoluteHref);
+      if (!assetResponse.ok()) throw new Error(`identity metadata asset returned ${assetResponse.status()}: ${absoluteHref}`);
     }
 
     const awakening = page.locator(".qc-sovereign-awakening");
     await awakening.waitFor({ state: "visible", timeout: 10000 });
     if ((await awakening.getAttribute("data-qc-awakening-phase")) !== "sealed") throw new Error("awakening did not start sealed");
     if ((await awakening.getAttribute("data-qc-awakening-avatar-state")) !== "idle") throw new Error("sealed phase is not mapped to idle portrait");
-    await waitForPortrait(page, "idle");
+    const idleImage = await waitForPortrait(page, "idle");
+    result.idleSrc = await idleImage.getAttribute("src");
 
     const ringAnimation = await page.locator(".qc-ring-spin").first().evaluate((node) => getComputedStyle(node).animationName);
     const scanAnimation = await page.locator(".qc-awaken-holo-scan").evaluate((node) => getComputedStyle(node).animationName);
@@ -82,14 +84,17 @@ for (const [name, viewport] of Object.entries(viewports)) {
 
     await page.getByRole("button", { name: "AWAKEN SOVEREIGN INTELLIGENCE" }).click();
     await page.waitForFunction(() => document.querySelector(".qc-sovereign-awakening")?.dataset.qcAwakeningPhase === "linking", null, { timeout: 5000 });
-    await waitForPortrait(page, "active");
+    const activeImage = await waitForPortrait(page, "active");
+    result.activeSrc = await activeImage.getAttribute("src");
 
     await page.waitForFunction(() => document.querySelector(".qc-sovereign-awakening")?.dataset.qcAwakeningPhase === "authorized", null, { timeout: 5000 });
-    await waitForPortrait(page, "staff_raised");
+    const authorityImage = await waitForPortrait(page, "staff_raised");
+    result.authoritySrc = await authorityImage.getAttribute("src");
     await page.getByRole("button", { name: "ENTER COMMAND FIELD" }).click();
 
     await page.waitForFunction(() => document.querySelector(".qc-sovereign-awakening")?.dataset.qcAwakeningPhase === "entering", null, { timeout: 3000 });
-    await waitForPortrait(page, "ascended");
+    const ascendedImage = await waitForPortrait(page, "ascended");
+    result.ascendedSrc = await ascendedImage.getAttribute("src");
     await page.screenshot({ path: `${evidenceDir}/${name}-awakening-ascended.png`, fullPage: true });
 
     await page.locator('[data-qc-command-frame="prestige-v1"]').waitFor({ state: "visible", timeout: 10000 });
@@ -122,20 +127,36 @@ for (const [name, viewport] of Object.entries(viewports)) {
 {
   const context = await browser.newContext({ viewport: viewports.mobile, reducedMotion: "reduce" });
   const page = await context.newPage();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(String(error)));
   const result = { hardFailure: false, error: null };
   try {
     const response = await page.goto(baseURL, { waitUntil: "domcontentloaded", timeout: 30000 });
     result.navStatus = response?.status() ?? null;
-    await page.locator('[data-qc-command-frame="prestige-v1"]').waitFor({ state: "visible", timeout: 10000 });
+    result.mediaQueryMatches = await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches);
+    if (!result.mediaQueryMatches) throw new Error("browser did not emulate prefers-reduced-motion: reduce");
+    try {
+      await page.locator('[data-qc-command-frame="prestige-v1"]').waitFor({ state: "visible", timeout: 15000 });
+    } catch (error) {
+      result.awakeningCount = await page.locator(".qc-sovereign-awakening").count();
+      result.awakeningPhase = await page.locator(".qc-sovereign-awakening").getAttribute("data-qc-awakening-phase").catch(() => null);
+      result.bodyTextSample = (await page.locator("body").innerText().catch(() => "")).slice(0, 1000);
+      throw error;
+    }
     result.awakeningPresent = await page.locator(".qc-sovereign-awakening").count();
     if (result.awakeningPresent !== 0) throw new Error("reduced-motion user remained trapped in cinematic awakening");
     const overflow = await page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth));
     result.horizontalOverflowPx = overflow;
+    result.pageErrors = pageErrors;
     if (overflow > 1) throw new Error(`reduced-motion horizontal overflow ${overflow}px`);
+    if (pageErrors.length) throw new Error(`reduced-motion page errors: ${pageErrors.join(" | ")}`);
+    await page.screenshot({ path: `${evidenceDir}/reduced-motion-command-field.png`, fullPage: true });
   } catch (error) {
     failures += 1;
     result.hardFailure = true;
     result.error = String(error);
+    await page.screenshot({ path: `${evidenceDir}/reduced-motion-failure.png`, fullPage: true }).catch(() => {});
   }
   report.reducedMotion = result;
   console.log("QC_REDUCED_MOTION_RESULT " + JSON.stringify(result));
