@@ -8,3 +8,8 @@ updates:
     directory: "/frontend"
     schedule:
       interval: "weekly"
+    groups:
+      react-runtime:
+        patterns:
+          - "react"
+          - "react-dom"

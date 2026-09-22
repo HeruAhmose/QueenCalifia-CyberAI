@@ -137,8 +137,11 @@ jobs:
         working-directory: backend
         run: |
           set -euo pipefail
+          expected_version="$(sed -n 's/^gunicorn==\([^[:space:];]*\).*/\1/p' requirements.txt)"
+          test -n "$expected_version"
           gunicorn --version | tee /tmp/qc-gunicorn.version
-          grep -Eq 'gunicorn \(version 26\.1\.0\)|gunicorn 26\.1\.0' /tmp/qc-gunicorn.version
+          grep -Fx "gunicorn (version ${expected_version})" /tmp/qc-gunicorn.version || \
+            grep -Fx "gunicorn ${expected_version}" /tmp/qc-gunicorn.version
           gunicorn app:app \
             --bind 127.0.0.1:18000 \
             --workers 1 \
