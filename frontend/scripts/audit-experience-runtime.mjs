@@ -5,7 +5,7 @@ const PORT = 4189;
 const ROOT = "/tmp/qc-experience-pages";
 const BASE = `http://127.0.0.1:${PORT}/QueenCalifia-CyberAI/`;
 const CDP_HTTP = "http://127.0.0.1:9239";
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitFor(url, attempts = 80) {
   for (let i = 0; i < attempts; i++) {
@@ -30,7 +30,7 @@ class CDP {
       this.ws.addEventListener("open", resolve, { once: true });
       this.ws.addEventListener("error", reject, { once: true });
     });
-    this.ws.addEventListener("message", event => {
+    this.ws.addEventListener("message", (event) => {
       const msg = JSON.parse(event.data);
       if (msg.id && this.pending.has(msg.id)) {
         const pending = this.pending.get(msg.id);
@@ -70,7 +70,7 @@ await fs.cp("dist", `${ROOT}/QueenCalifia-CyberAI`, { recursive: true });
 const server = spawn(
   "python3",
   ["-m", "http.server", String(PORT), "--directory", ROOT],
-  { stdio: "ignore" }
+  { stdio: "ignore" },
 );
 let cdp;
 
@@ -78,7 +78,7 @@ try {
   await waitFor(BASE);
   await waitFor(`${CDP_HTTP}/json/version`);
   const targets = await (await fetch(`${CDP_HTTP}/json/list`)).json();
-  const target = targets.find(item => item.type === "page");
+  const target = targets.find((item) => item.type === "page");
   if (!target?.webSocketDebuggerUrl) throw new Error("no page target");
 
   cdp = new CDP(target.webSocketDebuggerUrl);
@@ -87,6 +87,25 @@ try {
   await cdp.send("Runtime.enable");
   await cdp.send("Page.addScriptToEvaluateOnNewDocument", {
     source: `(() => {
+      window.__qcLayoutProbe = { maxOverflow: 0, maxScrollX: 0, transformedShell: false };
+      function sampleLayout() {
+        const root = document.documentElement;
+        if (root) {
+          window.__qcLayoutProbe.maxOverflow = Math.max(window.__qcLayoutProbe.maxOverflow, root.scrollWidth - root.clientWidth);
+          window.__qcLayoutProbe.maxScrollX = Math.max(window.__qcLayoutProbe.maxScrollX, Math.abs(window.scrollX));
+          if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            for (const shell of document.querySelectorAll('[data-qc-shell-motion]')) {
+              const style = getComputedStyle(shell);
+              const scaled = style.transform !== 'none' && !new DOMMatrixReadOnly(style.transform).isIdentity;
+              if (scaled || (style.filter !== 'none' && style.filter !== 'blur(0px)')) {
+                window.__qcLayoutProbe.transformedShell = true;
+              }
+            }
+          }
+        }
+        requestAnimationFrame(sampleLayout);
+      }
+      requestAnimationFrame(sampleLayout);
       const Native = window.AudioContext || window.webkitAudioContext;
       window.__qcAudioProbe = { contexts: 0, oscillators: 0 };
       if (!Native) return;
@@ -109,7 +128,9 @@ try {
 
   await cdp.send("Page.navigate", { url: BASE });
   await sleep(1200);
-  await cdp.eval(`localStorage.removeItem('qc_audio_enabled'); location.reload(); true`);
+  await cdp.eval(
+    `localStorage.removeItem('qc_audio_enabled'); location.reload(); true`,
+  );
   await sleep(1200);
 
   const initial = await cdp.eval(`(() => ({
@@ -137,15 +158,17 @@ try {
 
   await sleep(500);
   const scanTopAfter = await cdp.eval(
-    `getComputedStyle(document.querySelector('.qc-awaken-holo-scan')).top`
+    `getComputedStyle(document.querySelector('.qc-awaken-holo-scan')).top`,
   );
   if (scanTopAfter === initial.scanTop) {
     throw new Error(
-      `holographic scan did not visibly move: ${initial.scanTop} -> ${scanTopAfter}`
+      `holographic scan did not visibly move: ${initial.scanTop} -> ${scanTopAfter}`,
     );
   }
 
-  await cdp.eval(`([...document.querySelectorAll('button')].find(button => button.textContent.includes('AWAKEN SOVEREIGN INTELLIGENCE')))?.click(); true`);
+  await cdp.eval(
+    `([...document.querySelectorAll('button')].find(button => button.textContent.includes('AWAKEN SOVEREIGN INTELLIGENCE')))?.click(); true`,
+  );
   await sleep(350);
   const afterAwaken = await cdp.eval(`(() => ({
     sound: document.querySelector('[data-qc-sound]')?.dataset.qcSound,
@@ -159,7 +182,7 @@ try {
     afterAwaken.phase !== "linking"
   ) {
     throw new Error(
-      `awakening improperly changed audio consent ${JSON.stringify(afterAwaken)}`
+      `awakening improperly changed audio consent ${JSON.stringify(afterAwaken)}`,
     );
   }
 
@@ -181,22 +204,42 @@ try {
   await sleep(300);
   const mutedBefore = await cdp.eval(`window.__qcAudioProbe.oscillators`);
   await sleep(1800);
-  await cdp.eval(`([...document.querySelectorAll('button')].find(button => button.textContent.includes('ENTER COMMAND FIELD')))?.click(); true`);
-  await sleep(250);
+  await cdp.eval(
+    `([...document.querySelectorAll('button')].find(button => button.textContent.includes('ENTER COMMAND FIELD')))?.click(); true`,
+  );
+  let commandSettled = false;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    commandSettled = await cdp.eval(`(() => {
+      const shell = document.querySelector('[data-qc-shell-motion="dashboard"]');
+      if (!shell || !shell.querySelector('[data-qc-command-frame]')) return false;
+      const style = getComputedStyle(shell);
+      return style.opacity === '1' && (style.transform === 'none' || new DOMMatrixReadOnly(style.transform).isIdentity);
+    })()`);
+    if (commandSettled) break;
+    await sleep(100);
+  }
+  if (!commandSettled)
+    throw new Error("command field transition did not finish");
   const mutedAfter = await cdp.eval(`window.__qcAudioProbe.oscillators`);
   if (mutedAfter !== mutedBefore) {
     throw new Error(
-      `mute failed to suppress command SFX ${mutedBefore}->${mutedAfter}`
+      `mute failed to suppress command SFX ${mutedBefore}->${mutedAfter}`,
     );
   }
 
   const layout = await cdp.eval(`(() => ({
+    transition: window.__qcLayoutProbe,
     broken: [...document.images]
       .filter(image => image.complete && image.naturalWidth === 0)
       .map(image => image.src),
     overflow: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth)
   }))()`);
-  if (layout.broken.length || layout.overflow > 1) {
+  if (
+    layout.broken.length ||
+    layout.overflow > 1 ||
+    layout.transition.maxOverflow > 1 ||
+    layout.transition.maxScrollX > 0
+  ) {
     throw new Error(`layout/assets failed ${JSON.stringify(layout)}`);
   }
 
@@ -211,6 +254,7 @@ try {
     scan: document.querySelectorAll('.qc-awaken-holo-scan').length,
     command: document.querySelectorAll('[data-qc-command-frame="prestige-v1"]').length,
     probe: window.__qcAudioProbe,
+    transition: window.__qcLayoutProbe,
     overflow: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth)
   }))()`);
   if (
@@ -220,10 +264,13 @@ try {
     reduced.command < 1 ||
     reduced.probe.contexts !== 0 ||
     reduced.probe.oscillators !== 0 ||
-    reduced.overflow > 1
+    reduced.overflow > 1 ||
+    reduced.transition.maxOverflow > 1 ||
+    reduced.transition.maxScrollX > 0 ||
+    reduced.transition.transformedShell
   ) {
     throw new Error(
-      `reduced-motion/audio contract failed ${JSON.stringify(reduced)}`
+      `reduced-motion/audio contract failed ${JSON.stringify(reduced)}`,
     );
   }
 
@@ -239,7 +286,7 @@ try {
   };
   await fs.writeFile(
     "qc-experience-audit.json",
-    JSON.stringify(report, null, 2)
+    JSON.stringify(report, null, 2),
   );
   console.log("QC_EXPERIENCE_AUDIO=PASS");
   console.log(JSON.stringify(report));
