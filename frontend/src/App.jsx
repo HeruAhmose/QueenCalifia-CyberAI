@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useCallback, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import SovereignAwakening from "./components/SovereignAwakening.jsx";
 import SovereignCommandFrame from "./components/SovereignCommandFrame.jsx";
 import { SoundProvider } from "./contexts/SoundContext.jsx";
@@ -14,9 +14,10 @@ const AppLegacy = lazy(loadLegacy);
 const QCTrainingConsole = lazy(loadTrainingConsole);
 
 function ShellLoading({ label = "Linking sovereign systems..." }) {
+  const reduce = !!useReducedMotion();
   return (
     <motion.div
-      initial={{ opacity: 0 }}
+      initial={reduce ? false : { opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       style={{
@@ -40,7 +41,7 @@ function ShellLoading({ label = "Linking sovereign systems..." }) {
             borderRadius: "50%",
             border: "1px solid rgba(212,175,55,.28)",
           }}
-          animate={{ rotate: 360 }}
+          animate={reduce ? {} : { rotate: 360 }}
           transition={{ duration: 16, repeat: Infinity, ease: "linear" }}
         />
         <motion.div
@@ -50,7 +51,7 @@ function ShellLoading({ label = "Linking sovereign systems..." }) {
             borderRadius: "50%",
             border: "1px dashed rgba(125,211,252,.28)",
           }}
-          animate={{ rotate: -360 }}
+          animate={reduce ? {} : { rotate: -360 }}
           transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
         />
         <div
@@ -100,6 +101,7 @@ function ShellLoading({ label = "Linking sovereign systems..." }) {
  * authority.
  */
 export default function App() {
+  const reduce = !!useReducedMotion();
   const useLegacy = import.meta?.env?.VITE_QC_USE_LEGACY_DASHBOARD === "1";
   const trainingConsole =
     typeof window !== "undefined" &&
@@ -134,39 +136,57 @@ export default function App() {
 
   return (
     <SoundProvider>
-      <AnimatePresence mode="wait">
-        {!introComplete ? (
-          <motion.div
-            key="intro"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0, filter: "blur(10px)", scale: 1.02 }}
-            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          >
-            <SovereignAwakening
-              onAwaken={primeDashboard}
-              onComplete={() => setIntroComplete(true)}
-            />
-          </motion.div>
-        ) : (
-          <motion.div
-            key="dashboard"
-            initial={{ opacity: 0, scale: 1.012, filter: "blur(12px)" }}
-            animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
-            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-          >
-            <SovereignCommandFrame>
-              <Suspense
-                fallback={
-                  <ShellLoading label="Materializing command field..." />
-                }
-              >
-                <QueenCalifiaUnifiedCommandDashboard />
-              </Suspense>
-            </SovereignCommandFrame>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <div data-qc-shell style={{ minHeight: "100vh", overflowX: "clip" }}>
+        <AnimatePresence mode="wait">
+          {!introComplete ? (
+            <motion.div
+              key="intro"
+              data-qc-shell-motion="intro"
+              initial={reduce ? false : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={
+                reduce
+                  ? { opacity: 0 }
+                  : { opacity: 0, filter: "blur(10px)", scale: 1.02 }
+              }
+              transition={{
+                duration: reduce ? 0 : 0.6,
+                ease: [0.16, 1, 0.3, 1],
+              }}
+            >
+              <SovereignAwakening
+                onAwaken={primeDashboard}
+                onComplete={() => setIntroComplete(true)}
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="dashboard"
+              data-qc-shell-motion="dashboard"
+              initial={
+                reduce
+                  ? false
+                  : { opacity: 0, scale: 1.012, filter: "blur(12px)" }
+              }
+              animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+              transition={{
+                duration: reduce ? 0 : 0.8,
+                ease: [0.16, 1, 0.3, 1],
+              }}
+            >
+              <SovereignCommandFrame>
+                <Suspense
+                  fallback={
+                    <ShellLoading label="Materializing command field..." />
+                  }
+                >
+                  <QueenCalifiaUnifiedCommandDashboard />
+                </Suspense>
+              </SovereignCommandFrame>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </SoundProvider>
   );
 }
