@@ -19,8 +19,10 @@ def snapshot():
         return jsonify({"error": "asset_type and symbol required"}), 400
     try:
         return jsonify(get_market_snapshot(current_app.config["settings"], at, sym))
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    except ValueError:
+        return jsonify({"error": "invalid_market_request"}), 400
+    except requests.RequestException:
+        return jsonify({"error": "market_provider_unavailable"}), 502
 
 
 @market_bp.get("/fred/<series_id>")
@@ -28,8 +30,10 @@ def snapshot():
 def fred(series_id):
     try:
         return jsonify(fetch_fred(current_app.config["settings"], series_id))
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    except ValueError:
+        return jsonify({"error": "invalid_fred_request"}), 400
+    except requests.RequestException:
+        return jsonify({"error": "fred_provider_unavailable"}), 502
 
 
 @market_bp.get("/nasdaq/<path:dataset>")
@@ -38,24 +42,19 @@ def nasdaq(dataset):
     limit = request.args.get("limit", 30, type=int)
     try:
         return jsonify(fetch_nasdaq(current_app.config["settings"], dataset, limit))
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    except ValueError:
+        return jsonify({"error": "invalid_nasdaq_request"}), 400
     except requests.HTTPError as e:
-        detail = None
-        if e.response is not None:
-            try:
-                detail = e.response.json()
-            except Exception:
-                detail = (e.response.text or "")[:500] or None
+        # Upstream bodies and exception strings may contain request URLs with
+        # provider API keys. Only the numeric status crosses the API boundary.
         return jsonify(
             {
                 "error": "nasdaq_upstream_error",
-                "upstream_status": e.response.status_code if e.response else None,
-                "detail": detail,
+                "upstream_status": e.response.status_code if e.response is not None else None,
             }
         ), 502
-    except requests.RequestException as e:
-        return jsonify({"error": "nasdaq_request_failed", "message": str(e)}), 502
+    except requests.RequestException:
+        return jsonify({"error": "nasdaq_request_failed"}), 502
 
 
 @market_bp.get("/sources")

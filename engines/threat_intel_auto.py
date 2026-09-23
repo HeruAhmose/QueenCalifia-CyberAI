@@ -1079,14 +1079,14 @@ class ThreatIntelEngine:
                 detail={"source_url": feed.source_url},
             )
             return {"feed_id": feed.feed_id, "ok": True, **ingested}
-        except Exception as exc:
-            logger.exception("threat intel sync failed for %s", feed.feed_id)
+        except Exception:
+            logger.warning("threat intel sync failed for %s", feed.feed_id)
             self.record_sync(
                 feed.feed_id,
                 success=False,
-                detail={"error": str(exc), "source_url": feed.source_url},
+                detail={"error": "feed sync failed"},
             )
-            return {"feed_id": feed.feed_id, "ok": False, "error": str(exc)}
+            return {"feed_id": feed.feed_id, "ok": False, "error": "feed sync failed"}
 
     def sync_due_feeds(self) -> Dict[str, Any]:
         feeds = self.get_feeds_due_for_sync()

@@ -156,7 +156,7 @@ def sanitize_untrusted_text(
     Args:
         text: Raw untrusted input
         max_len: Maximum allowed length after sanitization
-        context_label: Optional label for logging (e.g., "telemetry_t1")
+        context_label: Legacy caller label; never logged because it may contain secrets
 
     Returns:
         Sanitized text safe for inclusion in prompts and UI rendering.
@@ -186,23 +186,25 @@ def sanitize_untrusted_text(
         payload_count += n
 
     # 5. Redact detected secrets
-    secret_count = 0
+    redaction_count = 0
     for pat in SECRET_PATTERNS:
         text, n = pat.subn("[REDACTED:SECRET]", text)
-        secret_count += n
+        redaction_count += n
 
     # 6. Collapse excessive whitespace
     text = re.sub(r"\n{4,}", "\n\n\n", text)
     text = re.sub(r" {4,}", "   ", text)
 
     # Log if anything was sanitized
-    total_changes = injection_count + payload_count + secret_count
+    total_changes = injection_count + payload_count + redaction_count
     if total_changes > 0:
+        # These are integer match counts, never matched text or caller labels.
+        # build_safe_context passes arbitrary field names as context_label.
         logger.warning(
-            "prompt_guard.sanitize: %d modifications (injections=%d payloads=%d secrets=%d) "
-            "original_len=%d sanitized_len=%d context=%s",
-            total_changes, injection_count, payload_count, secret_count,
-            original_len, len(text), context_label or "unknown",
+            "prompt_guard.sanitize: %d modifications (injections=%d payloads=%d redactions=%d) "
+            "original_len=%d sanitized_len=%d",
+            total_changes, injection_count, payload_count, redaction_count,
+            original_len, len(text),
         )
 
     return text.strip()

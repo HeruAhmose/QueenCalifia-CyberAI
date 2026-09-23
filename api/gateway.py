@@ -960,7 +960,7 @@ class AuditLog:
 
                     prev_hash = record_hash
         except Exception as exc:
-            return {"valid": False, "entries_checked": checked, "errors": [f"verify failed: {exc}"]}
+            return {"valid": False, "entries_checked": checked, "errors": ["audit verification failed"]}
 
         return {"valid": len(errors) == 0, "entries_checked": checked, "errors": errors}
 
@@ -1407,9 +1407,9 @@ def create_security_api(
             if not os.path.isdir(audit_dir):
                 os.makedirs(audit_dir, exist_ok=True)
             ok = os.access(audit_dir, os.W_OK)
-            return {"name": "audit_log_dir", "ok": bool(ok), "required": True, "path": audit_dir}
-        except Exception as exc:
-            return {"name": "audit_log_dir", "ok": False, "required": True, "path": audit_dir, "error": str(exc)}
+            return {"name": "audit_log_dir", "ok": bool(ok), "required": True}
+        except Exception:
+            return {"name": "audit_log_dir", "ok": False, "required": True, "error": "audit storage unavailable"}
 
     def _check_redis() -> dict:
         required = os.environ.get("QC_REQUIRE_REDIS", "0") == "1"
@@ -1423,9 +1423,9 @@ def create_security_api(
 
             r = get_redis()
             r.ping()
-            return {"name": "redis", "ok": True, "required": bool(required), "url": url}
-        except Exception as exc:
-            return {"name": "redis", "ok": False, "required": bool(required), "url": url, "error": str(exc)}
+            return {"name": "redis", "ok": True, "required": bool(required)}
+        except Exception:
+            return {"name": "redis", "ok": False, "required": bool(required), "error": "redis unavailable"}
 
     def _healthz_response():
         return jsonify(_health_payload())
@@ -1738,8 +1738,8 @@ def create_security_api(
         # Defense-grade guardrails (deny public targets unless allowlisted)
         try:
             scan_policy.assert_allowed(target if "/" not in target else target)
-        except Exception as exc:
-            return jsonify({"error": f"Target denied: {exc}"}), 400
+        except Exception:
+            return jsonify({"error": "Target denied by scan policy"}), 400
 
         scan_type = data.get("scan_type", "full")
         mode = data.get("mode", "async")  # async|sync
@@ -2391,10 +2391,10 @@ def create_security_api(
         try:
             report = live_scanner.scan(target, scan_type=scan_type, ports=ports)
             return jsonify(report.to_dict())
-        except PermissionError as e:
-            return jsonify({"error": str(e)}), 403
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
+        except PermissionError:
+            return jsonify({"error": "Target denied by scan policy"}), 403
+        except Exception:
+            return jsonify({"error": "scan failed"}), 500
 
     @app.route("/api/v1/scanner/scan/<scan_id>", methods=["GET"])
     @require_permission("read")
@@ -2698,8 +2698,8 @@ def create_security_api(
         try:
             report = assess_quantum_readiness(vault=_qe_vault, hybrid_enabled=_qe_hybrid)
             return jsonify({"readiness": report.__dict__ if hasattr(report, "__dict__") else report})
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
+        except Exception:
+            return jsonify({"error": "quantum readiness unavailable"}), 500
 
     @app.route("/api/v1/quantum/keygen", methods=["POST"])
     @require_permission("admin")

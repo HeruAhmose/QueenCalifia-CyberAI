@@ -129,9 +129,20 @@ try {
   await cdp.send("Page.navigate", { url: BASE });
   await sleep(1200);
   await cdp.eval(
-    `localStorage.removeItem('qc_audio_enabled'); location.reload(); true`,
+    `localStorage.removeItem('qc_audio_enabled');
+     for (const storage of [localStorage, sessionStorage]) {
+       storage.setItem('qc_api_key', 'legacy-test-credential');
+       storage.setItem('qc_admin_key', 'legacy-test-admin');
+     }
+     location.reload(); true`,
   );
   await sleep(1200);
+
+  const legacyCredentialsCleared = await cdp.eval(
+    `[localStorage, sessionStorage].every(storage =>
+      storage.getItem('qc_api_key') === null && storage.getItem('qc_admin_key') === null)`,
+  );
+  if (!legacyCredentialsCleared) throw new Error("legacy credentials remain in browser storage");
 
   const initial = await cdp.eval(`(() => ({
     sound: document.querySelector('[data-qc-sound]')?.dataset.qcSound,
@@ -243,6 +254,28 @@ try {
     throw new Error(`layout/assets failed ${JSON.stringify(layout)}`);
   }
 
+  await cdp.eval(`document.querySelector('#tab-vulns')?.click(); true`);
+  let credentialInputReady = false;
+  for (let attempt = 0; attempt < 50; attempt++) {
+    credentialInputReady = await cdp.eval(`Boolean(document.querySelector('input[placeholder^="API key (X-QC-API-Key)"]'))`);
+    if (credentialInputReady) break;
+    await sleep(100);
+  }
+  if (!credentialInputReady) throw new Error("scanner credential input did not appear");
+  await cdp.eval(`(() => {
+    const input = document.querySelector('input[placeholder^="API key (X-QC-API-Key)"]');
+    input.focus();
+  })()`);
+  await cdp.send("Input.insertText", { text: "memory-only-test-credential" });
+  await sleep(100);
+  const credentialsMemoryOnly = await cdp.eval(`(() => {
+    const input = document.querySelector('input[placeholder^="API key (X-QC-API-Key)"]');
+    return input.value === 'memory-only-test-credential' &&
+      [localStorage, sessionStorage].every(storage =>
+        storage.getItem('qc_api_key') === null && storage.getItem('qc_admin_key') === null);
+  })()`);
+  if (!credentialsMemoryOnly) throw new Error("scanner persisted an API credential");
+
   await cdp.send("Emulation.setEmulatedMedia", {
     features: [{ name: "prefers-reduced-motion", value: "reduce" }],
   });
@@ -281,6 +314,7 @@ try {
     enabled,
     muted: { before: mutedBefore, after: mutedAfter },
     layout,
+    credentials: { legacyCredentialsCleared, credentialsMemoryOnly },
     reduced,
     failures: 0,
   };
