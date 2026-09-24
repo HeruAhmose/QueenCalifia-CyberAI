@@ -144,7 +144,9 @@ function TechniqueChip({ technique, why, density }) {
   const name = technique?.name || technique?.technique_name || "";
   const tactic = technique?.tactic || technique?.tactics || "";
 
-  const href = id ? `https://attack.mitre.org/techniques/${id.replace(/^T/, "T")}/` : null;
+  const href = /^T\d{4}(?:\.\d{3})?$/.test(id)
+    ? `https://attack.mitre.org/techniques/${id.replace(".", "/")}/`
+    : null;
 
   const chip = (
     <span

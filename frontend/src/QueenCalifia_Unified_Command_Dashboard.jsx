@@ -1388,7 +1388,7 @@ function IncidentsTab({ incidents, onRefresh }) {
 // ─── VULN TAB ─────────────────────────────────────────────────────────────
 
 function VulnsTab({ onAvatarStateChange, onSound }) {
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem("qc_api_key") || "");
+  const [apiKey, setApiKey] = useState("");
   const [ack, setAck] = useState(false);
 
   const [target, setTarget] = useState("192.168.1.0/24");
@@ -1510,9 +1510,9 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
         "  tasks:",
       ];
       for (const a of actions) {
-        lines.push(`    - name: "[P${a.priority}] ${a.title} (${a.cve_id || a.vuln_id})"`);
+        lines.push(`    - name: ${JSON.stringify(`[P${a.priority}] ${a.title} (${a.cve_id || a.vuln_id})`)}`);
         lines.push("      debug:");
-        lines.push(`        msg: "${String(a.remediation || "n/a").replaceAll('"', '\"')}"`);
+        lines.push(`        msg: ${JSON.stringify(String(a.remediation || "n/a"))}`);
       }
       lines.push("");
       return lines.join("\n");
@@ -1774,10 +1774,6 @@ function VulnsTab({ onAvatarStateChange, onSound }) {
       setSubmitting(false);
     }
   }, [ack, apiFetch, fetchRemediation, onAvatarStateChange, scanType, target, webUrl]);
-
-  useEffect(() => {
-    localStorage.setItem("qc_api_key", apiKey || "");
-  }, [apiKey]);
 
   useEffect(() => {
     if (!scanId) return;

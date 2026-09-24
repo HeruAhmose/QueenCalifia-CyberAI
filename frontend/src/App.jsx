@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useCallback, useState } from "react";
+import React, { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import SovereignAwakening from "./components/SovereignAwakening.jsx";
 import SovereignCommandFrame from "./components/SovereignCommandFrame.jsx";
@@ -101,6 +101,18 @@ function ShellLoading({ label = "Linking sovereign systems..." }) {
  * authority.
  */
 export default function App() {
+  useEffect(() => {
+    // Remove credentials left by older dashboard builds. Current credentials
+    // live only in React/module memory and expire when the page is reloaded.
+    for (const storageName of ["localStorage", "sessionStorage"]) {
+      try {
+        window[storageName].removeItem("qc_api_key");
+        window[storageName].removeItem("qc_admin_key");
+      } catch {
+        // Storage may be unavailable in private or sandboxed browsing.
+      }
+    }
+  }, []);
   const reduce = !!useReducedMotion();
   const useLegacy = import.meta?.env?.VITE_QC_USE_LEGACY_DASHBOARD === "1";
   const trainingConsole =

@@ -53,8 +53,8 @@ def ollama_health() -> dict:
         if r.status_code == 200:
             return {"reachable": True, "status": "healthy", "base_url": OLLAMA_BASE}
         return {"reachable": False, "status": f"http_{r.status_code}", "base_url": OLLAMA_BASE}
-    except Exception as e:
-        return {"reachable": False, "status": str(e), "base_url": OLLAMA_BASE}
+    except Exception:
+        return {"reachable": False, "status": "provider_unavailable"}
 
 
 def ollama_models() -> dict:
@@ -67,8 +67,8 @@ def ollama_models() -> dict:
                     "modified_at": m.get("modified_at")}
                    for m in data.get("models", [])]
         return {"models": models}
-    except Exception as e:
-        return {"models": [], "error": str(e)}
+    except Exception:
+        return {"models": [], "error": "provider_unavailable"}
 
 
 def ollama_pull(model: str) -> dict:
@@ -79,8 +79,8 @@ def ollama_pull(model: str) -> dict:
         if r.status_code == 200:
             return {"ok": True, "model": model, "status": "pulled"}
         return {"ok": False, "model": model, "error": f"http_{r.status_code}"}
-    except Exception as e:
-        return {"ok": False, "model": model, "error": str(e)}
+    except Exception:
+        return {"ok": False, "model": model, "error": "provider_unavailable"}
 
 
 # ── vLLM ──────────────────────────────────────────────────────
@@ -91,5 +91,5 @@ def vllm_health() -> dict:
         if r.status_code == 200:
             return {"reachable": True, "status": "healthy", "base_url": VLLM_BASE}
         return {"reachable": False, "status": f"http_{r.status_code}", "base_url": VLLM_BASE}
-    except Exception as e:
-        return {"reachable": False, "status": str(e), "base_url": VLLM_BASE}
+    except Exception:
+        return {"reachable": False, "status": "provider_unavailable"}

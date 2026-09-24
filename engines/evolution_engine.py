@@ -1268,8 +1268,8 @@ class EvolutionEngine:
                 "predictions_generated": len(predictions),
                 "high_risk_predictions": len([p for p in predictions if p.get("risk_score", 0) >= 0.85]),
             }
-        except Exception as e:
-            report["phases"]["zero_day"] = {"error": str(e)}
+        except Exception:
+            report["phases"]["zero_day"] = {"error": "prediction unavailable"}
 
         # Phase 4: Remediation plan
         logger.info("[%s] Phase 4: Generating remediation plan", operation_id)
