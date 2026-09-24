@@ -274,7 +274,8 @@ def _connect_source(path: Path) -> sqlite3.Connection:
     resolved = path.expanduser().resolve()
     if not resolved.is_file():
         raise RuntimeError(f"SQLite source does not exist: {resolved}")
-    conn = sqlite3.connect(f"file:{resolved.as_posix()}?mode=ro", uri=True)
+    # Keep URI metacharacters in the operator-selected filename literal.
+    conn = sqlite3.connect(f"{resolved.as_uri()}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA query_only=ON")
     return conn
