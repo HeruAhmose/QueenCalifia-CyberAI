@@ -2333,7 +2333,13 @@ def create_security_api(
         Returns the last N events (default 100, max 500).
         """
         log_file = os.environ.get("QC_SPKI_LOG_FILE", "data/spki.jsonl")
-        limit = min(int(request.args.get("limit", 100)), 500)
+        try:
+            limit = int(request.args.get("limit", "100"))
+        except ValueError:
+            return jsonify({"error": "limit must be a positive integer"}), 400
+        if limit < 1:
+            return jsonify({"error": "limit must be a positive integer"}), 400
+        limit = min(limit, 500)
 
         events = []
         if os.path.isfile(log_file):
